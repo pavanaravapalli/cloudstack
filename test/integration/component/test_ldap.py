@@ -52,12 +52,7 @@ class TestLdap(cloudstackTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cleanup_resources(cls.api_client, cls._cleanup)
-
-        except Exception as tde:
-            raise Exception("Warning: Exception during cleanup : %s" % tde)
-        return
+        super(TestLdap, cls).tearDownClass()
 
     def setUp(self):
 
@@ -89,7 +84,7 @@ class TestLdap(cloudstackTestCase):
         else:
             self.delflag = 1
             self.acctRes = self.apiClient.createAccount(self.acct)
-        self.assertEquals(self.delflag,  1, "LDAP account details are not provided,please check the configuration")
+        self.assertEqual(self.delflag,  1, "LDAP account details are not provided,please check the configuration")
         return
 
     def tearDown(self):
@@ -105,7 +100,7 @@ class TestLdap(cloudstackTestCase):
                 self.apiClient.deleteAccount(deleteAcct)
 
                 self.debug(
-                    "Deleted the the following account name %s:" %
+                    "Deleted the following account name %s:" %
                     acct_name)
 
                 if self.ldapconfRes == 1:
@@ -134,13 +129,13 @@ class TestLdap(cloudstackTestCase):
                 self.services["configurableData"]["ldap_configuration"]["ldapUsername"],
                 self.services["configurableData"]["ldap_configuration"]["ldapPassword"])
             self.debug(loginRes)
-            self.assertEquals(loginRes, 1, self.reason)
+            self.assertEqual(loginRes, 1, self.reason)
 
         else:
 
             self.debug("LDAP Configuration failed with exception")
 
-            self.assertEquals(
+            self.assertEqual(
                 self.ldapconfRes,
                 1,
                 self.reason)
@@ -250,7 +245,7 @@ class TestLdap(cloudstackTestCase):
             tn = telnetlib.Telnet(ldapConfiguration['hostname'], ldapConfiguration['port'], timeout=15)
             if tn is not None:
                 tn.set_debuglevel(1)
-                print tn.msg("Connected to the server")
+                print(tn.msg("Connected to the server"))
                 self.debug("Ldap Server is Up and listening on the port %s" % tn.msg("Connected to the server"))
                 flag = True
                 tn.close()
@@ -304,4 +299,3 @@ class TestLdap(cloudstackTestCase):
         except Exception as p:
             self.debug("login operation failed %s" % p)
             self.reason = "Login operation Failed %s" % p
-

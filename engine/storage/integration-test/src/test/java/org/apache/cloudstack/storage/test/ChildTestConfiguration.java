@@ -33,6 +33,8 @@ import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationSer
 import org.apache.cloudstack.engine.service.api.OrchestrationService;
 import org.apache.cloudstack.engine.subsystem.api.storage.EndPointSelector;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDaoImpl;
+import org.apache.cloudstack.framework.config.dao.ConfigurationGroupDaoImpl;
+import org.apache.cloudstack.framework.config.dao.ConfigurationSubGroupDaoImpl;
 import org.apache.cloudstack.framework.rpc.RpcProvider;
 import org.apache.cloudstack.storage.cache.manager.StorageCacheManagerImpl;
 import org.apache.cloudstack.storage.test.ChildTestConfiguration.Library;
@@ -73,11 +75,9 @@ import com.cloud.storage.dao.StoragePoolHostDaoImpl;
 import com.cloud.storage.dao.StoragePoolWorkDaoImpl;
 import com.cloud.storage.dao.VMTemplateDaoImpl;
 import com.cloud.storage.dao.VMTemplateDetailsDaoImpl;
-import com.cloud.storage.dao.VMTemplateHostDaoImpl;
 import com.cloud.storage.dao.VMTemplatePoolDaoImpl;
 import com.cloud.storage.dao.VMTemplateZoneDaoImpl;
 import com.cloud.storage.dao.VolumeDaoImpl;
-import com.cloud.storage.dao.VolumeHostDaoImpl;
 import com.cloud.storage.download.DownloadMonitorImpl;
 import com.cloud.tags.dao.ResourceTagsDaoImpl;
 import com.cloud.template.TemplateManager;
@@ -91,19 +91,19 @@ import com.cloud.vm.dao.DomainRouterDao;
 import com.cloud.vm.dao.NicDaoImpl;
 import com.cloud.vm.dao.SecondaryStorageVmDaoImpl;
 import com.cloud.vm.dao.UserVmDaoImpl;
-import com.cloud.vm.dao.UserVmDetailsDaoImpl;
+import com.cloud.vm.dao.VMInstanceDetailsDaoImpl;
 import com.cloud.vm.dao.VMInstanceDaoImpl;
 import com.cloud.vm.snapshot.dao.VMSnapshotDaoImpl;
 
 @Configuration
-@ComponentScan(basePackageClasses = {NicDaoImpl.class, VMInstanceDaoImpl.class, VMTemplateHostDaoImpl.class, VolumeHostDaoImpl.class, VolumeDaoImpl.class,
+@ComponentScan(basePackageClasses = {NicDaoImpl.class, VMInstanceDaoImpl.class, VolumeDaoImpl.class,
     VMTemplatePoolDaoImpl.class, ResourceTagsDaoImpl.class, VMTemplateDaoImpl.class, MockStorageMotionStrategy.class, ConfigurationDaoImpl.class,
-    ClusterDaoImpl.class, HostPodDaoImpl.class, VMTemplateZoneDaoImpl.class, VMTemplateDetailsDaoImpl.class, HostDetailsDaoImpl.class,
-    HostTagsDaoImpl.class, HostTransferMapDaoImpl.class, DataCenterIpAddressDaoImpl.class, DataCenterLinkLocalIpAddressDaoImpl.class,
-    DataCenterVnetDaoImpl.class, PodVlanDaoImpl.class, DataCenterDetailsDaoImpl.class, DiskOfferingDaoImpl.class, StoragePoolHostDaoImpl.class,
-    UserVmDaoImpl.class, UserVmDetailsDaoImpl.class, ServiceOfferingDaoImpl.class, CapacityDaoImpl.class, SnapshotDaoImpl.class, VMSnapshotDaoImpl.class,
-    OCFS2ManagerImpl.class, ClusterDetailsDaoImpl.class, SecondaryStorageVmDaoImpl.class, ConsoleProxyDaoImpl.class, StoragePoolWorkDaoImpl.class,
-    StorageCacheManagerImpl.class, UserDaoImpl.class, DataCenterDaoImpl.class, StoragePoolDetailsDaoImpl.class, DomainDaoImpl.class,
+    ConfigurationGroupDaoImpl.class, ConfigurationSubGroupDaoImpl.class, ClusterDaoImpl.class, HostPodDaoImpl.class, VMTemplateZoneDaoImpl.class,
+    VMTemplateDetailsDaoImpl.class, HostDetailsDaoImpl.class, HostTagsDaoImpl.class, HostTransferMapDaoImpl.class, DataCenterIpAddressDaoImpl.class,
+    DataCenterLinkLocalIpAddressDaoImpl.class, DataCenterVnetDaoImpl.class, PodVlanDaoImpl.class, DataCenterDetailsDaoImpl.class, DiskOfferingDaoImpl.class,
+    StoragePoolHostDaoImpl.class, UserVmDaoImpl.class, VMInstanceDetailsDaoImpl.class, ServiceOfferingDaoImpl.class, CapacityDaoImpl.class, SnapshotDaoImpl.class,
+    VMSnapshotDaoImpl.class, OCFS2ManagerImpl.class, ClusterDetailsDaoImpl.class, SecondaryStorageVmDaoImpl.class, ConsoleProxyDaoImpl.class,
+    StoragePoolWorkDaoImpl.class, StorageCacheManagerImpl.class, UserDaoImpl.class, DataCenterDaoImpl.class, StoragePoolDetailsDaoImpl.class, DomainDaoImpl.class,
     DownloadMonitorImpl.class, AccountDaoImpl.class, ActionEventUtils.class, EventDaoImpl.class},
                includeFilters = {@Filter(value = Library.class, type = FilterType.CUSTOM)},
                useDefaultFilters = false)

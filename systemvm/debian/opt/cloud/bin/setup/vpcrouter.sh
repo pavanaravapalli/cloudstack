@@ -25,12 +25,6 @@ setup_vpcrouter() {
     grep -q $NAME /etc/hosts || echo "127.0.0.1 $NAME" >> /etc/hosts;
   fi
 
-    cat > /etc/network/interfaces << EOF
-auto lo eth0
-iface lo inet loopback
-EOF
-  setup_interface "0" $ETH0_IP $ETH0_MASK $GW
-
   echo $NAME > /etc/hostname
   echo 'AVAHI_DAEMON_DETECT_LOCAL=0' > /etc/default/avahi-daemon
   hostnamectl set-hostname $NAME
@@ -60,15 +54,19 @@ EOF
     echo "nameserver $NS2" >> /etc/dnsmasq-resolv.conf
     echo "nameserver $NS2" >> /etc/resolv.conf
   fi
-  if [ -n "$MGMTNET"  -a -n "$LOCAL_GW" ]
+
+  if [ -n "$IP6_NS1" ]
   then
-     if [ "$HYPERVISOR" == "vmware" ] || [ "$HYPERVISOR" == "hyperv" ];
-     then
-         ip route add $MGMTNET via $LOCAL_GW dev eth0
-         # workaround to activate vSwitch under VMware
-         timeout 3 ping -n -c 3 $LOCAL_GW || true
-     fi
+    echo "nameserver $IP6_NS1" >> /etc/dnsmasq-resolv.conf
+    echo "nameserver $IP6_NS1" >> /etc/resolv.conf
   fi
+  if [ -n "$IP6_NS2" ]
+  then
+    echo "nameserver $IP6_NS2" >> /etc/dnsmasq-resolv.conf
+    echo "nameserver $IP6_NS2" >> /etc/resolv.conf
+  fi
+
+  setup_vpc_mgmt_route "0"
 
   ip route delete default
   # create route table for static route
@@ -86,7 +84,6 @@ EOF
   enable_fwding 1
   enable_passive_ftp 1
   cp /etc/iptables/iptables-vpcrouter /etc/iptables/rules.v4
-  setup_sshd $ETH0_IP "eth0"
   cp /etc/vpcdnsmasq.conf /etc/dnsmasq.conf
   cp /etc/cloud-nic.rules /etc/udev/rules.d/cloud-nic.rules
   echo "" > /etc/dnsmasq.d/dhcphosts.txt
@@ -112,6 +109,17 @@ EOF
   if [ -f /etc/cron.daily/logrotate ]; then
     mv -n /etc/cron.daily/logrotate /etc/cron.hourly 2>&1
   fi
+
+  # As ACS is changing the file, the description will also change to make it clear that ACS is handling this.
+  sed -i "s#^Description=.*#Description=Cloudstack configuration time for rotation of log files#g" /usr/lib/systemd/system/logrotate.timer
+  sed -i "s#^OnCalendar=.*#OnCalendar=$LOGROTATE_FREQUENCY#g" /usr/lib/systemd/system/logrotate.timer
+  sed -i 's#^AccuracySec=.*#AccuracySec=5m#g' /usr/lib/systemd/system/logrotate.timer
+
+  # reload daemon
+  /usr/bin/systemctl daemon-reload
+
+  # Load modules to support NAT traversal in VR
+  modprobe nf_nat_pptp
 }
 
 routing_svcs
@@ -121,3 +129,4 @@ then
   exit 1
 fi
 setup_vpcrouter
+. /opt/cloud/bin/setup/patch.sh && patch_router

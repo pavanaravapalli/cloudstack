@@ -17,7 +17,8 @@
 """ Test cases for Test Paths Storage Migration
 """
 from nose.plugins.attrib import attr
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.lib.utils import (cleanup_resources)
 from marvin.lib.base import (Account,
                              ServiceOffering,
@@ -3539,7 +3540,7 @@ def check_files(self, vm, destinationHost):
         self.apiclient,
         virtualmachineid=vm.id,
         listall=True)
-    print vm_volumes
+    print(vm_volumes)
     for vol in vm_volumes:
         spool = list_storage_pools(self.apiclient, id=vol.storageid)
         split_path = spool[0].path.split("/")
@@ -3737,7 +3738,7 @@ class TestStorageLiveMigrationVmware(cloudstackTestCase):
     def GetDestinationHost(self, hostsToavoid):
         """
         This method gives us the destination host to which VM will be migrated
-        It takes the souce host i.e. hostsToavoid as input
+        It takes the source host i.e. hostsToavoid as input
         """
         destinationHost = None
         for host in self.hosts:

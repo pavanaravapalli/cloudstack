@@ -15,14 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { shallowRef, defineAsyncComponent } from 'vue'
 import store from '@/store'
 
 export default {
   name: 'storagepool',
   title: 'label.primary.storage',
-  icon: 'database',
+  icon: 'hdd-outlined',
   docHelp: 'adminguide/storage.html#primary-storage',
   permission: ['listStoragePoolsMetrics'],
+  searchFilters: ['name', 'zoneid', 'podid', 'clusterid', 'ipaddress', 'path', 'scope'],
   columns: () => {
     const fields = ['name', 'state', 'ipaddress', 'scope', 'type', 'path']
     const metricsFields = ['disksizeusedgb', 'disksizetotalgb', 'disksizeallocatedgb', 'disksizeunallocatedgb']
@@ -33,39 +35,67 @@ export default {
     fields.push('zonename')
     return fields
   },
-  details: ['name', 'id', 'ipaddress', 'type', 'scope', 'tags', 'path', 'provider', 'hypervisor', 'overprovisionfactor', 'disksizetotal', 'disksizeallocated', 'disksizeused', 'clustername', 'podname', 'zonename', 'created'],
+  details: ['name', 'id', 'ipaddress', 'type', 'details', 'nfsmountopts', 'scope', 'tags', 'storageaccessgroups', 'path', 'provider', 'hypervisor', 'overprovisionfactor', 'disksizetotal', 'disksizeallocated', 'disksizeused', 'capacityiops', 'usediops', 'clustername', 'podname', 'zonename', 'created'],
   related: [{
     name: 'volume',
     title: 'label.volumes',
     param: 'storageid'
+  },
+  {
+    name: 'template',
+    title: 'label.templates',
+    param: 'storageid'
+  },
+  {
+    name: 'iso',
+    title: 'label.isos',
+    param: 'storageid'
   }],
+  resourceType: 'PrimaryStorage',
+  filters: () => {
+    const filters = ['initial', 'initialized', 'creating', 'attaching', 'up', 'prepareformaintenance', 'errorinmaintenance', 'cancelmaintenance', 'maintenance', 'disabled', 'removed']
+    return filters
+  },
   tabs: [{
     name: 'details',
-    component: () => import('@/components/view/DetailsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
   }, {
     name: 'settings',
-    component: () => import('@/components/view/SettingsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/SettingsTab.vue')))
+  }, {
+    name: 'browser',
+    resourceType: 'PrimaryStorage',
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/StorageBrowser.vue')))
+  }, {
+    name: 'events',
+    resourceType: 'StoragePool',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+    show: () => { return 'listEvents' in store.getters.apis }
+  }, {
+    name: 'comments',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/AnnotationsTab.vue')))
   }],
   actions: [
     {
       api: 'createStoragePool',
-      icon: 'plus',
+      icon: 'plus-outlined',
       docHelp: 'installguide/configuration.html#add-primary-storage',
       label: 'label.add.primary.storage',
       listView: true,
       popup: true,
-      component: () => import('@/views/infra/AddPrimaryStorage.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/AddPrimaryStorage.vue')))
     },
     {
       api: 'updateStoragePool',
-      icon: 'edit',
+      icon: 'edit-outlined',
       label: 'label.edit',
       dataView: true,
-      args: ['name', 'tags', 'capacitybytes', 'capacityiops']
+      popup: true,
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/UpdatePrimaryStorage.vue')))
     },
     {
       api: 'updateStoragePool',
-      icon: 'pause-circle',
+      icon: 'pause-circle-outlined',
       label: 'label.disable.storage',
       message: 'message.confirm.disable.storage',
       dataView: true,
@@ -74,7 +104,7 @@ export default {
     },
     {
       api: 'updateStoragePool',
-      icon: 'play-circle',
+      icon: 'play-circle-outlined',
       label: 'label.enable.storage',
       message: 'message.confirm.enable.storage',
       dataView: true,
@@ -82,8 +112,16 @@ export default {
       show: (record) => { return record.state === 'Disabled' }
     },
     {
+      api: 'syncStoragePool',
+      icon: 'sync-outlined',
+      label: 'label.sync.storage',
+      message: 'message.confirm.sync.storage',
+      dataView: true,
+      show: (record) => { return record.state === 'Up' && record.type === 'DatastoreCluster' }
+    },
+    {
       api: 'enableStorageMaintenance',
-      icon: 'plus-square',
+      icon: 'plus-square-outlined',
       label: 'label.action.enable.maintenance.mode',
       message: 'message.action.primarystorage.enable.maintenance.mode',
       dataView: true,
@@ -91,19 +129,40 @@ export default {
     },
     {
       api: 'cancelStorageMaintenance',
-      icon: 'minus-square',
+      icon: 'minus-square-outlined',
       label: 'label.action.cancel.maintenance.mode',
       message: 'message.action.cancel.maintenance.mode',
       dataView: true,
       show: (record) => { return ['Maintenance', 'PrepareForMaintenance', 'ErrorInMaintenance'].includes(record.state) }
     },
     {
+      api: 'changeStoragePoolScope',
+      icon: 'swap-outlined',
+      label: 'label.action.change.primary.storage.scope',
+      dataView: true,
+      popup: true,
+      show: (record) => {
+        return (record.state === 'Disabled' &&
+          (record.scope === 'CLUSTER' ||
+           record.scope === 'ZONE') &&
+          (record.hypervisor === 'KVM' ||
+           record.hypervisor === 'VMware' ||
+           record.hypervisor === 'HyperV' ||
+           record.hypervisor === 'LXC' ||
+           record.hypervisor === 'Any' ||
+           record.hypervisor === 'Simulator')
+        )
+      },
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/ChangeStoragePoolScope.vue')))
+    },
+    {
       api: 'deleteStoragePool',
-      icon: 'delete',
+      icon: 'delete-outlined',
       label: 'label.action.delete.primary.storage',
       dataView: true,
       args: ['forced'],
-      show: (record) => { return (record.state === 'Down' || record.state === 'Maintenance' || record.state === 'Disconnected') }
+      show: (record) => { return (record.state === 'Down' || record.state === 'Maintenance' || record.state === 'Disconnected') },
+      displayName: (record) => { return record.name || record.displayName || record.id }
     }
   ]
 }

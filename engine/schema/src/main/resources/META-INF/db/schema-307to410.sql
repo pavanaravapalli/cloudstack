@@ -22,14 +22,14 @@
 
 SET foreign_key_checks = 0;
 
--- DB upgrade steps from 302-40 
+-- DB upgrade steps from 302-40
 CREATE TABLE `cloud`.`external_nicira_nvp_devices` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'id',
   `uuid` varchar(255) UNIQUE,
   `physical_network_id` bigint unsigned NOT NULL COMMENT 'id of the physical network in to which nicira nvp device is added',
   `provider_name` varchar(255) NOT NULL COMMENT 'Service Provider name corresponding to this nicira nvp device',
   `device_name` varchar(255) NOT NULL COMMENT 'name of the nicira nvp device',
-  `host_id` bigint unsigned NOT NULL COMMENT 'host id coresponding to the external nicira nvp device',
+  `host_id` bigint unsigned NOT NULL COMMENT 'host id corresponding to the external nicira nvp device',
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_external_nicira_nvp_devices__host_id` FOREIGN KEY (`host_id`) REFERENCES `host`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_external_nicira_nvp_devices__physical_network_id` FOREIGN KEY (`physical_network_id`) REFERENCES `physical_network`(`id`) ON DELETE CASCADE
@@ -51,7 +51,7 @@ ALTER TABLE `storage_pool` ADD `user_info` VARCHAR( 255 ) NULL COMMENT 'Authoriz
 INSERT INTO `cloud`.`configuration` (`category`, `instance`, `component`, `name`, `value`, `description`) VALUES ('Advanced', 'DEFAULT', 'management-server', 'event.purge.interval', '86400', 'The interval (in seconds) to wait before running the event purge thread');
 -- rrq 5839
 -- Remove the unique constraint on physical_network_id, provider_name from physical_network_service_providers
--- Because the name of this contraint is not set we need this roundabout way
+-- Because the name of this constraint is not set we need this roundabout way
 -- The key is also used by the foreign key constraint so drop and recreate that one
 ALTER TABLE physical_network_service_providers DROP FOREIGN KEY fk_pnetwork_service_providers__physical_network_id;
 SET @constraintname = (select CONCAT(CONCAT('DROP INDEX ', A.CONSTRAINT_NAME), ' ON physical_network_service_providers' )
@@ -59,9 +59,9 @@ from information_schema.key_column_usage A
 JOIN information_schema.key_column_usage B ON B.table_name = 'physical_network_service_providers' AND B.COLUMN_NAME = 'provider_name' AND A.COLUMN_NAME ='physical_network_id' AND B.CONSTRAINT_NAME=A.CONSTRAINT_NAME
 where A.table_name = 'physical_network_service_providers' LIMIT 1);
 
-PREPARE stmt1 FROM @constraintname; 
-EXECUTE stmt1; 
-DEALLOCATE PREPARE stmt1; 
+PREPARE stmt1 FROM @constraintname;
+EXECUTE stmt1;
+DEALLOCATE PREPARE stmt1;
 
 AlTER TABLE physical_network_service_providers ADD CONSTRAINT `fk_pnetwork_service_providers__physical_network_id` FOREIGN KEY (`physical_network_id`) REFERENCES `physical_network`(`id`) ON DELETE CASCADE;
 UPDATE `cloud`.`configuration` SET description='Do URL encoding for the api response, false by default' WHERE name='encode.api.response';
@@ -165,7 +165,7 @@ CREATE TABLE `cloud`.`s3` (
   `https` tinyint unsigned DEFAULT NULL COMMENT ' Flag indicating whether or not to connect over HTTPS',
   `connection_timeout` integer COMMENT ' The amount of time to wait (in milliseconds) when initially establishing a connection before giving up and timing out.',
   `max_error_retry` integer  COMMENT ' The maximum number of retry attempts for failed retryable requests (ex: 5xx error responses from services).',
-  `socket_timeout` integer COMMENT ' The amount of time to wait (in milliseconds) for data to be transfered over an established, open connection before the connection times out and is closed.',
+  `socket_timeout` integer COMMENT ' The amount of time to wait (in milliseconds) for data to be transferred over an established, open connection before the connection times out and is closed.',
   `created` datetime COMMENT 'date the s3 first signed on',
   PRIMARY KEY (`id`),
   CONSTRAINT `uc_s3__uuid` UNIQUE (`uuid`)
@@ -304,7 +304,7 @@ CREATE TABLE `cloud`.`external_bigswitch_vns_devices` (
   `physical_network_id` bigint unsigned NOT NULL COMMENT 'id of the physical network in to which bigswitch vns device is added',
   `provider_name` varchar(255) NOT NULL COMMENT 'Service Provider name corresponding to this bigswitch vns device',
   `device_name` varchar(255) NOT NULL COMMENT 'name of the bigswitch vns device',
-  `host_id` bigint unsigned NOT NULL COMMENT 'host id coresponding to the external bigswitch vns device',
+  `host_id` bigint unsigned NOT NULL COMMENT 'host id corresponding to the external bigswitch vns device',
   PRIMARY KEY  (`id`),
   CONSTRAINT `fk_external_bigswitch_vns_devices__host_id` FOREIGN KEY (`host_id`) REFERENCES `host`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_external_bigswitch_vns_devices__physical_network_id` FOREIGN KEY (`physical_network_id`) REFERENCES `physical_network`(`id`) ON DELETE CASCADE
@@ -351,8 +351,8 @@ ALTER TABLE `cloud`.`vlan` ADD COLUMN `ip6_range` varchar(255);
 ALTER TABLE `cloud`.`data_center` ADD COLUMN `ip6_dns1` varchar(255);
 ALTER TABLE `cloud`.`data_center` ADD COLUMN `ip6_dns2` varchar(255);
 
-UPDATE `cloud`.`networks` INNER JOIN `cloud`.`vlan` ON networks.id = vlan.network_id 
-SET networks.gateway = vlan.vlan_gateway, networks.ip6_gateway = vlan.ip6_gateway, networks.ip6_cidr = vlan.ip6_cidr 
+UPDATE `cloud`.`networks` INNER JOIN `cloud`.`vlan` ON networks.id = vlan.network_id
+SET networks.gateway = vlan.vlan_gateway, networks.ip6_gateway = vlan.ip6_gateway, networks.ip6_cidr = vlan.ip6_cidr
 WHERE networks.data_center_id = vlan.data_center_id AND networks.physical_network_id = vlan.physical_network_id;
 
 -- DB views for list api
@@ -1536,7 +1536,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`baremetal_dhcp_devices`(
   `pod_id` bigint unsigned DEFAULT NULL COMMENT 'Pod id where this dhcp server in',
   `device_type` varchar(255) DEFAULT NULL COMMENT 'type of the external device',
   `physical_network_id` bigint unsigned DEFAULT NULL COMMENT 'id of the physical network in to which external dhcp device is added',
-  `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id coresponding to the external dhcp device',
+  `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id corresponding to the external dhcp device',
   PRIMARY KEY  (`id`)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -1544,7 +1544,7 @@ ALTER TABLE `cloud`.`baremetal_dhcp_devices` CHANGE COLUMN `nsp_id` `nsp_id` big
 ALTER TABLE `cloud`.`baremetal_dhcp_devices` CHANGE COLUMN `pod_id` `pod_id` bigint unsigned DEFAULT NULL COMMENT 'Pod id where this dhcp server in';
 ALTER TABLE `cloud`.`baremetal_dhcp_devices` CHANGE COLUMN `device_type` `device_type` varchar(255) DEFAULT NULL COMMENT 'type of the external device';
 ALTER TABLE `cloud`.`baremetal_dhcp_devices` CHANGE COLUMN `physical_network_id` `physical_network_id` bigint unsigned DEFAULT NULL COMMENT 'id of the physical network in to which external dhcp device is added';
-ALTER TABLE `cloud`.`baremetal_dhcp_devices` CHANGE COLUMN `host_id` `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id coresponding to the external dhcp device';
+ALTER TABLE `cloud`.`baremetal_dhcp_devices` CHANGE COLUMN `host_id` `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id corresponding to the external dhcp device';
 
 CREATE TABLE IF NOT EXISTS `cloud`.`baremetal_pxe_devices` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'id',
@@ -1553,7 +1553,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`baremetal_pxe_devices` (
   `pod_id` bigint unsigned DEFAULT NULL COMMENT 'Pod id where this pxe server in, for pxe per zone this field is null',
   `device_type` varchar(255) DEFAULT NULL COMMENT 'type of the pxe device',
   `physical_network_id` bigint unsigned DEFAULT NULL COMMENT 'id of the physical network in to which external pxe device is added',
-  `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id coresponding to the external pxe device',
+  `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id corresponding to the external pxe device',
   PRIMARY KEY  (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -1561,7 +1561,7 @@ ALTER TABLE `cloud`.`baremetal_pxe_devices` CHANGE COLUMN `nsp_id` `nsp_id` bigi
 ALTER TABLE `cloud`.`baremetal_pxe_devices` CHANGE COLUMN `pod_id` `pod_id` bigint unsigned DEFAULT NULL COMMENT 'Pod id where this pxe server in, for pxe per zone this field is null';
 ALTER TABLE `cloud`.`baremetal_pxe_devices` CHANGE COLUMN `device_type` `device_type` varchar(255) DEFAULT NULL COMMENT 'type of the pxe device';
 ALTER TABLE `cloud`.`baremetal_pxe_devices` CHANGE COLUMN `physical_network_id` `physical_network_id` bigint unsigned DEFAULT NULL COMMENT 'id of the physical network in to which external pxe device is added';
-ALTER TABLE `cloud`.`baremetal_pxe_devices` CHANGE COLUMN `host_id` `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id coresponding to the external pxe device';
+ALTER TABLE `cloud`.`baremetal_pxe_devices` CHANGE COLUMN `host_id` `host_id` bigint unsigned DEFAULT NULL COMMENT 'host id corresponding to the external pxe device';
 
 #drop tables as the feature is not a part of 4.2
 DROP TABLE IF EXISTS `cloud`.`host_updates`;

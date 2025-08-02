@@ -45,9 +45,7 @@ public interface NetworkDao extends GenericDao<NetworkVO, Long>, StateDao<State,
 
     List<NetworkVO> getNetworksForOffering(long offeringId, long dataCenterId, long accountId);
 
-    @Override
-    @Deprecated
-    NetworkVO persist(NetworkVO vo);
+    int getOtherPersistentNetworksCount(long id, String broadcastURI, boolean isPersistent);
 
     /**
      * Retrieves the next available mac address in this network configuration.
@@ -128,4 +126,6 @@ public interface NetworkDao extends GenericDao<NetworkVO, Long>, StateDao<State,
     List<NetworkVO> listByPhysicalNetworkPvlan(long physicalNetworkId, String broadcastUri, Network.PVlanType pVlanType);
 
     List<NetworkVO> listByPhysicalNetworkPvlan(long physicalNetworkId, String broadcastUri);
+
+    List<NetworkVO> getAllPersistentNetworksFromZone(long dataCenterId);
 }

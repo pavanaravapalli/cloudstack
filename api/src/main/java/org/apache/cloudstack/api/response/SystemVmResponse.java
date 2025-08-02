@@ -20,7 +20,7 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.BaseResponse;
+import org.apache.cloudstack.api.BaseResponseWithAnnotations;
 import org.apache.cloudstack.api.EntityReference;
 
 import com.cloud.host.Status;
@@ -29,7 +29,7 @@ import com.cloud.vm.VirtualMachine;
 import com.google.gson.annotations.SerializedName;
 
 @EntityReference(value = VirtualMachine.class)
-public class SystemVmResponse extends BaseResponse {
+public class SystemVmResponse extends BaseResponseWithAnnotations {
     @SerializedName("id")
     @Param(description = "the ID of the system VM")
     private String id;
@@ -37,14 +37,6 @@ public class SystemVmResponse extends BaseResponse {
     @SerializedName("systemvmtype")
     @Param(description = "the system VM type")
     private String systemVmType;
-
-    @SerializedName("jobid")
-    @Param(description = "the job ID associated with the system VM. This is only displayed if the router listed is part of a currently running asynchronous job.")
-    private String jobId;
-
-    @SerializedName("jobstatus")
-    @Param(description = "the job status associated with the system VM.  This is only displayed if the router listed is part of a currently running asynchronous job.")
-    private Integer jobStatus;
 
     @SerializedName("zoneid")
     @Param(description = "the Zone ID for the system VM")
@@ -89,6 +81,10 @@ public class SystemVmResponse extends BaseResponse {
     @SerializedName("hostname")
     @Param(description = "the hostname for the system VM")
     private String hostName;
+
+    @SerializedName(ApiConstants.HOST_CONTROL_STATE)
+    @Param(description = "the control state of the host for the system VM")
+    private String hostControlState;
 
     @SerializedName("hypervisor")
     @Param(description = "the hypervisor on which the template runs")
@@ -169,6 +165,22 @@ public class SystemVmResponse extends BaseResponse {
     @SerializedName("version")
     @Param(description = "the systemvm agent version", since = "4.13.1")
     private String version;
+
+    @SerializedName(ApiConstants.IS_DYNAMICALLY_SCALABLE)
+    @Param(description = "true if vm contains XS/VMWare tools inorder to support dynamic scaling of VM cpu/memory.")
+    private Boolean isDynamicallyScalable;
+
+    @SerializedName(ApiConstants.SERVICE_OFFERING_ID)
+    @Param(description = "the ID of the service offering of the system virtual machine.")
+    private String serviceOfferingId;
+
+    @SerializedName("serviceofferingname")
+    @Param(description = "the name of the service offering of the system virtual machine.")
+    private String serviceOfferingName;
+
+    @SerializedName(ApiConstants.ARCH)
+    @Param(description = "CPU arch of the system VM", since = "4.20.1")
+    private String arch;
 
     @Override
     public String getObjectId() {
@@ -277,6 +289,14 @@ public class SystemVmResponse extends BaseResponse {
 
     public void setHostName(String hostName) {
         this.hostName = hostName;
+    }
+
+    public String getHostControlState() {
+        return hostControlState;
+    }
+
+    public void setHostControlState(String hostControlState) {
+        this.hostControlState = hostControlState;
     }
 
     public String getHypervisor() {
@@ -441,5 +461,33 @@ public class SystemVmResponse extends BaseResponse {
 
     public void setVersion(String version) {
         this.version = version;
+    }
+
+    public Boolean getDynamicallyScalable() {
+        return isDynamicallyScalable;
+    }
+
+    public void setDynamicallyScalable(Boolean dynamicallyScalable) {
+        isDynamicallyScalable = dynamicallyScalable;
+    }
+
+    public String getServiceOfferingId() {
+        return serviceOfferingId;
+    }
+
+    public void setServiceOfferingId(String serviceOfferingId) {
+        this.serviceOfferingId = serviceOfferingId;
+    }
+
+    public String getServiceOfferingName() {
+        return serviceOfferingName;
+    }
+
+    public void setServiceOfferingName(String serviceOfferingName) {
+        this.serviceOfferingName = serviceOfferingName;
+    }
+
+    public void setArch(String arch) {
+        this.arch = arch;
     }
 }

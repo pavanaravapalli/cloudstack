@@ -16,12 +16,12 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vm;
 
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -44,7 +44,6 @@ import com.cloud.vm.VirtualMachine;
         "support this feature for this command to take effect. [async]", responseView = ResponseView.Restricted, entityType = {VirtualMachine.class},
     requestHasSensitiveInfo = false, responseHasSensitiveInfo = true)
 public class ResetVMPasswordCmd extends BaseAsyncCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(ResetVMPasswordCmd.class.getName());
 
     private static final String s_name = "resetpasswordforvirtualmachineresponse";
 
@@ -56,8 +55,7 @@ public class ResetVMPasswordCmd extends BaseAsyncCmd implements UserCmd {
             required=true, description="The ID of the virtual machine")
     private Long id;
 
-    // unexposed parameter needed for serializing/deserializing the command
-    @Parameter(name=ApiConstants.PASSWORD, type=CommandType.STRING, expose=false)
+    @Parameter(name=ApiConstants.PASSWORD, type=CommandType.STRING, description="The new password of the virtual machine. If null, a random password will be generated for the VM.", since="4.19.0")
     protected String password;
 
 
@@ -107,18 +105,25 @@ public class ResetVMPasswordCmd extends BaseAsyncCmd implements UserCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.VirtualMachine;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 
     @Override
     public void execute() throws ResourceUnavailableException, InsufficientCapacityException {
-        password = _mgr.generateRandomPassword();
+        password = getPassword();
+        UserVm vm = _responseGenerator.findUserVmById(getId());
+        if (StringUtils.isBlank(password)) {
+            password = _mgr.generateRandomPassword();
+            logger.debug(String.format("Resetting VM [%s] password to a randomly generated password.", vm.getUuid()));
+        } else {
+            logger.debug(String.format("Resetting VM [%s] password to password defined by user.", vm.getUuid()));
+        }
         CallContext.current().setEventDetails("Vm Id: " + getId());
         UserVm result = _userVmService.resetVMPassword(this, password);
         if (result != null){

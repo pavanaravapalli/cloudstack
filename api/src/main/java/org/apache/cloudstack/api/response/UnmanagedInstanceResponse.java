@@ -39,9 +39,17 @@ public class UnmanagedInstanceResponse extends BaseResponse {
     @Param(description = "the ID of the cluster to which virtual machine belongs")
     private String clusterId;
 
+    @SerializedName(ApiConstants.CLUSTER_NAME)
+    @Param(description = "the name of the cluster to which virtual machine belongs")
+    private String clusterName;
+
     @SerializedName(ApiConstants.HOST_ID)
     @Param(description = "the ID of the host to which virtual machine belongs")
     private String hostId;
+
+    @SerializedName(ApiConstants.HOST_NAME)
+    @Param(description = "the name of the host to which virtual machine belongs")
+    private String hostName;
 
     @SerializedName(ApiConstants.POWER_STATE)
     @Param(description = "the power state of the virtual machine")
@@ -70,6 +78,14 @@ public class UnmanagedInstanceResponse extends BaseResponse {
     @SerializedName(ApiConstants.OS_DISPLAY_NAME)
     @Param(description = "the operating system of the virtual machine")
     private String operatingSystem;
+
+    @SerializedName(ApiConstants.BOOT_MODE)
+    @Param(description = "indicates the boot mode")
+    private String bootMode;
+
+    @SerializedName(ApiConstants.BOOT_TYPE)
+    @Param(description = "indicates the boot type")
+    private String bootType;
 
     @SerializedName(ApiConstants.DISK)
     @Param(description = "the list of disks associated with the virtual machine", responseObject = UnmanagedInstanceDiskResponse.class)
@@ -100,12 +116,28 @@ public class UnmanagedInstanceResponse extends BaseResponse {
         this.clusterId = clusterId;
     }
 
+    public String getClusterName() {
+        return clusterName;
+    }
+
+    public void setClusterName(String clusterName) {
+        this.clusterName = clusterName;
+    }
+
     public String getHostId() {
         return hostId;
     }
 
     public void setHostId(String hostId) {
         this.hostId = hostId;
+    }
+
+    public String getHostName() {
+        return hostName;
+    }
+
+    public void setHostName(String hostName) {
+        this.hostName = hostName;
     }
 
     public String getPowerState() {
@@ -186,5 +218,21 @@ public class UnmanagedInstanceResponse extends BaseResponse {
 
     public void addNic(NicResponse nic) {
         this.nics.add(nic);
+    }
+
+    public String getBootMode() {
+        return bootMode;
+    }
+
+    public void setBootMode(String bootMode) {
+        this.bootMode = bootMode;
+    }
+
+    public String getBootType() {
+        return bootType;
+    }
+
+    public void setBootType(String bootType) {
+        this.bootType = bootType;
     }
 }

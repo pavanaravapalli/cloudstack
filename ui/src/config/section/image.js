@@ -15,44 +15,65 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import kubernetes from '@/assets/icons/kubernetes.svg?inline'
+import { shallowRef, defineAsyncComponent } from 'vue'
 import store from '@/store'
+import { isZoneCreated } from '@/utils/zone'
 
 export default {
   name: 'image',
   title: 'label.images',
-  icon: 'picture',
+  icon: 'picture-outlined',
   docHelp: 'adminguide/templates.html',
   children: [
     {
       name: 'template',
       title: 'label.templates',
-      icon: 'save',
+      icon: 'save-outlined',
       docHelp: 'adminguide/templates.html',
       permission: ['listTemplates'],
       params: { templatefilter: 'self', showunique: 'true' },
       resourceType: 'Template',
       filters: ['self', 'shared', 'featured', 'community'],
       columns: () => {
-        var fields = ['name', 'hypervisor', 'ostypename']
+        var fields = ['name',
+          {
+            state: (record) => {
+              if (record.isready) {
+                return 'Ready'
+              }
+              return 'Not Ready'
+            }
+          }, 'ostypename', 'arch', 'hypervisor']
         if (['Admin', 'DomainAdmin'].includes(store.getters.userInfo.roletype)) {
+          fields.push('size')
           fields.push('account')
         }
+        if (store.getters.listAllProjects) {
+          fields.push('project')
+        }
         if (['Admin'].includes(store.getters.userInfo.roletype)) {
+          fields.push('templatetype')
           fields.push('order')
         }
         return fields
       },
       details: () => {
-        var fields = ['name', 'id', 'displaytext', 'checksum', 'hypervisor', 'format', 'ostypename', 'size', 'isready', 'passwordenabled',
-          'directdownload', 'deployasis', 'ispublic', 'isfeatured', 'isextractable', 'isdynamicallyscalable', 'crosszones', 'type',
-          'account', 'domain', 'created']
+        var fields = ['name', 'id', 'displaytext', 'checksum', 'hypervisor', 'arch', 'format', 'externalprovisioner', 'ostypename', 'size', 'physicalsize', 'isready', 'passwordenabled',
+          'crossZones', 'templatetype', 'directdownload', 'deployasis', 'ispublic', 'isfeatured', 'isextractable', 'isdynamicallyscalable', 'crosszones', 'type',
+          'account', 'domain', 'created', 'userdatadetails', 'userdatapolicy', 'forcks']
         if (['Admin'].includes(store.getters.userInfo.roletype)) {
-          fields.push('templatetype', 'url')
+          fields.push('templatetag', 'templatetype', 'url')
         }
         return fields
       },
-      searchFilters: ['name', 'zoneid', 'tags'],
+      searchFilters: () => {
+        var filters = ['name', 'zoneid', 'tags', 'arch', 'oscategoryid', 'templatetype', 'extensionid']
+        if (['Admin', 'DomainAdmin'].includes(store.getters.userInfo.roletype)) {
+          filters.push('storageid')
+          filters.push('imagestoreid')
+        }
+        return filters
+      },
       related: [{
         name: 'vm',
         title: 'label.instances',
@@ -60,61 +81,66 @@ export default {
       }],
       tabs: [{
         name: 'details',
-        component: () => import('@/components/view/DetailsTab.vue')
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
       }, {
         name: 'zones',
-        component: () => import('@/views/image/TemplateZones.vue')
+        component: shallowRef(defineAsyncComponent(() => import('@/views/image/TemplateZones.vue')))
       }, {
         name: 'settings',
-        component: () => import('@/components/view/DetailSettings')
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailSettings')))
+      }, {
+        name: 'vnf.settings',
+        component: shallowRef(defineAsyncComponent(() => import('@/views/image/TemplateVnfSettings.vue'))),
+        show: (record) => { return record.templatetype === 'VNF' && 'updateVnfTemplate' in store.getters.apis }
+      },
+      {
+        name: 'events',
+        resourceType: 'Template',
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+        show: () => { return 'listEvents' in store.getters.apis }
+      },
+      {
+        name: 'comments',
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/AnnotationsTab.vue')))
       }],
       actions: [
         {
           api: 'registerTemplate',
-          icon: 'plus',
+          icon: 'plus-outlined',
           label: 'label.action.register.template',
           docHelp: 'adminguide/templates.html#uploading-templates-from-a-remote-http-server',
           listView: true,
           popup: true,
-          component: () => import('@/views/image/RegisterOrUploadTemplate.vue')
+          show: isZoneCreated,
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/RegisterOrUploadTemplate.vue')))
         },
         {
           api: 'registerTemplate',
-          icon: 'cloud-upload',
+          icon: 'cloud-upload-outlined',
           label: 'label.upload.template.from.local',
           docHelp: 'adminguide/templates.html#uploading-templates-and-isos-from-a-local-computer',
           listView: true,
           popup: true,
-          component: () => import('@/views/image/RegisterOrUploadTemplate.vue')
+          show: () => { return isZoneCreated() && 'getUploadParamsForTemplate' in store.getters.apis },
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/RegisterOrUploadTemplate.vue')))
         },
         {
           api: 'updateTemplate',
-          icon: 'edit',
-          label: 'label.edit',
+          icon: 'edit-outlined',
+          label: 'label.action.edit.template',
           dataView: true,
           show: (record, store) => {
             return (['Admin'].includes(store.userInfo.roletype) || // If admin or owner or belongs to current project
               (record.domainid === store.userInfo.domainid && record.account === store.userInfo.account) ||
               (record.domainid === store.userInfo.domainid && record.projectid && store.project && store.project.id && record.projectid === store.project.id)) &&
-              record.templatetype !== 'SYSTEM' &&
               record.isready
           },
-          args: (record, store) => {
-            var fields = ['name', 'displaytext', 'passwordenabled', 'ostypeid', 'isdynamicallyscalable']
-            if (['Admin'].includes(store.userInfo.roletype)) {
-              fields.push('templatetype')
-            }
-            return fields
-          },
-          mapping: {
-            templatetype: {
-              options: ['BUILTIN', 'USER', 'SYSTEM', 'ROUTING']
-            }
-          }
+          popup: true,
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/UpdateTemplate.vue')))
         },
         {
           api: 'updateTemplatePermissions',
-          icon: 'share-alt',
+          icon: 'share-alt-outlined',
           label: 'label.action.template.share',
           dataView: true,
           args: (record, store) => {
@@ -134,18 +160,18 @@ export default {
         },
         {
           api: 'extractTemplate',
-          icon: 'cloud-download',
+          icon: 'cloud-download-outlined',
           label: 'label.action.download.template',
           message: 'message.action.download.template',
           docHelp: 'adminguide/templates.html#exporting-templates',
           dataView: true,
           show: (record, store) => {
             return (['Admin'].includes(store.userInfo.roletype) || // If admin or owner or belongs to current project
-              (record.domainid === store.userInfo.domainid && record.account === store.userInfo.account) ||
+              ((record.domainid === store.userInfo.domainid && record.account === store.userInfo.account) ||
               (record.domainid === store.userInfo.domainid && record.projectid && store.project && store.project.id && record.projectid === store.project.id)) &&
               record.templatetype !== 'SYSTEM' &&
-              record.isready &&
-              record.isextractable
+              record.isextractable) &&
+              record.isready
           },
           args: ['zoneid', 'mode'],
           mapping: {
@@ -160,7 +186,7 @@ export default {
         },
         {
           api: 'updateTemplatePermissions',
-          icon: 'reconciliation',
+          icon: 'reconciliation-outlined',
           label: 'label.action.template.permission',
           docHelp: 'adminguide/templates.html#sharing-templates-with-other-accounts-projects',
           dataView: true,
@@ -172,28 +198,50 @@ export default {
               record.templatetype !== 'SYSTEM' &&
               record.isready
           },
-          component: () => import('@/views/image/UpdateTemplateIsoPermissions')
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/UpdateTemplateIsoPermissions')))
         }
       ]
     },
     {
       name: 'iso',
       title: 'label.isos',
-      icon: 'usb',
+      icon: 'usb-outlined',
       docHelp: 'adminguide/templates.html#working-with-isos',
       permission: ['listIsos'],
       params: { isofilter: 'self', showunique: 'true' },
       resourceType: 'ISO',
       filters: ['self', 'shared', 'featured', 'community'],
       columns: () => {
-        var fields = ['name', 'ostypename']
+        var fields = ['name',
+          {
+            state: (record) => {
+              if (record.isready) {
+                return 'Ready'
+              }
+              return 'Not Ready'
+            }
+          }, 'ostypename', 'arch']
         if (['Admin', 'DomainAdmin'].includes(store.getters.userInfo.roletype)) {
+          fields.push('size')
           fields.push('account')
+        }
+        if (store.getters.listAllProjects) {
+          fields.push('project')
+        }
+        if (['Admin'].includes(store.getters.userInfo.roletype)) {
+          fields.push('order')
         }
         return fields
       },
-      details: ['name', 'id', 'displaytext', 'checksum', 'ostypename', 'size', 'bootable', 'isready', 'directdownload', 'isextractable', 'ispublic', 'isfeatured', 'crosszones', 'account', 'domain', 'created'],
-      searchFilters: ['name', 'zoneid', 'tags'],
+      details: ['name', 'id', 'displaytext', 'checksum', 'ostypename', 'size', 'arch', 'bootable', 'isready', 'passwordenabled', 'directdownload', 'isextractable', 'ispublic', 'isfeatured', 'isdynamicallyscalable', 'crosszones', 'account', 'domain', 'created', 'userdatadetails', 'userdatapolicy', 'url'],
+      searchFilters: () => {
+        var filters = ['name', 'zoneid', 'tags', 'arch', 'oscategoryid']
+        if (['Admin', 'DomainAdmin'].includes(store.getters.userInfo.roletype)) {
+          filters.push('storageid')
+          filters.push('imagestoreid')
+        }
+        return filters
+      },
       related: [{
         name: 'vm',
         title: 'label.instances',
@@ -201,33 +249,45 @@ export default {
       }],
       tabs: [{
         name: 'details',
-        component: () => import('@/components/view/DetailsTab.vue')
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
       }, {
         name: 'zones',
-        component: () => import('@/views/image/IsoZones.vue')
+        component: shallowRef(defineAsyncComponent(() => import('@/views/image/IsoZones.vue')))
+      },
+      {
+        name: 'events',
+        resourceType: 'Iso',
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+        show: () => { return 'listEvents' in store.getters.apis }
+      },
+      {
+        name: 'comments',
+        component: shallowRef(defineAsyncComponent(() => import('@/components/view/AnnotationsTab.vue')))
       }],
       actions: [
         {
           api: 'registerIso',
-          icon: 'plus',
+          icon: 'plus-outlined',
           label: 'label.action.register.iso',
           docHelp: 'adminguide/templates.html#id10',
           listView: true,
           popup: true,
-          component: () => import('@/views/image/RegisterOrUploadIso.vue')
+          show: isZoneCreated,
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/RegisterOrUploadIso.vue')))
         },
         {
           api: 'registerIso',
-          icon: 'cloud-upload',
+          icon: 'cloud-upload-outlined',
           label: 'label.upload.iso.from.local',
+          show: () => { return isZoneCreated() && 'getUploadParamsForIso' in store.getters.apis },
           docHelp: 'adminguide/templates.html#id10',
           listView: true,
           popup: true,
-          component: () => import('@/views/image/RegisterOrUploadIso.vue')
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/RegisterOrUploadIso.vue')))
         },
         {
           api: 'updateIso',
-          icon: 'edit',
+          icon: 'edit-outlined',
           label: 'label.action.edit.iso',
           dataView: true,
           show: (record, store) => {
@@ -237,11 +297,12 @@ export default {
               !(record.account === 'system' && record.domainid === 1) &&
               record.isready
           },
-          args: ['name', 'displaytext', 'bootable', 'ostypeid']
+          popup: true,
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/UpdateISO.vue')))
         },
         {
           api: 'updateIsoPermissions',
-          icon: 'share-alt',
+          icon: 'share-alt-outlined',
           label: 'label.action.iso.share',
           dataView: true,
           args: (record, store) => {
@@ -261,14 +322,14 @@ export default {
         },
         {
           api: 'extractIso',
-          icon: 'cloud-download',
+          icon: 'cloud-download-outlined',
           label: 'label.action.download.iso',
           message: 'message.action.download.iso',
           docHelp: 'adminguide/templates.html#exporting-templates',
           dataView: true,
           show: (record, store) => {
             return (['Admin'].includes(store.userInfo.roletype) || // If admin or owner or belongs to current project
-              (record.domainid === store.userInfo.domainid && record.account === store.userInfo.account) ||
+              (record.domainid === store.userInfo.domainid && record.account === store.userInfo.account && record.isextractable) ||
               (record.domainid === store.userInfo.domainid && record.projectid && store.project && store.project.id && record.projectid === store.project.id)) &&
               !(record.account === 'system' && record.domainid === 1) &&
               record.isready
@@ -286,7 +347,7 @@ export default {
         },
         {
           api: 'updateIsoPermissions',
-          icon: 'reconciliation',
+          icon: 'reconciliation-outlined',
           label: 'label.action.iso.permission',
           docHelp: 'adminguide/templates.html#sharing-templates-with-other-accounts-projects',
           dataView: true,
@@ -299,38 +360,52 @@ export default {
               !(record.account === 'system' && record.domainid === 1) &&
               record.isready
           },
-          component: () => import('@/views/image/UpdateTemplateIsoPermissions')
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/UpdateTemplateIsoPermissions')))
         }
       ]
     },
     {
       name: 'kubernetesiso',
       title: 'label.kubernetes.isos',
-      icon: kubernetes,
+      icon: ['fa-solid', 'fa-dharmachakra'],
       docHelp: 'plugins/cloudstack-kubernetes-service.html#kubernetes-supported-versions',
       permission: ['listKubernetesSupportedVersions'],
-      columns: ['name', 'state', 'semanticversion', 'isostate', 'mincpunumber', 'minmemory', 'zonename'],
-      details: ['name', 'semanticversion', 'zoneid', 'zonename', 'isoid', 'isoname', 'isostate', 'mincpunumber', 'minmemory', 'supportsha', 'state'],
+      searchFilters: ['zoneid', 'minimumsemanticversion', 'arch'],
+      columns: ['name', 'state', 'semanticversion', 'isostate', 'mincpunumber', 'minmemory', 'arch', 'zonename'],
+      details: ['name', 'semanticversion', 'supportsautoscaling', 'zoneid', 'zonename', 'isoid', 'isoname', 'isostate', 'arch', 'mincpunumber', 'minmemory', 'supportsha', 'state', 'created'],
+      tabs: [
+        {
+          name: 'details',
+          component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
+        },
+        {
+          name: 'events',
+          resourceType: 'KubernetesSupportedVersion',
+          component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+          show: () => { return 'listEvents' in store.getters.apis }
+        }
+      ],
       actions: [
         {
           api: 'addKubernetesSupportedVersion',
-          icon: 'plus',
+          icon: 'plus-outlined',
           label: 'label.kubernetes.version.add',
           listView: true,
           popup: true,
-          component: () => import('@/views/image/AddKubernetesSupportedVersion.vue')
+          show: isZoneCreated,
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/AddKubernetesSupportedVersion.vue')))
         },
         {
           api: 'updateKubernetesSupportedVersion',
-          icon: 'edit',
+          icon: 'edit-outlined',
           label: 'label.kubernetes.version.update',
           dataView: true,
           popup: true,
-          component: () => import('@/views/image/UpdateKubernetesSupportedVersion.vue')
+          component: shallowRef(defineAsyncComponent(() => import('@/views/image/UpdateKubernetesSupportedVersion.vue')))
         },
         {
           api: 'deleteKubernetesSupportedVersion',
-          icon: 'delete',
+          icon: 'delete-outlined',
           label: 'label.kubernetes.version.delete',
           message: 'message.kubernetes.version.delete',
           dataView: true

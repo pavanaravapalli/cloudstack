@@ -22,11 +22,11 @@ import com.cloud.exception.NetworkRuleConflictException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.host.Host;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiArgValidator;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseCmd;
@@ -37,14 +37,14 @@ import org.apache.cloudstack.api.response.OutOfBandManagementResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.outofbandmanagement.OutOfBandManagement;
 import org.apache.cloudstack.outofbandmanagement.OutOfBandManagementService;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.inject.Inject;
 
-@APICommand(name = ConfigureOutOfBandManagementCmd.APINAME, description = "Configures a host's out-of-band management interface",
+@APICommand(name = "configureOutOfBandManagement", description = "Configures a host's out-of-band management interface",
         responseObject = OutOfBandManagementResponse.class, requestHasSensitiveInfo = true, responseHasSensitiveInfo = false,
         since = "4.9.0", authorized = {RoleType.Admin})
 public class ConfigureOutOfBandManagementCmd extends BaseCmd {
-    public static final String APINAME = "configureOutOfBandManagement";
 
     @Inject
     private OutOfBandManagementService outOfBandManagementService;
@@ -90,11 +90,6 @@ public class ConfigureOutOfBandManagementCmd extends BaseCmd {
     }
 
     @Override
-    public String getCommandName() {
-        return APINAME.toLowerCase() + BaseCmd.RESPONSE_SUFFIX;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         return CallContext.current().getCallingAccountId();
     }
@@ -105,21 +100,27 @@ public class ConfigureOutOfBandManagementCmd extends BaseCmd {
 
     public final ImmutableMap<OutOfBandManagement.Option, String> getHostPMOptions() {
         final ImmutableMap.Builder<OutOfBandManagement.Option, String> builder = ImmutableMap.builder();
-        if (!Strings.isNullOrEmpty(driver)) {
-            builder.put(OutOfBandManagement.Option.DRIVER, driver);
-        }
-        if (!Strings.isNullOrEmpty(address)) {
-            builder.put(OutOfBandManagement.Option.ADDRESS, address);
-        }
-        if (!Strings.isNullOrEmpty(port)) {
-            builder.put(OutOfBandManagement.Option.PORT, port);
-        }
-        if (!Strings.isNullOrEmpty(username)) {
-            builder.put(OutOfBandManagement.Option.USERNAME, username);
-        }
-        if (!Strings.isNullOrEmpty(password)) {
-            builder.put(OutOfBandManagement.Option.PASSWORD, password);
-        }
+        putOptionIfIsNotEmpty(builder, OutOfBandManagement.Option.DRIVER, driver);
+        putOptionIfIsNotEmpty(builder, OutOfBandManagement.Option.ADDRESS, address);
+        putOptionIfIsNotEmpty(builder, OutOfBandManagement.Option.PORT, port);
+        putOptionIfIsNotEmpty(builder, OutOfBandManagement.Option.USERNAME, username);
+        putOptionIfIsNotEmpty(builder, OutOfBandManagement.Option.PASSWORD, password);
         return builder.build();
+    }
+
+    protected void putOptionIfIsNotEmpty(ImmutableMap.Builder<OutOfBandManagement.Option, String> builder, OutOfBandManagement.Option option, String value) {
+        if (StringUtils.isNotEmpty(value)) {
+            builder.put(option, value);
+        }
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return getHostId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Host;
     }
 }

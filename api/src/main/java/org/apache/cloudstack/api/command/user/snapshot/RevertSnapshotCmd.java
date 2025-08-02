@@ -21,7 +21,7 @@ package org.apache.cloudstack.api.command.user.snapshot;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -30,7 +30,6 @@ import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.SnapshotResponse;
 import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
 
 import com.cloud.event.EventTypes;
 import com.cloud.storage.Snapshot;
@@ -39,8 +38,6 @@ import com.cloud.user.Account;
 @APICommand(name = "revertSnapshot", description = "This is supposed to revert a volume snapshot. This command is only supported with KVM so far", responseObject = SnapshotResponse.class, entityType = {Snapshot.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class RevertSnapshotCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(RevertSnapshotCmd.class.getName());
-    private static final String s_name = "revertsnapshotresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -60,11 +57,6 @@ public class RevertSnapshotCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
     @Override
     public long getEntityOwnerId() {
         Snapshot snapshot = _entityMgr.findById(Snapshot.class, getId());
@@ -86,12 +78,12 @@ public class RevertSnapshotCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Snapshot;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Snapshot;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 

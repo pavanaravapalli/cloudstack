@@ -17,17 +17,27 @@
 package com.cloud.configuration;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
+import com.cloud.network.Network;
+import org.apache.cloudstack.api.ApiConstants;
+import org.apache.cloudstack.api.command.admin.config.ResetCfgCmd;
 import org.apache.cloudstack.api.command.admin.config.UpdateCfgCmd;
+import org.apache.cloudstack.api.command.admin.network.CreateGuestNetworkIpv6PrefixCmd;
 import org.apache.cloudstack.api.command.admin.network.CreateManagementNetworkIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.network.CreateNetworkOfferingCmd;
+import org.apache.cloudstack.api.command.admin.network.DeleteGuestNetworkIpv6PrefixCmd;
 import org.apache.cloudstack.api.command.admin.network.DeleteManagementNetworkIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.network.DeleteNetworkOfferingCmd;
+import org.apache.cloudstack.api.command.admin.network.ListGuestNetworkIpv6PrefixesCmd;
 import org.apache.cloudstack.api.command.admin.network.UpdateNetworkOfferingCmd;
+import org.apache.cloudstack.api.command.admin.network.UpdatePodManagementNetworkIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.offering.CreateDiskOfferingCmd;
 import org.apache.cloudstack.api.command.admin.offering.CreateServiceOfferingCmd;
 import org.apache.cloudstack.api.command.admin.offering.DeleteDiskOfferingCmd;
 import org.apache.cloudstack.api.command.admin.offering.DeleteServiceOfferingCmd;
+import org.apache.cloudstack.api.command.admin.offering.IsAccountAllowedToCreateOfferingsWithTagsCmd;
 import org.apache.cloudstack.api.command.admin.offering.UpdateDiskOfferingCmd;
 import org.apache.cloudstack.api.command.admin.offering.UpdateServiceOfferingCmd;
 import org.apache.cloudstack.api.command.admin.pod.DeletePodCmd;
@@ -39,6 +49,7 @@ import org.apache.cloudstack.api.command.admin.vlan.CreateVlanIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.vlan.DedicatePublicIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.vlan.DeleteVlanIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.vlan.ReleasePublicIpRangeCmd;
+import org.apache.cloudstack.api.command.admin.vlan.UpdateVlanIpRangeCmd;
 import org.apache.cloudstack.api.command.admin.zone.CreateZoneCmd;
 import org.apache.cloudstack.api.command.admin.zone.DeleteZoneCmd;
 import org.apache.cloudstack.api.command.admin.zone.UpdateZoneCmd;
@@ -48,6 +59,7 @@ import org.apache.cloudstack.region.PortableIp;
 import org.apache.cloudstack.region.PortableIpRange;
 
 import com.cloud.dc.DataCenter;
+import com.cloud.dc.DataCenterGuestIpv6Prefix;
 import com.cloud.dc.Pod;
 import com.cloud.dc.Vlan;
 import com.cloud.domain.Domain;
@@ -73,6 +85,15 @@ public interface ConfigurationService {
      * @return updated configuration object if successful
      */
     Configuration updateConfiguration(UpdateCfgCmd cmd) throws InvalidParameterValueException;
+
+    /**
+     * Resets a configuration entry with default value
+     *
+     * @param cmd
+     *            - the command wrapping name parameter
+     * @return updated configuration object if successful
+     */
+    Pair<Configuration, String> resetConfiguration(ResetCfgCmd cmd) throws InvalidParameterValueException;
 
     /**
      * Create a service offering through the API
@@ -184,11 +205,12 @@ public interface ConfigurationService {
      *            TODO
      * @param allocationState
      *            TODO
+     * @param storageAccessGroups
      * @return the new pod if successful, null otherwise
      * @throws
      * @throws
      */
-    Pod createPod(long zoneId, String name, String startIp, String endIp, String gateway, String netmask, String allocationState);
+    Pod createPod(long zoneId, String name, String startIp, String endIp, String gateway, String netmask, String allocationState, List<String> storageAccessGroups);
 
     /**
      * Creates a mutual exclusive IP range in the pod with same gateway, netmask.
@@ -202,6 +224,29 @@ public interface ConfigurationService {
      * @param cmd - The command specifying pod ID, start IP, end IP.
      */
     void deletePodIpRange(DeleteManagementNetworkIpRangeCmd cmd) throws ResourceUnavailableException, ConcurrentOperationException;
+
+    /**
+     * Updates a mutually exclusive IP range in the pod.
+     * @param cmd - The command specifying pod ID, current Start IP, current End IP, new Start IP, new End IP.
+     * @throws com.cloud.exception.ConcurrentOperationException
+     * @return Success
+     */
+    void updatePodIpRange(UpdatePodManagementNetworkIpRangeCmd cmd) throws ConcurrentOperationException;
+
+    /**
+     * Creates a new IPv6 prefix for a zone. Needs to be >= /64.
+     */
+    DataCenterGuestIpv6Prefix createDataCenterGuestIpv6Prefix(CreateGuestNetworkIpv6PrefixCmd cmd);
+
+    /**
+     * Lists IPv6 prefixes for a zone.
+     */
+    List<? extends DataCenterGuestIpv6Prefix> listDataCenterGuestIpv6Prefixes(ListGuestNetworkIpv6PrefixesCmd cmd);
+
+    /**
+     * Deletes an existing IPv6 prefix.
+     */
+    boolean deleteDataCenterGuestIpv6Prefix(DeleteGuestNetworkIpv6PrefixCmd cmd);
 
     /**
      * Edits a pod in the database. Will not allow you to edit pods that are being used anywhere in the system.
@@ -234,7 +279,7 @@ public interface ConfigurationService {
     /**
      * Edits a zone in the database. Will not allow you to edit DNS values if there are VMs in the specified zone.
      *
-     * @param UpdateZoneCmd
+     * @param cmd command object containing the id of the zone to update and relevant attributes
      * @return Updated zone
      */
     DataCenter editZone(UpdateZoneCmd cmd);
@@ -242,8 +287,7 @@ public interface ConfigurationService {
     /**
      * Deletes a zone from the database. Will not allow you to delete zones that are being used anywhere in the system.
      *
-     * @param userId
-     * @param zoneId
+     * @param cmd command object containg the zoneid
      */
     boolean deleteZone(DeleteZoneCmd cmd);
 
@@ -273,13 +317,18 @@ public interface ConfigurationService {
         ResourceAllocationException;
 
     /**
-     * Marks the the account with the default zone-id.
+     * Updates the IP address Range for the VLAN on the database
+     * @return The Updated Vlan Object
+     */
+    Vlan updateVlanAndPublicIpRange(UpdateVlanIpRangeCmd cmd) throws ConcurrentOperationException,
+            ResourceUnavailableException, ResourceAllocationException;
+    /**
+     * Marks the account with the default zone-id.
      *
      * @param accountName
      * @param domainId
-     * @param zoneId
+     * @param defaultZoneId
      * @return The new account object
-     * @throws ,
      */
     Account markDefaultZone(String accountName, long domainId, long defaultZoneId);
 
@@ -326,4 +375,18 @@ public interface ConfigurationService {
     List<? extends PortableIpRange> listPortableIpRanges(ListPortableIpRangesCmd cmd);
 
     List<? extends PortableIp> listPortableIps(long id);
+
+    Boolean isAccountAllowedToCreateOfferingsWithTags(IsAccountAllowedToCreateOfferingsWithTagsCmd cmd);
+
+    public static final Map<String, String> ProviderDetailKeyMap = Map.of(
+            Network.Provider.Nsx.getName(), ApiConstants.NSX_DETAIL_KEY,
+            Network.Provider.Netris.getName(), ApiConstants.NETRIS_DETAIL_KEY
+    );
+
+    public static boolean IsIpRangeForProvider(Network.Provider provider) {
+        if (Objects.isNull(provider)) {
+            return false;
+        }
+        return ProviderDetailKeyMap.containsKey(provider.getName());
+    }
 }

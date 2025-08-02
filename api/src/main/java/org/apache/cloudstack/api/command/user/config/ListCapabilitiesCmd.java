@@ -19,23 +19,17 @@ package org.apache.cloudstack.api.command.user.config;
 import java.util.Map;
 
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.response.CapabilitiesResponse;
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.config.ApiServiceConfiguration;
 
 import com.cloud.user.Account;
 
 @APICommand(name = "listCapabilities", description = "Lists capabilities", responseObject = CapabilitiesResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListCapabilitiesCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(ListCapabilitiesCmd.class.getName());
 
-    private static final String s_name = "listcapabilitiesresponse";
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -61,14 +55,26 @@ public class ListCapabilitiesCmd extends BaseCmd {
         response.setAllowUserExpungeRecoverVM((Boolean)capabilities.get("allowUserExpungeRecoverVM"));
         response.setAllowUserExpungeRecoverVolume((Boolean)capabilities.get("allowUserExpungeRecoverVolume"));
         response.setAllowUserViewAllDomainAccounts((Boolean)capabilities.get("allowUserViewAllDomainAccounts"));
+        response.setAllowUserForceStopVM((Boolean)capabilities.get(ApiConstants.ALLOW_USER_FORCE_STOP_VM));
         response.setKubernetesServiceEnabled((Boolean)capabilities.get("kubernetesServiceEnabled"));
         response.setKubernetesClusterExperimentalFeaturesEnabled((Boolean)capabilities.get("kubernetesClusterExperimentalFeaturesEnabled"));
+        response.setCustomHypervisorDisplayName((String) capabilities.get("customHypervisorDisplayName"));
         if (capabilities.containsKey("apiLimitInterval")) {
             response.setApiLimitInterval((Integer)capabilities.get("apiLimitInterval"));
         }
         if (capabilities.containsKey("apiLimitMax")) {
             response.setApiLimitMax((Integer)capabilities.get("apiLimitMax"));
         }
+        response.setDefaultUiPageSize((Long)capabilities.get(ApiServiceConfiguration.DefaultUIPageSize.key()));
+        response.setInstancesStatsRetentionTime((Integer) capabilities.get(ApiConstants.INSTANCES_STATS_RETENTION_TIME));
+        response.setInstancesStatsUserOnly((Boolean) capabilities.get(ApiConstants.INSTANCES_STATS_USER_ONLY));
+        response.setInstancesDisksStatsRetentionEnabled((Boolean) capabilities.get(ApiConstants.INSTANCES_DISKS_STATS_RETENTION_ENABLED));
+        response.setInstancesDisksStatsRetentionTime((Integer) capabilities.get(ApiConstants.INSTANCES_DISKS_STATS_RETENTION_TIME));
+        response.setSharedFsVmMinCpuCount((Integer)capabilities.get(ApiConstants.SHAREDFSVM_MIN_CPU_COUNT));
+        response.setSharedFsVmMinRamSize((Integer)capabilities.get(ApiConstants.SHAREDFSVM_MIN_RAM_SIZE));
+        response.setInstanceLeaseEnabled((Boolean) capabilities.get(ApiConstants.INSTANCE_LEASE_ENABLED));
+        response.setExtensionsPath((String)capabilities.get(ApiConstants.EXTENSIONS_PATH));
+        response.setDynamicScalingEnabled((Boolean) capabilities.get(ApiConstants.DYNAMIC_SCALING_ENABLED));
         response.setObjectName("capability");
         response.setResponseName(getCommandName());
         this.setResponseObject(response);

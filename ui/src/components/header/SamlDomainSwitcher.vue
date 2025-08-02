@@ -22,20 +22,27 @@
       :loading="loading"
       :defaultValue="currentAccount"
       :value="currentAccount"
+      showSearch
+      optionFilterProp="label"
+      :filterOption="(input, option) => {
+        return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      }"
       @change="changeAccount"
       @focus="fetchData" >
 
-      <a-tooltip placement="bottom" slot="suffixIcon">
-        <template slot="title">
-          <span>{{ $t('label.domain') }}</span>
-        </template>
-        <span style="font-size: 20px; color: #999; margin-top: -5px">
-          <a-icon v-if="!loading" type="block" />
-          <a-icon v-else type="loading" />
-        </span>
-      </a-tooltip>
+      <template #suffixIcon>
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('label.domain') }}</span>
+          </template>
+          <span class="custom-suffix-icon">
+            <BlockOutlined v-if="!loading" class="ant-select-suffix" />
+            <LoadingOutlined v-else />
+          </span>
+        </a-tooltip>
+      </template>
 
-      <a-select-option v-for="(account, index) in samlAccounts" :key="index">
+      <a-select-option v-for="(account, index) in samlAccounts" :key="index" :label="`${account.accountName} (${account.domainName})`">
         {{ `${account.accountName} (${account.domainName})` }}
       </a-select-option>
     </a-select>
@@ -44,7 +51,7 @@
 
 <script>
 import store from '@/store'
-import { api } from '@/api'
+import { postAPI } from '@/api'
 import _ from 'lodash'
 
 export default {
@@ -57,7 +64,7 @@ export default {
       loading: false
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   methods: {
@@ -66,7 +73,7 @@ export default {
       const samlAccounts = []
       const getNextPage = () => {
         this.loading = true
-        api('listAndSwitchSamlAccount', { listAll: true, details: 'min', page: page, pageSize: 500 }).then(json => {
+        postAPI('listAndSwitchSamlAccount', { details: 'min', page: page, pageSize: 500 }).then(json => {
           if (json && json.listandswitchsamlaccountresponse && json.listandswitchsamlaccountresponse.samluseraccount) {
             samlAccounts.push(...json.listandswitchsamlaccountresponse.samluseraccount)
           }
@@ -81,6 +88,7 @@ export default {
             this.showSwitcher = false
             return
           }
+          this.samlAccounts = samlAccounts
           this.samlAccounts = _.orderBy(samlAccounts, ['domainPath'], ['asc'])
           const currentAccount = this.samlAccounts.filter(x => {
             return x.userId === store.getters.userInfo.id
@@ -94,14 +102,16 @@ export default {
     },
     changeAccount (index) {
       const account = this.samlAccounts[index]
-      api('listAndSwitchSamlAccount', {}, 'POST', {
+      postAPI('listAndSwitchSamlAccount', {
         userid: account.userId,
         domainid: account.domainId
       }).then(response => {
-        store.dispatch('GetInfo').then(() => {
+        store.dispatch('GetInfo', true).then(() => {
           this.$message.success(`Switched to "${account.accountName} (${account.domainPath})"`)
           this.$router.go()
         })
+      }).else(error => {
+        console.log('error refreshing with new user context: ' + error)
       })
     }
   }
@@ -120,5 +130,13 @@ export default {
     padding-top: 5px;
     padding-right: 5px;
   }
+}
+
+.custom-suffix-icon {
+  font-size: 20px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin-top: -8px;
 }
 </style>

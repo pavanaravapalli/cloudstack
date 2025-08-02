@@ -19,11 +19,14 @@
   <a-form
     id="formLogin"
     class="user-layout-login"
-    ref="formLogin"
-    :form="form"
-    @submit="handleSubmit"
+    :ref="formRef"
+    :model="form"
+    :rules="rules"
+    @finish="handleSubmit"
+    v-ctrl-enter="handleSubmit"
   >
     <a-tabs
+      class="tab-center"
       :activeKey="customActiveKey"
       size="large"
       :tabBarStyle="{ textAlign: 'center', borderBottom: 'unset' }"
@@ -31,63 +34,117 @@
       :animated="false"
     >
       <a-tab-pane key="cs">
-        <span slot="tab">
-          <a-icon type="safety" />
-          {{ $t('label.login.portal') }}
-        </span>
-        <a-form-item>
+        <template #tab>
+          <span>
+            <safety-outlined />
+            {{ $t('label.login.portal') }}
+          </span>
+        </template>
+        <a-form-item v-if="$config.multipleServer" name="server" ref="server">
+          <a-select
+            size="large"
+            :placeholder="$t('server')"
+            v-model:value="form.server"
+            @change="onChangeServer"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }">
+            <a-select-option v-for="item in $config.servers" :key="(item.apiHost || '') + item.apiBase" :label="item.name">
+              <template #prefix>
+                <database-outlined />
+              </template>
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item ref="username" name="username">
           <a-input
             size="large"
             type="text"
-            autoFocus
+            v-focus="true"
             :placeholder="$t('label.username')"
-            v-decorator="[
-              'username',
-              {rules: [{ required: true, message: $t('message.error.username') }, { validator: handleUsernameOrEmail }], validateTrigger: 'change'}
-            ]"
+            v-model:value="form.username"
           >
-            <a-icon slot="prefix" type="user" :style="{ color: 'rgba(0,0,0,.25)' }"/>
+            <template #prefix>
+              <user-outlined />
+            </template>
           </a-input>
         </a-form-item>
-
-        <a-form-item>
+        <a-form-item ref="password" name="password">
           <a-input-password
             size="large"
             type="password"
             autocomplete="false"
             :placeholder="$t('label.password')"
-            v-decorator="[
-              'password',
-              {rules: [{ required: true, message: $t('message.error.password') }], validateTrigger: 'blur'}
-            ]"
+            v-model:value="form.password"
           >
-            <a-icon slot="prefix" type="lock" :style="{ color: 'rgba(0,0,0,.25)' }"/>
+            <template #prefix>
+              <lock-outlined />
+            </template>
           </a-input-password>
         </a-form-item>
-
-        <a-form-item>
+        <a-form-item ref="domain" name="domain">
           <a-input
             size="large"
             type="text"
             :placeholder="$t('label.domain')"
-            v-decorator="[
-              'domain',
-              {rules: [{ required: false, message: $t('message.error.domain') }], validateTrigger: 'change'}
-            ]"
+            v-model:value="form.domain"
           >
-            <a-icon slot="prefix" type="block" :style="{ color: 'rgba(0,0,0,.25)' }"/>
+            <template #prefix>
+              <project-outlined />
+            </template>
           </a-input>
         </a-form-item>
-
+        <a-form-item ref="project" name="project" v-if="$config.displayProjectFieldOnLogin">
+          <a-input
+            size="large"
+            type="text"
+            :placeholder="$t('label.project')"
+            v-model:value="form.project"
+          >
+            <template #prefix>
+              <block-outlined />
+            </template>
+          </a-input>
+        </a-form-item>
       </a-tab-pane>
       <a-tab-pane key="saml" :disabled="idps.length === 0">
-        <span slot="tab">
-          <a-icon type="audit" />
-          {{ $t('label.login.single.signon') }}
-        </span>
-        <a-form-item>
-          <a-select v-decorator="['idp', { initialValue: selectedIdp } ]">
-            <a-select-option v-for="(idp, idx) in idps" :key="idx" :value="idp.id">
+        <template #tab>
+          <span>
+            <audit-outlined />
+            {{ $t('label.login.single.signon') }}
+          </span>
+        </template>
+        <a-form-item v-if="$config.multipleServer" name="server" ref="server">
+          <a-select
+            size="large"
+            :placeholder="$t('server')"
+            v-model:value="form.server"
+            @change="onChangeServer"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }" >
+            <a-select-option v-for="item in $config.servers" :key="(item.apiHost || '') + item.apiBase" :label="item.name">
+              <template #prefix>
+                <database-outlined />
+              </template>
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item name="idp" ref="idp">
+          <a-select
+            v-model:value="form.idp"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }" >
+            <a-select-option v-for="(idp, idx) in idps" :key="idx" :value="idp.id" :label="idp.orgName">
               {{ idp.orgName }}
             </a-select-option>
           </a-select>
@@ -99,19 +156,63 @@
       <a-button
         size="large"
         type="primary"
-        htmlType="submit"
+        html-type="submit"
         class="login-button"
         :loading="state.loginBtn"
         :disabled="state.loginBtn"
+        ref="submit"
+        @click="handleSubmit"
       >{{ $t('label.login') }}</a-button>
     </a-form-item>
-    <translation-menu/>
+    <a-row justify="space-between">
+      <a-col>
+      <translation-menu/>
+      </a-col>
+      <a-col v-if="forgotPasswordEnabled">
+        <router-link :to="{ name: 'forgotPassword' }">
+          {{ $t('label.forgot.password') }}
+        </router-link>
+      </a-col>
+    </a-row>
+    <div class="content" v-if="socialLogin">
+      <p class="or">or</p>
+    </div>
+    <div class="center">
+      <div class="social-auth" v-if="githubprovider">
+        <a-button
+          @click="handleGithubProviderAndDomain"
+          tag="a"
+          color="primary"
+          :href="getGitHubUrl(from)"
+          class="auth-btn github-auth"
+          style="height: 38px; width: 185px; padding: 0; margin-bottom: 5px;" >
+          <img src="/assets/github.svg" style="width: 32px; padding: 5px" />
+          <a-typography-text>Sign in with Github</a-typography-text>
+        </a-button>
+      </div>
+      <div class="social-auth" v-if="googleprovider">
+        <a-button
+          @click="handleGoogleProviderAndDomain"
+          tag="a"
+          color="primary"
+          :href="getGoogleUrl(from)"
+          class="auth-btn google-auth"
+          style="height: 38px; width: 185px; padding: 0" >
+          <img src="/assets/google.svg" style="width: 32px; padding: 5px" />
+          <a-typography-text>Sign in with Google</a-typography-text>
+        </a-button>
+      </div>
+    </div>
   </a-form>
 </template>
 
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
+import store from '@/store'
 import { mapActions } from 'vuex'
+import { sourceToken } from '@/utils/request'
+import { SERVER_MANAGER } from '@/store/mutation-types'
 import TranslationMenu from '@/components/header/TranslationMenu'
 
 export default {
@@ -121,35 +222,125 @@ export default {
   data () {
     return {
       idps: [],
-      selectedIdp: '',
       customActiveKey: 'cs',
+      customActiveKeyOauth: false,
       loginBtn: false,
+      email: '',
+      secretcode: '',
+      oauthexclude: '',
+      socialLogin: false,
+      googleprovider: false,
+      githubprovider: false,
+      googleredirecturi: '',
+      githubredirecturi: '',
+      googleclientid: '',
+      githubclientid: '',
       loginType: 0,
-      form: this.$form.createForm(this),
       state: {
         time: 60,
         loginBtn: false,
         loginType: 0
-      }
+      },
+      server: '',
+      forgotPasswordEnabled: false,
+      project: null
     }
   },
   created () {
-  },
-  mounted () {
-    this.fetchData()
+    if (this.$config.multipleServer) {
+      this.server = this.$localStorage.get(SERVER_MANAGER) || this.$config.servers[0]
+    }
+    this.initForm()
+    if (store.getters.logoutFlag) {
+      if (store.getters.readyForShutdownPollingJob !== '' || store.getters.readyForShutdownPollingJob !== undefined) {
+        clearInterval(store.getters.readyForShutdownPollingJob)
+      }
+      sourceToken.init()
+      this.fetchData()
+    } else {
+      this.fetchData()
+    }
   },
   methods: {
-    ...mapActions(['Login', 'Logout']),
+    ...mapActions(['Login', 'Logout', 'OauthLogin']),
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({
+        server: (this.server.apiHost || '') + this.server.apiBase,
+        username: this.$route.query?.username || '',
+        domain: this.$route.query?.domain || '',
+        project: null
+      })
+      this.rules = reactive({})
+      this.setRules()
+    },
+    setRules () {
+      if (this.customActiveKey === 'cs' && this.customActiveKeyOauth === false) {
+        this.rules.username = [
+          {
+            required: true,
+            message: this.$t('message.error.username'),
+            trigger: 'change'
+          },
+          {
+            validator: this.handleUsernameOrEmail,
+            trigger: 'change'
+          }
+        ]
+        this.rules.password = [
+          {
+            required: true,
+            message: this.$t('message.error.password'),
+            trigger: 'change'
+          }
+        ]
+      } else {
+        this.rules.username = []
+        this.rules.password = []
+      }
+    },
     fetchData () {
-      api('listIdps').then(response => {
+      getAPI('listIdps').then(response => {
         if (response) {
           this.idps = response.listidpsresponse.idp || []
-          this.selectedIdp = this.idps[0].id || ''
+          this.idps.sort(function (a, b) {
+            if (a.orgName < b.orgName) { return -1 }
+            if (a.orgName > b.orgName) { return 1 }
+            return 0
+          })
+          this.form.idp = this.idps[0].id || ''
+        }
+      })
+      getAPI('listOauthProvider', {}).then(response => {
+        if (response) {
+          const oauthproviders = response.listoauthproviderresponse.oauthprovider || []
+          oauthproviders.forEach(item => {
+            if (item.provider === 'google') {
+              this.googleprovider = item.enabled
+              this.googleclientid = item.clientid
+              this.googleredirecturi = item.redirecturi
+            }
+            if (item.provider === 'github') {
+              this.githubprovider = item.enabled
+              this.githubclientid = item.clientid
+              this.githubredirecturi = item.redirecturi
+            }
+          })
+          this.socialLogin = this.googleprovider || this.githubprovider
+        }
+      })
+      postAPI('forgotPassword', {}).then(response => {
+        this.forgotPasswordEnabled = response.forgotpasswordresponse.enabled
+      }).catch((err) => {
+        if (err?.response?.data === null) {
+          this.forgotPasswordEnabled = true
+        } else {
+          this.forgotPasswordEnabled = false
         }
       })
     },
     // handler
-    handleUsernameOrEmail (rule, value, callback) {
+    async handleUsernameOrEmail (rule, value) {
       const { state } = this
       const regex = /^([a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+((\.[a-zA-Z0-9_-]{2,3}){1,2})$/
       if (regex.test(value)) {
@@ -157,67 +348,170 @@ export default {
       } else {
         state.loginType = 1
       }
-      callback()
+      return Promise.resolve()
     },
     handleTabClick (key) {
       this.customActiveKey = key
-      // this.form.resetFields()
+      this.setRules()
+    },
+    handleGithubProviderAndDomain () {
+      this.handleDomain()
+      this.$store.commit('SET_OAUTH_PROVIDER_USED_TO_LOGIN', 'github')
+    },
+    handleGoogleProviderAndDomain () {
+      this.handleDomain()
+      this.$store.commit('SET_OAUTH_PROVIDER_USED_TO_LOGIN', 'google')
+    },
+    handleDomain () {
+      const values = toRaw(this.form)
+      if (!values.domain) {
+        this.$store.commit('SET_DOMAIN_USED_TO_LOGIN', '/')
+      } else {
+        this.$store.commit('SET_DOMAIN_USED_TO_LOGIN', values.domain)
+      }
+    },
+    getGitHubUrl (from) {
+      const rootURl = 'https://github.com/login/oauth/authorize'
+      const options = {
+        client_id: this.githubclientid,
+        scope: 'user:email',
+        state: 'cloudstack'
+      }
+
+      const qs = new URLSearchParams(options)
+
+      return `${rootURl}?${qs.toString()}`
+    },
+    getGoogleUrl (from) {
+      const rootUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+      const options = {
+        redirect_uri: this.googleredirecturi,
+        client_id: this.googleclientid,
+        access_type: 'offline',
+        response_type: 'code',
+        prompt: 'consent',
+        scope: [
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/userinfo.email'
+        ].join(' '),
+        state: from
+      }
+
+      const qs = new URLSearchParams(options)
+
+      return `${rootUrl}?${qs.toString()}`
     },
     handleSubmit (e) {
       e.preventDefault()
-      const {
-        form: { validateFields },
-        state,
-        customActiveKey,
-        Login
-      } = this
+      if (this.state.loginBtn) return
+      this.formRef.value.validate().then(() => {
+        this.state.loginBtn = true
 
-      state.loginBtn = true
-
-      const validateFieldsKey = customActiveKey === 'cs' ? ['username', 'password', 'domain'] : ['idp']
-
-      validateFields(validateFieldsKey, { force: true }, (err, values) => {
-        if (!err) {
-          if (customActiveKey === 'cs') {
-            const loginParams = { ...values }
-            delete loginParams.username
-            loginParams[!state.loginType ? 'email' : 'username'] = values.username
-            loginParams.password = values.password
-            loginParams.domain = values.domain
-            if (!loginParams.domain) {
-              loginParams.domain = '/'
-            }
-            Login(loginParams)
-              .then((res) => this.loginSuccess(res))
-              .catch(err => this.requestFailed(err))
-              .finally(() => {
-                state.loginBtn = false
-              })
-          } else if (customActiveKey === 'saml') {
-            state.loginBtn = false
-            var samlUrl = this.$config.apiBase + '?command=samlSso'
-            if (values.idp) {
-              samlUrl += ('&idpid=' + values.idp)
-            }
-            window.location.href = samlUrl
-          }
-        } else {
-          setTimeout(() => {
-            state.loginBtn = false
-          }, 600)
+        const values = toRaw(this.form)
+        if (this.$config.multipleServer) {
+          this.axios.defaults.baseURL = (this.server.apiHost || '') + this.server.apiBase
+          store.dispatch('SetServer', this.server)
         }
+        if (this.customActiveKey === 'cs') {
+          const loginParams = { ...values }
+          delete loginParams.username
+          loginParams[!this.state.loginType ? 'email' : 'username'] = values.username
+          loginParams.password = values.password
+          loginParams.domain = values.domain
+          if (!loginParams.domain) {
+            loginParams.domain = '/'
+          }
+          this.Login(loginParams)
+            .then((res) => this.loginSuccess(res))
+            .catch(err => {
+              this.requestFailed(err)
+              this.state.loginBtn = false
+            })
+        } else if (this.customActiveKey === 'saml') {
+          this.state.loginBtn = false
+          var samlUrl = this.$config.apiBase + '?command=samlSso'
+          if (values.idp) {
+            samlUrl += ('&idpid=' + values.idp)
+          }
+          window.location.href = samlUrl
+        }
+      }).catch(error => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
-    loginSuccess (res) {
-      this.$router.push({ path: '/dashboard' }).catch(() => {})
+    handleSubmitOauth (provider) {
+      this.customActiveKeyOauth = true
+      this.setRules()
+      this.formRef.value.validate().then(() => {
+        const values = toRaw(this.form)
+        const loginParams = { ...values }
+        delete loginParams.username
+        loginParams.email = this.email
+        loginParams.provider = provider
+        loginParams.secretcode = this.secretcode
+        loginParams.domain = values.domain
+        if (!loginParams.domain) {
+          loginParams.domain = '/'
+        }
+        this.OauthLogin(loginParams)
+          .then((res) => this.loginSuccess(res))
+          .catch(err => {
+            this.requestFailed(err)
+            this.state.loginBtn = false
+          })
+      })
+    },
+    async loginSuccess (res) {
+      this.$notification.destroy()
+      this.$store.commit('SET_COUNT_NOTIFY', 0)
+      if (store.getters.twoFaEnabled === true && store.getters.twoFaProvider !== '' && store.getters.twoFaProvider !== undefined) {
+        this.$router.push({ path: '/verify2FA' }).catch(() => {})
+      } else if (store.getters.twoFaEnabled === true && (store.getters.twoFaProvider === '' || store.getters.twoFaProvider === undefined)) {
+        this.$router.push({ path: '/setup2FA' }).catch(() => {})
+      } else {
+        this.$store.commit('SET_LOGIN_FLAG', true)
+        const values = toRaw(this.form)
+        if (values.project) {
+          await this.getProject(values.project)
+          this.$store.dispatch('ProjectView', this.project.id)
+          this.$store.dispatch('SetProject', this.project)
+          this.$store.dispatch('ToggleTheme', this.project.id === undefined ? 'light' : 'dark')
+        }
+        this.$router.push({ path: '/dashboard' }).catch(() => {})
+      }
+    },
+    getProject (projectName) {
+      return new Promise((resolve, reject) => {
+        getAPI('listProjects', {
+          response: 'json',
+          domainId: this.selectedDomain,
+          details: 'min'
+        }).then((response) => {
+          const projects = response.listprojectsresponse.project
+          this.project = projects.filter(project => project.name === projectName)?.[0] || null
+          resolve(this.project)
+        }).catch((error) => {
+          this.$notifyError(error)
+        }).finally(() => {
+          this.loading = false
+        })
+      })
     },
     requestFailed (err) {
       if (err && err.response && err.response.data && err.response.data.loginresponse) {
         const error = err.response.data.loginresponse.errorcode + ': ' + err.response.data.loginresponse.errortext
         this.$message.error(`${this.$t('label.error')} ${error}`)
+      } else if (err && err.response && err.response.data && err.response.data.oauthloginresponse) {
+        const error = err.response.data.oauthloginresponse.errorcode + ': ' + err.response.data.oauthloginresponse.errortext
+        this.$message.error(`${this.$t('label.error')} ${error}`)
       } else {
         this.$message.error(this.$t('message.login.failed'))
       }
+    },
+    onChangeServer (server) {
+      const servers = this.$config.servers || []
+      const serverFilter = servers.filter(ser => (ser.apiHost || '') + ser.apiBase === server)
+      this.server = serverFilter[0] || {}
     }
   }
 }
@@ -267,6 +561,34 @@ export default {
     .register {
       float: right;
     }
+
+    .g-btn-wrapper {
+      background-color: rgb(221, 75, 57);
+      height: 40px;
+      width: 80px;
+    }
   }
+    .center {
+     display: flex;
+     flex-direction: column;
+     justify-content: center;
+     align-items: center;
+     height: 100px;
+    }
+
+    .content {
+      margin: 10px auto;
+      width: 300px;
+    }
+
+    .or {
+      text-align: center;
+      font-size: 16px;
+      background:
+        linear-gradient(#CCC 0 0) left,
+        linear-gradient(#CCC 0 0) right;
+      background-size: 40% 1px;
+      background-repeat: no-repeat;
+    }
 }
 </style>

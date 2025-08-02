@@ -17,29 +17,43 @@
 
 <template>
   <div class="form-layout">
-    <a-form layout="vertical" :form="form">
-      <a-form-item :label="$t('label.volume')">
+    <a-form
+      layout="vertical"
+      :ref="formRef"
+      :model="form"
+      :rules="rules"
+      @finish="handleSubmit"
+      v-ctrl-enter="handleSubmit"
+     >
+      <a-form-item name="volumeid" ref="volumeid" :label="$t('label.volume')">
         <a-select
           allowClear
-          v-decorator="['volumeid', {
-            rules: [{ required: true, message: `${this.$t('message.error.select')}` }]
-          }]"
-          :loading="volumeOptions.loading">
+          v-model:value="form.volumeid"
+          :loading="volumeOptions.loading"
+          v-focus="true"
+          showSearch
+          optionFilterProp="label"
+          :filterOption="(input, option) => {
+            return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option
             v-for="(opt) in volumeOptions.opts"
-            :key="opt.id">
+            :key="opt.id"
+            :label="opt.name">
             {{ opt.name }}
           </a-select-option>
         </a-select>
       </a-form-item>
-      <a-form-item :label="$t('label.vm')">
+      <a-form-item name="virtualmachineid" ref="virtualmachineid" :label="$t('label.vm')">
         <a-select
-          showSearch
           allowClear
-          v-decorator="['virtualmachineid', {
-            rules: [{ required: true, message: `${this.$t('message.error.select')}` }]
-          }]"
-          :loading="virtualMachineOptions.loading">
+          v-model:value="form.virtualmachineid"
+          :loading="virtualMachineOptions.loading"
+          showSearch
+          optionFilterProp="value"
+          :filterOption="(input, option) => {
+            return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option
             v-for="(opt) in virtualMachineOptions.opts"
             :key="opt.name">
@@ -48,15 +62,16 @@
         </a-select>
       </a-form-item>
       <div :span="24" class="action-button">
-        <a-button :loading="loading || actionLoading" @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-        <a-button :loading="loading || actionLoading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+        <a-button :loading="loading || actionLoading" @click="closeAction">{{ $t('label.cancel') }}</a-button>
+        <a-button :loading="loading || actionLoading" ref="submit" type="primary" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
       </div>
     </a-form>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
 
 export default {
   name: 'RestoreAttachBackupVolume',
@@ -83,23 +98,28 @@ export default {
       actionLoading: false
     }
   },
-  beforeCreate () {
-    this.form = this.$form.createForm(this)
-  },
-  mounted () {
+  created () {
+    this.initForm()
     this.fetchData()
   },
   inject: ['parentFetchData'],
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({})
+      this.rules = reactive({
+        volumeid: [{ required: true, message: this.$t('message.error.select') }],
+        virtualmachineid: [{ required: true, message: this.$t('message.error.select') }]
+      })
+    },
     fetchData () {
       this.fetchVirtualMachine()
       this.fetchVolumes()
     },
     fetchVirtualMachine () {
       this.virtualMachineOptions.loading = true
-      api('listVirtualMachines', { zoneid: this.resource.zoneid }).then(json => {
+      getAPI('listVirtualMachines', { zoneid: this.resource.zoneid }).then(json => {
         this.virtualMachineOptions.opts = json.listvirtualmachinesresponse.virtualmachine || []
-        this.$forceUpdate()
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
@@ -122,15 +142,13 @@ export default {
         }
       })
       this.volumeOptions.loading = false
-      this.$forceUpdate()
     },
     handleSubmit (e) {
       e.preventDefault()
+      if (this.actionLoading) return
 
-      this.form.validateFields((err, values) => {
-        if (err) {
-          return
-        }
+      this.formRef.value.validate().then(() => {
+        const values = toRaw(this.form)
         const params = {}
         params.backupid = this.resource.id
         params.volumeid = values.volumeid
@@ -138,31 +156,25 @@ export default {
 
         this.actionLoading = true
         const title = this.$t('label.restore.volume.attach')
-        api('restoreVolumeFromBackupAndAttachToVM', params).then(json => {
+        postAPI('restoreVolumeFromBackupAndAttachToVM', params).then(json => {
           const jobId = json.restorevolumefrombackupandattachtovmresponse.jobid || null
           if (jobId) {
             this.$pollJob({
               jobId,
-              successMethod: result => {
-                const successDescription = result.jobresult.storagebackup.name
-                this.$store.dispatch('AddAsyncJob', {
-                  title: title,
-                  jobid: jobId,
-                  description: successDescription,
-                  status: 'progress'
-                })
-                this.parentFetchData()
-                this.closeAction()
-              },
+              title,
+              description: values.volumeid,
               loadingMessage: `${title} ${this.$t('label.in.progress.for')} ${this.resource.id}`,
               catchMessage: this.$t('error.fetching.async.job.result')
             })
+            this.closeAction()
           }
         }).catch(error => {
           this.$notifyError(error)
         }).finally(() => {
           this.actionLoading = false
         })
+      }).catch((error) => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     closeAction () {
@@ -178,15 +190,6 @@ export default {
 
   @media (min-width: 500px) {
     width: 400px;
-  }
-
-  .action-button {
-    text-align: right;
-    margin-top: 20px;
-
-    button {
-      margin-right: 5px;
-    }
   }
 }
 </style>

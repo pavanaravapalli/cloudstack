@@ -25,22 +25,25 @@
       :rowKey="item => item.id"
       :pagination="false"
     >
-      <template slot="displayname" slot-scope="text, record">
-        <router-link :to="{ path: '/vm/' + record.id }">{{ record.displayname || record.name }}</router-link>
-      </template>
-      <template slot="ipaddress" slot-scope="text, record">
-        <span v-for="nic in record.nic" :key="nic.id">
-          <span v-if="nic.networkid === resource.networkid">
-            {{ nic.ipaddress }} <br/>
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'displayname'">
+          <router-link :to="{ path: '/vm/' + record.id }">{{ record.displayname || record.name }}</router-link>
+        </template>
+        <template v-if="column.key === 'ipaddress'">
+          <span v-for="nic in record.nic" :key="nic.id">
+            <span v-if="nic.networkid === resource.networkid">
+              {{ nic.ipaddress }} <br/>
+            </span>
           </span>
-        </span>
-      </template>
-      <template slot="remove" slot-scope="text, record">
-        <a-button
-          type="danger"
-          icon="delete"
-          shape="circle"
-          @click="removeVmFromLB(record)" />
+        </template>
+        <template v-if="column.key === 'remove'">
+          <tooltip-button
+            :tooltip="$t('label.remove.vm.from.lb')"
+            type="primary"
+            :danger="true"
+            icon="delete-outlined"
+            @onClick="removeVmFromLB(record)" />
+        </template>
       </template>
       <a-divider />
     </a-table>
@@ -55,17 +58,21 @@
       @change="changePage"
       @showSizeChange="changePageSize"
       showSizeChanger>
-      <template slot="buildOptionText" slot-scope="props">
+      <template #buildOptionText="props">
         <span>{{ props.value }} / {{ $t('label.page') }}</span>
       </template>
     </a-pagination>
   </a-spin>
 </template>
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
+import TooltipButton from '@/components/widgets/TooltipButton'
 
 export default {
   name: 'InternalLBAssignedVmTab',
+  components: {
+    TooltipButton
+  },
   props: {
     resource: {
       type: Object,
@@ -81,37 +88,40 @@ export default {
       totalInstances: 0,
       columns: [
         {
+          key: 'displayname',
           title: this.$t('label.name'),
-          dataIndex: 'displayname',
-          scopedSlots: { customRender: 'displayname' }
+          dataIndex: 'displayname'
         },
         {
+          key: 'ipaddress',
           title: this.$t('label.ipaddress'),
-          dataIndex: 'ipaddress',
-          scopedSlots: { customRender: 'ipaddress' }
+          dataIndex: 'ipaddress'
         },
         {
-          title: '',
-          scopedSlots: { customRender: 'remove' }
+          key: 'remove',
+          title: ''
         }
       ]
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    resource: function (newItem, oldItem) {
-      if (!newItem || !newItem.id) {
-        return
+    resource: {
+      deep: true,
+      handler (newItem) {
+        if (!newItem || !newItem.id) {
+          return
+        }
+        this.fetchData()
       }
-      this.fetchData()
     }
   },
   methods: {
     fetchData () {
       this.fetchLoading = true
-      api('listLoadBalancerRuleInstances', {
+      getAPI('listLoadBalancerRuleInstances', {
         id: this.resource.id,
         page: this.page,
         pagesize: this.pageSize
@@ -124,7 +134,7 @@ export default {
     },
     removeVmFromLB (vm) {
       this.fetchLoading = true
-      api('removeFromLoadBalancerRule', {
+      postAPI('removeFromLoadBalancerRule', {
         id: this.resource.id,
         virtualmachineids: vm.id
       }).then(response => {

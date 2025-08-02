@@ -16,15 +16,13 @@
 // under the License.
 package org.apache.cloudstack.api.response;
 
-import com.google.gson.annotations.SerializedName;
-
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseResponse;
 import org.apache.cloudstack.api.EntityReference;
 
-import com.cloud.hypervisor.Hypervisor.HypervisorType;
 import com.cloud.hypervisor.HypervisorCapabilities;
 import com.cloud.serializer.Param;
+import com.google.gson.annotations.SerializedName;
 
 @EntityReference(value = HypervisorCapabilities.class)
 public class HypervisorCapabilitiesResponse extends BaseResponse {
@@ -38,7 +36,7 @@ public class HypervisorCapabilitiesResponse extends BaseResponse {
 
     @SerializedName(ApiConstants.HYPERVISOR)
     @Param(description = "the hypervisor type")
-    private HypervisorType hypervisor;
+    private String hypervisor;
 
     @SerializedName(ApiConstants.MAX_GUESTS_LIMIT)
     @Param(description = "the maximum number of guest vms recommended for this hypervisor")
@@ -60,6 +58,14 @@ public class HypervisorCapabilitiesResponse extends BaseResponse {
     @Param(description = "true if storage motion is supported")
     private boolean isStorageMotionSupported;
 
+    @SerializedName(ApiConstants.VM_SNAPSHOT_ENABELD)
+    @Param(description = "true if VM snapshots are enabled for this hypervisor")
+    private boolean isVmSnapshotEnabled;
+
+    public HypervisorCapabilitiesResponse(){
+        super("hypervisorcapabilities");
+    }
+
     public String getId() {
         return id;
     }
@@ -76,11 +82,11 @@ public class HypervisorCapabilitiesResponse extends BaseResponse {
         this.hypervisorVersion = hypervisorVersion;
     }
 
-    public HypervisorType getHypervisor() {
+    public String getHypervisor() {
         return hypervisor;
     }
 
-    public void setHypervisor(HypervisorType hypervisor) {
+    public void setHypervisor(String hypervisor) {
         this.hypervisor = hypervisor;
     }
 
@@ -122,5 +128,13 @@ public class HypervisorCapabilitiesResponse extends BaseResponse {
 
     public void setMaxHostsPerCluster(Integer maxHostsPerCluster) {
         this.maxHostsPerCluster = maxHostsPerCluster;
+    }
+
+    public boolean isVmSnapshotEnabled() {
+        return isVmSnapshotEnabled;
+    }
+
+    public void setVmSnapshotEnabled(boolean vmSnapshotEnabled) {
+        isVmSnapshotEnabled = vmSnapshotEnabled;
     }
 }

@@ -23,7 +23,8 @@ import java.io.File;
 import java.util.UUID;
 
 import org.apache.cloudstack.agent.directdownload.DirectDownloadCommand;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import org.apache.cloudstack.storage.command.AttachAnswer;
 import org.apache.cloudstack.storage.command.AttachCommand;
@@ -41,6 +42,7 @@ import org.apache.cloudstack.storage.command.ResignatureAnswer;
 import org.apache.cloudstack.storage.command.ResignatureCommand;
 import org.apache.cloudstack.storage.command.SnapshotAndCopyAnswer;
 import org.apache.cloudstack.storage.command.SnapshotAndCopyCommand;
+import org.apache.cloudstack.storage.command.SyncVolumePathCommand;
 import org.apache.cloudstack.storage.to.SnapshotObjectTO;
 import org.apache.cloudstack.storage.to.TemplateObjectTO;
 import org.apache.cloudstack.storage.to.VolumeObjectTO;
@@ -56,7 +58,7 @@ import com.cloud.storage.resource.StorageProcessor;
 
 public class SimulatorStorageProcessor implements StorageProcessor {
 
-    private static final Logger s_logger = Logger.getLogger(SimulatorStorageProcessor.class);
+    protected Logger logger = LogManager.getLogger(getClass());
     protected SimulatorManager hypervisorResource;
 
     public SimulatorStorageProcessor(SimulatorManager resource) {
@@ -65,14 +67,14 @@ public class SimulatorStorageProcessor implements StorageProcessor {
 
     @Override
     public SnapshotAndCopyAnswer snapshotAndCopy(SnapshotAndCopyCommand cmd) {
-        s_logger.info("'SnapshotAndCopyAnswer snapshotAndCopy(SnapshotAndCopyCommand)' not currently used for SimulatorStorageProcessor");
+        logger.info("'SnapshotAndCopyAnswer snapshotAndCopy(SnapshotAndCopyCommand)' not currently used for SimulatorStorageProcessor");
 
         return new SnapshotAndCopyAnswer();
     }
 
     @Override
     public ResignatureAnswer resignature(ResignatureCommand cmd) {
-        s_logger.info("'ResignatureAnswer resignature(ResignatureCommand)' not currently used for SimulatorStorageProcessor");
+        logger.info("'ResignatureAnswer resignature(ResignatureCommand)' not currently used for SimulatorStorageProcessor");
 
         return new ResignatureAnswer();
     }
@@ -272,7 +274,12 @@ public class SimulatorStorageProcessor implements StorageProcessor {
     }
 
     @Override
-    public Answer CheckDataStoreStoragePolicyComplaince(CheckDataStoreStoragePolicyComplainceCommand cmd) {
+    public Answer checkDataStoreStoragePolicyCompliance(CheckDataStoreStoragePolicyComplainceCommand cmd) {
+        return new Answer(cmd, true, null);
+    }
+
+    @Override
+    public Answer syncVolumePath(SyncVolumePathCommand cmd) {
         return new Answer(cmd, true, null);
     }
 }

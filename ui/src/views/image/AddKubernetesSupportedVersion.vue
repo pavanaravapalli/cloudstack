@@ -16,145 +16,119 @@
 // under the License.
 
 <template>
-  <div class="form-layout">
+  <div class="form-layout" v-ctrl-enter="handleSubmit">
     <a-spin :spinning="loading">
       <a-form
-        :form="form"
-        @submit="handleSubmit"
-        layout="vertical">
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.semanticversion') }}
-            <a-tooltip :title="apiParams.semanticversion.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        :ref="formRef"
+        :model="form"
+        :rules="rules"
+        layout="vertical"
+        @finish="handleSubmit">
+        <a-form-item ref="semanticversion" name="semanticversion">
+          <template #label>
+            <tooltip-label :title="$t('label.semanticversion')" :tooltip="apiParams.semanticversion.description"/>
+          </template>
           <a-input
-            v-decorator="['semanticversion', {
-              rules: [{ required: true, message: $t('message.error.kuberversion') }]
-            }]"
-            :placeholder="apiParams.semanticversion.description"/>
+            v-model:value="form.semanticversion"
+            :placeholder="apiParams.semanticversion.description"
+            v-focus="true" />
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.name') }}
-            <a-tooltip :title="apiParams.name.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item ref="name" name="name">
+          <template #label>
+            <tooltip-label :title="$t('label.name')" :tooltip="apiParams.name.description"/>
+          </template>
           <a-input
-            v-decorator="['name', {
-              rules: [{ message: $t('message.error.name') }]
-            }]"
-            :placeholder="$t('label.name')"/>
+            v-model:value="form.name"
+            :placeholder="apiParams.name.description"/>
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.zoneid') }}
-            <a-tooltip :title="apiParams.zoneid.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item ref="zoneid" name="zoneid">
+          <template #label>
+            <tooltip-label :title="$t('label.zoneid')" :tooltip="apiParams.zoneid.description"/>
+          </template>
           <a-select
             id="zone-selection"
-            v-decorator="['zoneid', {
-              rules: [
-                {
-                  validator: (rule, value, callback) => {
-                    if (value && value.length > 1 && value.indexOf(0) !== -1) {
-                      callback(this.$t('message.error.zone.combined'))
-                    }
-                    callback()
-                  }
-                }
-              ]
-            }]"
+            v-model:value="form.zoneid"
             showSearch
-            optionFilterProp="children"
+            optionFilterProp="label"
             :filterOption="(input, option) => {
-              return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              return  option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
             }"
             :loading="zoneLoading"
-            :placeholder="apiParams.zoneid.description">
-            <a-select-option v-for="(opt, optIndex) in this.zones" :key="optIndex">
+            :placeholder="apiParams.zoneid.description"
+            @change="handleZoneChange">
+            <a-select-option v-for="(opt, optIndex) in this.zones" :key="optIndex" :label="opt.name || opt.description">
+              <span>
+                <resource-icon v-if="opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                <global-outlined v-else style="margin-right: 5px"/>
+                {{ opt.name || opt.description }}
+              </span>
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item ref="url" name="url">
+          <template #label>
+            <tooltip-label :title="$t('label.url')" :tooltip="apiParams.url.description"/>
+          </template>
+          <a-input
+            v-model:value="form.url"
+            :placeholder="apiParams.url.description" />
+        </a-form-item>
+        <a-form-item ref="checksum" name="checksum">
+          <template #label>
+            <tooltip-label :title="$t('label.checksum')" :tooltip="apiParams.checksum.description"/>
+          </template>
+          <a-input
+            v-model:value="form.checksum"
+            :placeholder="apiParams.checksum.description" />
+        </a-form-item>
+        <a-form-item ref="mincpunumber" name="mincpunumber">
+          <template #label>
+            <tooltip-label :title="$t('label.mincpunumber')" :tooltip="apiParams.mincpunumber.description"/>
+          </template>
+          <a-input
+            v-model:value="form.mincpunumber"
+            :placeholder="apiParams.mincpunumber.description"/>
+        </a-form-item>
+        <a-form-item ref="minmemory" name="minmemory">
+          <template #label>
+            <tooltip-label :title="$t('label.minmemory')" :tooltip="apiParams.minmemory.description"/>
+          </template>
+          <a-input
+            v-model:value="form.minmemory"
+            :placeholder="apiParams.minmemory.description"/>
+        </a-form-item>
+        <a-form-item ref="directdownload" name="directdownload">
+          <template #label>
+            <tooltip-label :title="$t('label.directdownload')" :tooltip="apiParams.directdownload.description"/>
+          </template>
+          <a-switch
+            :disabled="directDownloadDisabled"
+            v-model:checked="form.directdownload"
+            :placeholder="apiParams.directdownload.description"/>
+        </a-form-item>
+        <a-form-item
+          name="arch"
+          ref="arch">
+          <template #label>
+            <tooltip-label :title="$t('label.arch')" :tooltip="apiParams.arch.description"/>
+          </template>
+          <a-select
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.children[0].children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            v-model:value="form.arch"
+            :placeholder="apiParams.arch.description">
+            <a-select-option v-for="opt in architectureTypes.opts" :key="opt.id">
               {{ opt.name || opt.description }}
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.url') }}
-            <a-tooltip :title="apiParams.url.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-input
-            v-decorator="['url', {
-              rules: [{ required: true, message: $t('message.error.binaries.iso.url') }]
-            }]"
-            :placeholder="apiParams.url.description" />
-        </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.checksum') }}
-            <a-tooltip :title="apiParams.checksum.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-input
-            v-decorator="['checksum', {
-              rules: [{ required: false, message: $t('message.error.required.input') }]
-            }]"
-            :placeholder="apiParams.checksum.description" />
-        </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.mincpunumber') }}
-            <a-tooltip :title="apiParams.mincpunumber.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-input
-            v-decorator="['mincpunumber', {
-              rules: [{ required: true, message: $t('message.please.enter.value') },
-                      {
-                        validator: (rule, value, callback) => {
-                          if (value && (isNaN(value) || value <= 0)) {
-                            callback(this.$t('message.validate.number'))
-                          }
-                          callback()
-                        }
-                      }
-              ]
-            }]"
-            :placeholder="apiParams.mincpunumber.description"/>
-        </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.minmemory') }}
-            <a-tooltip :title="apiParams.minmemory.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-input
-            v-decorator="['minmemory', {
-              rules: [{ required: true, message: $t('message.please.enter.value') },
-                      {
-                        validator: (rule, value, callback) => {
-                          if (value && (isNaN(value) || value <= 0)) {
-                            callback(this.$t('message.validate.number'))
-                          }
-                          callback()
-                        }
-                      }
-              ]
-            }]"
-            :placeholder="apiParams.minmemory.description"/>
-        </a-form-item>
 
         <div :span="24" class="action-button">
-          <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-          <a-button :loading="loading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+          <a-button @click="closeAction">{{ $t('label.cancel') }}</a-button>
+          <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
         </div>
       </a-form>
     </a-spin>
@@ -162,25 +136,30 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import TooltipLabel from '@/components/widgets/TooltipLabel'
 
 export default {
   name: 'AddKubernetesSupportedVersion',
-  props: {},
+  components: {
+    ResourceIcon,
+    TooltipLabel
+  },
   data () {
     return {
       zones: [],
       zoneLoading: false,
-      loading: false
+      loading: false,
+      selectedZone: {},
+      directDownloadDisabled: false,
+      lastNonEdgeDirectDownloadUserSelection: false,
+      architectureTypes: {}
     }
   },
   beforeCreate () {
-    this.form = this.$form.createForm(this)
-    this.apiConfig = this.$store.getters.apis.addKubernetesSupportedVersion || {}
-    this.apiParams = {}
-    this.apiConfig.params.forEach(param => {
-      this.apiParams[param.name] = param
-    })
+    this.apiParams = this.$getApiParams('addKubernetesSupportedVersion')
   },
   created () {
     this.zones = [
@@ -189,12 +168,55 @@ export default {
         name: this.$t('label.all.zone')
       }
     ]
-  },
-  mounted () {
+    this.initForm()
     this.fetchData()
   },
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({
+        mincpunumber: 2,
+        minmemory: 2048,
+        directdownload: false
+      })
+      this.rules = reactive({
+        semanticversion: [{ required: true, message: this.$t('message.error.kuberversion') }],
+        zoneid: [{
+          type: 'number',
+          validator: async (rule, value) => {
+            if (value && value.length > 1 && value.indexOf(0) !== -1) {
+              return Promise.reject(this.$t('message.error.zone.combined'))
+            }
+            return Promise.resolve()
+          }
+        }],
+        url: [{ required: true, message: this.$t('message.error.binaries.iso.url') }],
+        mincpunumber: [
+          { required: true, message: this.$t('message.please.enter.value') },
+          {
+            validator: async (rule, value) => {
+              if (value && (isNaN(value) || value <= 0)) {
+                return Promise.reject(this.$t('message.validate.number'))
+              }
+              return Promise.resolve()
+            }
+          }
+        ],
+        minmemory: [
+          { required: true, message: this.$t('message.please.enter.value') },
+          {
+            validator: async (rule, value) => {
+              if (value && (isNaN(value) || value <= 0)) {
+                return Promise.reject(this.$t('message.validate.number'))
+              }
+              Promise.resolve()
+            }
+          }
+        ]
+      })
+    },
     fetchData () {
+      this.architectureTypes.opts = this.$fetchCpuArchitectureTypes()
       this.fetchZoneData()
     },
     isValidValueForKey (obj, key) {
@@ -205,38 +227,52 @@ export default {
     },
     fetchZoneData () {
       const params = {}
-      params.listAll = true
+      params.showicon = true
       this.zoneLoading = true
-      api('listZones', params).then(json => {
+      getAPI('listZones', params).then(json => {
         const listZones = json.listzonesresponse.zone
-        this.zones = this.zones.concat(listZones)
+        if (listZones) {
+          this.zones = this.zones.concat(listZones)
+        }
       }).finally(() => {
         this.zoneLoading = false
         if (this.arrayHasItems(this.zones)) {
-          this.form.setFieldsValue({
-            zoneid: 0
-          })
+          this.form.zoneid = 0
         }
       })
     },
+    handleZoneChange (zoneIdx) {
+      const zone = this.zones[zoneIdx]
+      if (this.selectedZone.type === zone.type) {
+        return
+      }
+      var lastZoneType = this.selectedZone?.type || ''
+      if (lastZoneType !== 'Edge') {
+        this.nonEdgeDirectDownloadUserSelection = this.form.directdownload
+      }
+      this.selectedZone = zone
+      if (zone.type && zone.type === 'Edge') {
+        this.form.directdownload = true
+        this.directDownloadDisabled = true
+        return
+      }
+      this.directDownloadDisabled = false
+      this.form.directdownload = this.nonEdgeDirectDownloadUserSelection
+    },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
-        if (err) {
-          return
-        }
+      if (this.loading) return
+      this.formRef.value.validate().then(() => {
+        const values = toRaw(this.form)
         this.loading = true
-        const params = {
-          semanticversion: values.semanticversion,
-          url: values.url
+        const params = {}
+        const customCheckParams = ['mincpunumber', 'minmemory', 'zoneid']
+        for (const key in values) {
+          if (!customCheckParams.includes(key) && values[key]) {
+            params[key] = values[key]
+          }
         }
-        if (this.isValidValueForKey(values, 'name')) {
-          params.name = values.name
-        }
-        if (this.isValidValueForKey(values, 'checksum')) {
-          params.checksum = values.checksum
-        }
-        if (this.isValidValueForKey(values, 'zoneid')) {
+        if (this.isValidValueForKey(values, 'zoneid') && values.zoneid > 0) {
           params.zoneid = this.zones[values.zoneid].id
         }
         if (this.isValidValueForKey(values, 'mincpunumber') && values.mincpunumber > 0) {
@@ -245,7 +281,7 @@ export default {
         if (this.isValidValueForKey(values, 'minmemory') && values.minmemory > 0) {
           params.minmemory = values.minmemory
         }
-        api('addKubernetesSupportedVersion', params).then(json => {
+        postAPI('addKubernetesSupportedVersion', params).then(json => {
           this.$message.success(`${this.$t('message.success.add.kuberversion')}: ${values.semanticversion}`)
           this.$emit('refresh-data')
           this.closeAction()
@@ -254,6 +290,8 @@ export default {
         }).finally(() => {
           this.loading = false
         })
+      }).catch(error => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     closeAction () {
@@ -269,14 +307,6 @@ export default {
 
     @media (min-width: 700px) {
       width: 550px;
-    }
-  }
-
-  .action-button {
-    text-align: right;
-
-    button {
-      margin-right: 5px;
     }
   }
 </style>

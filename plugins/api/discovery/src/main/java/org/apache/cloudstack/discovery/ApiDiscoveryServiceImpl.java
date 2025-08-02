@@ -18,8 +18,10 @@ package org.apache.cloudstack.discovery;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +30,9 @@ import java.util.Set;
 import javax.inject.Inject;
 
 import org.apache.cloudstack.acl.APIChecker;
+import org.apache.cloudstack.acl.Role;
+import org.apache.cloudstack.acl.RoleService;
+import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.BaseAsyncCmd;
 import org.apache.cloudstack.api.BaseAsyncCreateCmd;
@@ -39,25 +44,34 @@ import org.apache.cloudstack.api.response.ApiDiscoveryResponse;
 import org.apache.cloudstack.api.response.ApiParameterResponse;
 import org.apache.cloudstack.api.response.ApiResponseResponse;
 import org.apache.cloudstack.api.response.ListResponse;
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reflections.ReflectionUtils;
 import org.springframework.stereotype.Component;
 
+import com.cloud.exception.PermissionDeniedException;
 import com.cloud.serializer.Param;
+import com.cloud.user.Account;
+import com.cloud.user.AccountService;
 import com.cloud.user.User;
 import com.cloud.utils.ReflectUtil;
-import com.cloud.utils.StringUtils;
 import com.cloud.utils.component.ComponentLifecycleBase;
 import com.cloud.utils.component.PluggableService;
 import com.google.gson.annotations.SerializedName;
 
 @Component
 public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements ApiDiscoveryService {
-    private static final Logger s_logger = Logger.getLogger(ApiDiscoveryServiceImpl.class);
 
     List<APIChecker> _apiAccessCheckers = null;
     List<PluggableService> _services = null;
-    private static Map<String, ApiDiscoveryResponse> s_apiNameDiscoveryResponseMap = null;
+    protected static Map<String, ApiDiscoveryResponse> s_apiNameDiscoveryResponseMap = null;
+
+    @Inject
+    AccountService accountService;
+
+    @Inject
+    RoleService roleService;
 
     protected ApiDiscoveryServiceImpl() {
         super();
@@ -70,13 +84,13 @@ public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements A
             s_apiNameDiscoveryResponseMap = new HashMap<String, ApiDiscoveryResponse>();
             Set<Class<?>> cmdClasses = new LinkedHashSet<Class<?>>();
             for (PluggableService service : _services) {
-                s_logger.debug(String.format("getting api commands of service: %s", service.getClass().getName()));
+                logger.debug(String.format("getting api commands of service: %s", service.getClass().getName()));
                 cmdClasses.addAll(service.getCommands());
             }
             cmdClasses.addAll(this.getCommands());
             cacheResponseMap(cmdClasses);
             long endTime = System.nanoTime();
-            s_logger.info("Api Discovery Service: Annotation, docstrings, api relation graph processed in " + (endTime - startTime) / 1000000.0 + " ms");
+            logger.info("Api Discovery Service: Annotation, docstrings, api relation graph processed in " + (endTime - startTime) / 1000000.0 + " ms");
         }
 
         return true;
@@ -95,8 +109,8 @@ public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements A
             }
 
             String apiName = apiCmdAnnotation.name();
-            if (s_logger.isTraceEnabled()) {
-                s_logger.trace("Found api: " + apiName);
+            if (logger.isTraceEnabled()) {
+                logger.trace("Found api: " + apiName);
             }
             ApiDiscoveryResponse response = getCmdRequestMap(cmdClass, apiCmdAnnotation);
 
@@ -126,7 +140,7 @@ public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements A
             for (ApiParameterResponse param : response.getParams()) {
                 if (responseApiNameListMap.containsKey(param.getRelated())) {
                     List<String> relatedApis = responseApiNameListMap.get(param.getRelated());
-                    param.setRelated(StringUtils.join(relatedApis, ","));
+                    param.setRelated(StringUtils.defaultString(StringUtils.join(relatedApis, ",")));
                 } else {
                     param.setRelated(null);
                 }
@@ -204,6 +218,9 @@ public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements A
                     paramResponse.setSince(parameterAnnotation.since());
                 }
                 paramResponse.setRelated(parameterAnnotation.entityType()[0].getName());
+                if (parameterAnnotation.authorized() != null) {
+                    paramResponse.setAuthorizedRoleTypes(Arrays.asList(parameterAnnotation.authorized()));
+                }
                 response.addParam(paramResponse);
             }
         }
@@ -211,12 +228,32 @@ public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements A
     }
 
     @Override
+    public List<String> listApiNames(Account account) {
+        List<String> apiNames = new ArrayList<>();
+        for (String apiName : s_apiNameDiscoveryResponseMap.keySet()) {
+            boolean isAllowed = true;
+            for (APIChecker apiChecker : _apiAccessCheckers) {
+                try {
+                    apiChecker.checkAccess(account, apiName);
+                } catch (Exception ex) {
+                    isAllowed = false;
+                }
+            }
+            if (isAllowed)
+                apiNames.add(apiName);
+        }
+        return apiNames;
+    }
+
+    @Override
     public ListResponse<? extends BaseResponse> listApis(User user, String name) {
-        ListResponse<ApiDiscoveryResponse> response = new ListResponse<ApiDiscoveryResponse>();
-        List<ApiDiscoveryResponse> responseList = new ArrayList<ApiDiscoveryResponse>();
+        ListResponse<ApiDiscoveryResponse> response = new ListResponse<>();
+        List<ApiDiscoveryResponse> responseList = new ArrayList<>();
+        List<String> apisAllowed = new ArrayList<>(s_apiNameDiscoveryResponseMap.keySet());
 
         if (user == null)
             return null;
+        Account account = accountService.getAccount(user.getAccountId());
 
         if (name != null) {
             if (!s_apiNameDiscoveryResponseMap.containsKey(name))
@@ -226,28 +263,58 @@ public class ApiDiscoveryServiceImpl extends ComponentLifecycleBase implements A
                 try {
                     apiChecker.checkAccess(user, name);
                 } catch (Exception ex) {
-                    s_logger.debug("API discovery access check failed for " + name + " with " + ex.getMessage());
+                    logger.error(String.format("API discovery access check failed for [%s] with error [%s].", name, ex.getMessage()), ex);
                     return null;
                 }
             }
-            responseList.add(s_apiNameDiscoveryResponseMap.get(name));
+            responseList.add(getApiDiscoveryResponseWithAccessibleParams(name, account));
 
         } else {
-            for (String apiName : s_apiNameDiscoveryResponseMap.keySet()) {
-                boolean isAllowed = true;
+            if (account == null) {
+                throw new PermissionDeniedException(String.format("The account with id [%s] for user [%s] is null.", user.getAccountId(), user));
+            }
+
+            final Role role = roleService.findRole(account.getRoleId());
+            if (role == null || role.getId() < 1L) {
+                throw new PermissionDeniedException(String.format("The account [%s] has role null or unknown.",
+                        ReflectionToStringBuilderUtils.reflectOnlySelectedFields(account, "accountName", "uuid")));
+            }
+
+            if (role.getRoleType() == RoleType.Admin && role.getId() == RoleType.Admin.getId()) {
+                logger.info(String.format("Account [%s] is Root Admin, all APIs are allowed.",
+                        ReflectionToStringBuilderUtils.reflectOnlySelectedFields(account, "accountName", "uuid")));
+            } else {
                 for (APIChecker apiChecker : _apiAccessCheckers) {
-                    try {
-                        apiChecker.checkAccess(user, apiName);
-                    } catch (Exception ex) {
-                        isAllowed = false;
-                    }
+                    apisAllowed = apiChecker.getApisAllowedToUser(role, user, apisAllowed);
                 }
-                if (isAllowed)
-                    responseList.add(s_apiNameDiscoveryResponseMap.get(apiName));
+            }
+
+            for (String apiName: apisAllowed) {
+                responseList.add(getApiDiscoveryResponseWithAccessibleParams(apiName, account));
             }
         }
         response.setResponses(responseList);
         return response;
+    }
+
+    private static ApiDiscoveryResponse getApiDiscoveryResponseWithAccessibleParams(String name, Account account) {
+        if (Account.Type.ADMIN.equals(account.getType())) {
+            return s_apiNameDiscoveryResponseMap.get(name);
+        }
+        ApiDiscoveryResponse apiDiscoveryResponse =
+                new ApiDiscoveryResponse(s_apiNameDiscoveryResponseMap.get(name));
+        Iterator<ApiParameterResponse> iterator = apiDiscoveryResponse.getParams().iterator();
+        while (iterator.hasNext()) {
+            ApiParameterResponse parameterResponse = iterator.next();
+            List<RoleType> authorizedRoleTypes = parameterResponse.getAuthorizedRoleTypes();
+            RoleType accountRoleType = RoleType.getByAccountType(account.getType());
+            if (CollectionUtils.isNotEmpty(parameterResponse.getAuthorizedRoleTypes()) &&
+                    accountRoleType != null &&
+                    !authorizedRoleTypes.contains(accountRoleType)) {
+                iterator.remove();
+            }
+        }
+        return apiDiscoveryResponse;
     }
 
     @Override

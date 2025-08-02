@@ -16,16 +16,22 @@
 // under the License.
 package org.apache.cloudstack.api.response;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.affinity.AffinityGroupResponse;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseResponseWithTagInformation;
 import org.apache.cloudstack.api.EntityReference;
+import org.apache.commons.collections.CollectionUtils;
 
 import com.cloud.network.router.VirtualRouter;
 import com.cloud.serializer.Param;
@@ -35,7 +41,7 @@ import com.google.gson.annotations.SerializedName;
 
 @SuppressWarnings("unused")
 @EntityReference(value = {VirtualMachine.class, UserVm.class, VirtualRouter.class})
-public class UserVmResponse extends BaseResponseWithTagInformation implements ControlledEntityResponse {
+public class UserVmResponse extends BaseResponseWithTagInformation implements ControlledEntityResponse, SetResourceIconResponse {
     @SerializedName(ApiConstants.ID)
     @Param(description = "the ID of the virtual machine")
     private String id;
@@ -76,9 +82,17 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "the name of the domain in which the virtual machine exists")
     private String domainName;
 
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "path of the domain in which the virtual machine exists", since = "4.19.2.0")
+    private String domainPath;
+
     @SerializedName(ApiConstants.CREATED)
     @Param(description = "the date when this virtual machine was created")
     private Date created;
+
+    @SerializedName("lastupdated")
+    @Param(description="the date when this virtual machine was updated last time", since="4.16.0")
+    private Date lastUpdated;
 
     @SerializedName(ApiConstants.STATE)
     @Param(description = "the state of the virtual machine")
@@ -97,7 +111,7 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     private String group;
 
     @SerializedName(ApiConstants.ZONE_ID)
-    @Param(description = "the ID of the availablility zone for the virtual machine")
+    @Param(description = "the ID of the availability zone for the virtual machine")
     private String zoneId;
 
     @SerializedName(ApiConstants.ZONE_NAME)
@@ -112,6 +126,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "the name of the host for the virtual machine")
     private String hostName;
 
+    @SerializedName(ApiConstants.HOST_CONTROL_STATE)
+    @Param(description = "the control state of the host for the virtual machine")
+    private String hostControlState;
+
     @SerializedName(ApiConstants.TEMPLATE_ID)
     @Param(description = "the ID of the template for the virtual machine. A -1 is returned if the virtual machine was created from an ISO file.")
     private String templateId;
@@ -119,6 +137,14 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @SerializedName("templatename")
     @Param(description = "the name of the template for the virtual machine")
     private String templateName;
+
+    @SerializedName(ApiConstants.TEMPLATE_TYPE)
+    @Param(description = "the type of the template for the virtual machine", since = "4.19.0")
+    private String templateType;
+
+    @SerializedName(ApiConstants.TEMPLATE_FORMAT)
+    @Param(description = "the format of the template for the virtual machine", since = "4.19.1")
+    private String templateFormat;
 
     @SerializedName("templatedisplaytext")
     @Param(description = " an alternate display text of the template for the virtual machine")
@@ -149,12 +175,48 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     private String serviceOfferingName;
 
     @SerializedName(ApiConstants.DISK_OFFERING_ID)
-    @Param(description = "the ID of the disk offering of the virtual machine", since = "4.4")
+    @Param(description = "the ID of the disk offering of the virtual machine. This parameter should not be used for retrieving disk offering details of DATA volumes. Use listVolumes API instead", since = "4.4")
     private String diskOfferingId;
 
     @SerializedName("diskofferingname")
-    @Param(description = "the name of the disk offering of the virtual machine", since = "4.4")
+    @Param(description = "the name of the disk offering of the virtual machine. This parameter should not be used for retrieving disk offering details of DATA volumes. Use listVolumes API instead", since = "4.4")
     private String diskOfferingName;
+
+    @SerializedName(ApiConstants.GPU_CARD_ID)
+    @Param(description = "the ID of the gpu card to which service offering is linked", since = "4.21")
+    private String gpuCardId;
+
+    @SerializedName(ApiConstants.GPU_CARD_NAME)
+    @Param(description = "the name of the gpu card to which service offering is linked", since = "4.21")
+    private String gpuCardName;
+
+    @SerializedName(ApiConstants.VGPU_PROFILE_ID)
+    @Param(description = "the ID of the vgpu profile to which service offering is linked", since = "4.21")
+    private String vgpuProfileId;
+
+    @SerializedName(ApiConstants.VGPU_PROFILE_NAME)
+    @Param(description = "the name of the vgpu profile to which service offering is linked", since = "4.21")
+    private String vgpuProfileName;
+
+    @SerializedName(ApiConstants.VIDEORAM)
+    @Param(description = "the video RAM size in MB")
+    private Long videoRam;
+
+    @SerializedName(ApiConstants.MAXHEADS)
+    @Param(description = "the maximum number of display heads")
+    private Long maxHeads;
+
+    @SerializedName(ApiConstants.MAXRESOLUTIONX)
+    @Param(description = "the maximum X resolution")
+    private Long maxResolutionX;
+
+    @SerializedName(ApiConstants.MAXRESOLUTIONY)
+    @Param(description = "the maximum Y resolution")
+    private Long maxResolutionY;
+
+    @SerializedName(ApiConstants.GPU_COUNT)
+    @Param(description = "the count of GPUs on the virtual machine", since = "4.21")
+    private Integer gpuCount;
 
     @SerializedName(ApiConstants.BACKUP_OFFERING_ID)
     @Param(description = "the ID of the backup offering of the virtual machine", since = "4.14")
@@ -169,11 +231,11 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     private Boolean forVirtualNetwork;
 
     @SerializedName(ApiConstants.CPU_NUMBER)
-    @Param(description = "the number of cpu this virtual machine is running with")
+    @Param(description = "the number of vCPUs this virtual machine is using")
     private Integer cpuNumber;
 
     @SerializedName(ApiConstants.CPU_SPEED)
-    @Param(description = "the speed of each cpu")
+    @Param(description = "the speed of each vCPU")
     private Integer cpuSpeed;
 
     @SerializedName(ApiConstants.MEMORY)
@@ -181,7 +243,7 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     private Integer memory;
 
     @SerializedName(ApiConstants.VGPU)
-    @Param(description = "the vgpu type used by the virtual machine", since = "4.4")
+    @Param(description = "the vGPU type used by the virtual machine", since = "4.4")
     private String vgpu;
 
     @SerializedName("cpuused")
@@ -189,39 +251,39 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     private String cpuUsed;
 
     @SerializedName("networkkbsread")
-    @Param(description = "the incoming network traffic on the vm")
+    @Param(description = "the incoming network traffic on the VM in KiB")
     private Long networkKbsRead;
 
     @SerializedName("networkkbswrite")
-    @Param(description = "the outgoing network traffic on the host")
+    @Param(description = "the outgoing network traffic on the host in KiB")
     private Long networkKbsWrite;
 
     @SerializedName(ApiConstants.DISK_KBS_READ)
-    @Param(description = "the read (bytes) of disk on the vm")
+    @Param(description = "the VM's disk read in KiB")
     private Long diskKbsRead;
 
     @SerializedName(ApiConstants.DISK_KBS_WRITE)
-    @Param(description = "the write (bytes) of disk on the vm")
+    @Param(description = "the VM's disk write in KiB")
     private Long diskKbsWrite;
 
     @SerializedName("memorykbs")
-    @Param(description = "the memory used by the vm")
+    @Param(description = "the memory used by the VM in KiB")
     private Long memoryKBs;
 
     @SerializedName("memoryintfreekbs")
-    @Param(description = "the internal memory thats free in vm")
+    @Param(description = "the internal memory (KiB) that's free in VM or zero if it can not be calculated")
     private Long memoryIntFreeKBs;
 
     @SerializedName("memorytargetkbs")
-    @Param(description = "the target memory in vm")
+    @Param(description = "the target memory in VM (KiB)")
     private Long memoryTargetKBs;
 
     @SerializedName(ApiConstants.DISK_IO_READ)
-    @Param(description = "the read (io) of disk on the vm")
+    @Param(description = "the read (IO) of disk on the VM")
     private Long diskIORead;
 
     @SerializedName(ApiConstants.DISK_IO_WRITE)
-    @Param(description = "the write (io) of disk on the vm")
+    @Param(description = "the write (IO) of disk on the VM")
     private Long diskIOWrite;
 
     @SerializedName("guestosid")
@@ -252,6 +314,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "the hypervisor on which the template runs")
     private String hypervisor;
 
+    @SerializedName(ApiConstants.IP_ADDRESS)
+    @Param(description = "the VM's primary IP address")
+    private String ipAddress;
+
     @SerializedName(ApiConstants.PUBLIC_IP_ID)
     @Param(description = "public IP address id associated with vm via Static nat rule")
     private String publicIpId;
@@ -270,13 +336,13 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "Vm details in key/value pairs.", since = "4.2.1")
     private Map details;
 
-    @SerializedName("readonlyuidetails")
-    @Param(description = "List of UI read-only Vm details as comma separated string.", since = "4.13.0")
-    private String readOnlyUIDetails;
+    @SerializedName("readonlydetails")
+    @Param(description = "List of read-only Vm details as comma separated string.", since = "4.16.0")
+    private String readOnlyDetails;
 
-    @SerializedName(ApiConstants.SSH_KEYPAIR)
-    @Param(description = "ssh key-pair")
-    private String keyPairName;
+    @SerializedName(ApiConstants.SSH_KEYPAIRS)
+    @Param(description = "ssh key-pairs")
+    private String keyPairNames;
 
     @SerializedName("affinitygroup")
     @Param(description = "list of affinity groups associated with the virtual machine", responseObject = AffinityGroupResponse.class)
@@ -289,6 +355,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @SerializedName(ApiConstants.IS_DYNAMICALLY_SCALABLE)
     @Param(description = "true if vm contains XS/VMWare tools inorder to support dynamic scaling of VM cpu/memory.")
     private Boolean isDynamicallyScalable;
+
+    @SerializedName(ApiConstants.DELETE_PROTECTION)
+    @Param(description = "true if vm has delete protection.", since = "4.20.0")
+    private boolean deleteProtection;
 
     @SerializedName(ApiConstants.SERVICE_STATE)
     @Param(description = "State of the Service from LB rule")
@@ -314,12 +384,76 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "the pool type of the virtual machine", since = "4.16")
     private String poolType;
 
+    @SerializedName(ApiConstants.RECEIVED_BYTES)
+    @Param(description = "the total number of network traffic bytes received")
+    private Long bytesReceived;
+
+    @SerializedName(ApiConstants.SENT_BYTES)
+    @Param(description = "the total number of network traffic bytes sent")
+    private Long bytesSent;
+
+    @SerializedName(ApiConstants.RESOURCE_ICON)
+    @Param(description = "Base64 string representation of the resource icon", since = "4.16.0")
+    ResourceIconResponse resourceIconResponse;
+
+    @SerializedName(ApiConstants.AUTOSCALE_VMGROUP_ID)
+    @Param(description = "ID of AutoScale VM group", since = "4.18.0")
+    String autoScaleVmGroupId;
+
+    @SerializedName(ApiConstants.AUTOSCALE_VMGROUP_NAME)
+    @Param(description = "Name of AutoScale VM group", since = "4.18.0")
+    String autoScaleVmGroupName;
+
+    @SerializedName(ApiConstants.USER_DATA)
+    @Param(description = "Base64 string containing the user data", since = "4.18.0.0")
+    private String userData;
+
+    @SerializedName(ApiConstants.USER_DATA_ID) @Param(description="the id of userdata used for the VM", since = "4.18.0")
+    private String userDataId;
+
+    @SerializedName(ApiConstants.USER_DATA_NAME) @Param(description="the name of userdata used for the VM", since = "4.18.0")
+    private String userDataName;
+
+    @SerializedName(ApiConstants.USER_DATA_POLICY) @Param(description="the userdata override policy with the userdata provided while deploying VM", since = "4.18.0")
+    private String userDataPolicy;
+
+    @SerializedName(ApiConstants.USER_DATA_DETAILS) @Param(description="list of variables and values for the variables declared in userdata", since = "4.18.0")
+    private String userDataDetails;
+
+    @SerializedName(ApiConstants.VNF_NICS)
+    @Param(description = "NICs of the VNF appliance", since = "4.19.0")
+    private List<VnfNicResponse> vnfNics;
+
+    @SerializedName(ApiConstants.VNF_DETAILS)
+    @Param(description = "VNF details", since = "4.19.0")
+    private Map<String, String> vnfDetails;
+
+    @SerializedName(ApiConstants.VM_TYPE)
+    @Param(description = "User VM type", since = "4.20.0")
+    private String vmType;
+
+    @SerializedName(ApiConstants.ARCH)
+    @Param(description = "CPU arch of the VM", since = "4.20.1")
+    private String arch;
+
+    @SerializedName(ApiConstants.INSTANCE_LEASE_DURATION)
+    @Param(description = "Instance lease duration in days", since = "4.21.0")
+    private Integer leaseDuration;
+
+    @SerializedName(ApiConstants.INSTANCE_LEASE_EXPIRY_DATE)
+    @Param(description = "Instance lease expiry date", since = "4.21.0")
+    private Date leaseExpiryDate;
+
+    @SerializedName(ApiConstants.INSTANCE_LEASE_EXPIRY_ACTION)
+    @Param(description = "Instance lease expiry action", since = "4.21.0")
+    private String leaseExpiryAction;
+
     public UserVmResponse() {
-        securityGroupList = new LinkedHashSet<SecurityGroupResponse>();
-        nics = new LinkedHashSet<NicResponse>();
-        tags = new LinkedHashSet<ResourceTagResponse>();
-        tagIds = new LinkedHashSet<Long>();
-        affinityGroupList = new LinkedHashSet<AffinityGroupResponse>();
+        securityGroupList = new LinkedHashSet<>();
+        nics = new TreeSet<>(Comparator.comparingInt(x -> Integer.parseInt(x.getDeviceId())));
+        tags = new LinkedHashSet<>();
+        tagIds = new LinkedHashSet<>();
+        affinityGroupList = new LinkedHashSet<>();
     }
 
     public void setHypervisor(String hypervisor) {
@@ -419,6 +553,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         return hostName;
     }
 
+    public String getHostControlState() {
+        return hostControlState;
+    }
+
     public String getTemplateId() {
         return templateId;
     }
@@ -461,6 +599,42 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
 
     public String getDiskOfferingName() {
         return diskOfferingName;
+    }
+
+    public String getGpuCardId() {
+        return gpuCardId;
+    }
+
+    public String getGpuCardName() {
+        return gpuCardName;
+    }
+
+    public String getVgpuProfileId() {
+        return vgpuProfileId;
+    }
+
+    public String getVgpuProfileName() {
+        return vgpuProfileName;
+    }
+
+    public Long getVideoRam() {
+        return videoRam;
+    }
+
+    public Long getMaxHeads() {
+        return maxHeads;
+    }
+
+    public Long getMaxResolutionX() {
+        return maxResolutionX;
+    }
+
+    public Long getMaxResolutionY() {
+        return maxResolutionY;
+    }
+
+    public Integer getGpuCount() {
+        return gpuCount;
     }
 
     public String getBackupOfferingId() {
@@ -558,6 +732,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         return hypervisor;
     }
 
+    public String getIpAddress() {
+        return ipAddress;
+    }
+
     public String getPublicIpId() {
         return publicIpId;
     }
@@ -570,8 +748,8 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         return instanceName;
     }
 
-    public String getKeyPairName() {
-        return keyPairName;
+    public String getKeyPairNames() {
+        return keyPairNames;
     }
 
     public Set<AffinityGroupResponse> getAffinityGroupList() {
@@ -584,6 +762,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
 
     public String getServiceState() {
         return serviceState;
+    }
+
+    public String getUserData() {
+        return userData;
     }
 
     public void setIsDynamicallyScalable(Boolean isDynamicallyScalable) {
@@ -621,6 +803,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         this.domainName = domainName;
     }
 
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
+    }
     public void setCreated(Date created) {
         this.created = created;
     }
@@ -655,6 +841,10 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
 
     public void setHostName(String hostName) {
         this.hostName = hostName;
+    }
+
+    public void setHostControlState(String hostControlState) {
+        this.hostControlState = hostControlState;
     }
 
     public void setTemplateId(String templateId) {
@@ -729,6 +919,42 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         this.diskOfferingName = diskOfferingName;
     }
 
+    public void setGpuCardId(String gpuCardId) {
+        this.gpuCardId = gpuCardId;
+    }
+
+    public void setGpuCardName(String gpuCardName) {
+        this.gpuCardName = gpuCardName;
+    }
+
+    public void setVgpuProfileId(String vgpuProfileId) {
+        this.vgpuProfileId = vgpuProfileId;
+    }
+
+    public void setVgpuProfileName(String vgpuProfileName) {
+        this.vgpuProfileName = vgpuProfileName;
+    }
+
+    public void setVideoRam(Long videoRam) {
+        this.videoRam = videoRam;
+    }
+
+    public void setMaxHeads(Long maxHeads) {
+        this.maxHeads = maxHeads;
+    }
+
+    public void setMaxResolutionX(Long maxResolutionX) {
+        this.maxResolutionX = maxResolutionX;
+    }
+
+    public void setMaxResolutionY(Long maxResolutionY) {
+        this.maxResolutionY = maxResolutionY;
+    }
+
+    public void setGpuCount(Integer gpuCount) {
+        this.gpuCount = gpuCount;
+    }
+
     public void setBackupOfferingId(String backupOfferingId) {
         this.backupOfferingId = backupOfferingId;
     }
@@ -786,6 +1012,13 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
 
     public void setNics(Set<NicResponse> nics) {
         this.nics = nics;
+        setIpAddress(nics);
+    }
+
+    public void setIpAddress(final Set<NicResponse> nics) {
+        if (CollectionUtils.isNotEmpty(nics)) {
+            this.ipAddress = nics.iterator().next().getIpaddress();
+        }
     }
 
     public void addNic(NicResponse nic) {
@@ -830,8 +1063,8 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         this.tags = tags;
     }
 
-    public void setKeyPairName(String keyPairName) {
-        this.keyPairName = keyPairName;
+    public void setKeyPairNames(String keyPairNames) {
+        this.keyPairNames = keyPairNames;
     }
 
     public void setAffinityGroupList(Set<AffinityGroupResponse> affinityGroups) {
@@ -854,8 +1087,8 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         this.details = details;
     }
 
-    public void setReadOnlyUIDetails(String readOnlyUIDetails) {
-        this.readOnlyUIDetails = readOnlyUIDetails;
+    public void setReadOnlyDetails(String readOnlyDetails) {
+        this.readOnlyDetails = readOnlyDetails;
     }
 
     public void setOsTypeId(String osTypeId) {
@@ -878,8 +1111,8 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
         return details;
     }
 
-    public String getReadOnlyUIDetails() {
-        return readOnlyUIDetails;
+    public String getReadOnlyDetails() {
+        return readOnlyDetails;
     }
 
     public Boolean getDynamicallyScalable() {
@@ -888,6 +1121,14 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
 
     public void setDynamicallyScalable(Boolean dynamicallyScalable) {
         isDynamicallyScalable = dynamicallyScalable;
+    }
+
+    public boolean isDeleteProtection() {
+        return deleteProtection;
+    }
+
+    public void setDeleteProtection(boolean deleteProtection) {
+        this.deleteProtection = deleteProtection;
     }
 
     public String getOsTypeId() {
@@ -909,4 +1150,180 @@ public class UserVmResponse extends BaseResponseWithTagInformation implements Co
     public String getPoolType() { return poolType; }
 
     public void setPoolType(String poolType) { this.poolType = poolType; }
+
+    @Override
+    public void setResourceIconResponse(ResourceIconResponse resourceIconResponse) {
+        this.resourceIconResponse = resourceIconResponse;
+    }
+
+    public ResourceIconResponse getResourceIconResponse() {
+        return resourceIconResponse;
+    }
+
+    public void setLastUpdated(Date lastUpdated) {
+        this.lastUpdated = lastUpdated;
+    }
+
+    public Date getLastUpdated() {
+        return lastUpdated;
+    }
+
+    public void setBytesReceived(Long bytesReceived) {
+        this.bytesReceived = bytesReceived;
+    }
+
+    public void setBytesSent(Long bytesSent) {
+        this.bytesSent = bytesSent;
+    }
+
+    public void setAutoScaleVmGroupId(String autoScaleVmGroupId) {
+        this.autoScaleVmGroupId = autoScaleVmGroupId;
+    }
+
+    public void setAutoScaleVmGroupName(String autoScaleVmGroupName) {
+        this.autoScaleVmGroupName = autoScaleVmGroupName;
+    }
+
+    public String getAutoScaleVmGroupId() {
+        return autoScaleVmGroupId;
+    }
+
+    public String getAutoScaleVmGroupName() {
+        return autoScaleVmGroupName;
+    }
+
+    public void setUserData(String userData) {
+        this.userData = userData;
+    }
+
+    public String getUserDataId() {
+        return userDataId;
+    }
+
+    public void setUserDataId(String userDataId) {
+        this.userDataId = userDataId;
+    }
+
+    public String getUserDataName() {
+        return userDataName;
+    }
+
+    public void setUserDataName(String userDataName) {
+        this.userDataName = userDataName;
+    }
+
+    public String getUserDataPolicy() {
+        return userDataPolicy;
+    }
+
+    public void setUserDataPolicy(String userDataPolicy) {
+        this.userDataPolicy = userDataPolicy;
+    }
+
+    public String getUserDataDetails() {
+        return userDataDetails;
+    }
+
+    public void setUserDataDetails(String userDataDetails) {
+        this.userDataDetails = userDataDetails;
+    }
+
+    public Long getBytesReceived() {
+        return bytesReceived;
+    }
+
+    public Long getBytesSent() {
+        return bytesSent;
+    }
+
+    public String getTemplateType() {
+        return templateType;
+    }
+
+    public void setTemplateType(String templateType) {
+        this.templateType = templateType;
+    }
+
+    public String getTemplateFormat() {
+        return templateFormat;
+    }
+
+    public void setTemplateFormat(String templateFormat) {
+        this.templateFormat = templateFormat;
+    }
+
+    public List<VnfNicResponse> getVnfNics() {
+        return vnfNics;
+    }
+
+    public void setVnfNics(List<VnfNicResponse> vnfNics) {
+        this.vnfNics = vnfNics;
+    }
+
+    public Map<String, String> getVnfDetails() {
+        return vnfDetails;
+    }
+
+    public void setVnfDetails(Map<String, String> vnfDetails) {
+        this.vnfDetails = vnfDetails;
+    }
+
+    public void addVnfNic(VnfNicResponse vnfNic) {
+        if (this.vnfNics == null) {
+            this.vnfNics = new ArrayList<>();
+        }
+        this.vnfNics.add(vnfNic);
+    }
+
+    public void addVnfDetail(String key, String value) {
+        if (this.vnfDetails == null) {
+            this.vnfDetails = new LinkedHashMap<>();
+        }
+        this.vnfDetails.put(key,value);
+    }
+
+    public void setVmType(String vmType) {
+        this.vmType = vmType;
+    }
+
+    public String getVmType() {
+        return vmType;
+    }
+
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
+    public String getArch() {
+        return arch;
+    }
+
+    public void setArch(String arch) {
+        this.arch = arch;
+    }
+
+    public Integer getLeaseDuration() {
+        return leaseDuration;
+    }
+
+    public void setLeaseDuration(Integer leaseDuration) {
+        this.leaseDuration = leaseDuration;
+    }
+
+    public String getLeaseExpiryAction() {
+        return leaseExpiryAction;
+    }
+
+    public void setLeaseExpiryAction(String leaseExpiryAction) {
+        this.leaseExpiryAction = leaseExpiryAction;
+    }
+
+    public Date getLeaseExpiryDate() {
+        return leaseExpiryDate;
+    }
+
+    public void setLeaseExpiryDate(Date leaseExpiryDate) {
+        this.leaseExpiryDate = leaseExpiryDate;
+    }
+
 }

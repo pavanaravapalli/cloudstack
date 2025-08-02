@@ -17,7 +17,7 @@
 
 package org.apache.cloudstack.api.command.user.vmsnapshot;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
@@ -38,8 +38,6 @@ import com.cloud.vm.snapshot.VMSnapshot;
 @APICommand(name = "deleteVMSnapshot", description = "Deletes a vmsnapshot.", responseObject = SuccessResponse.class, since = "4.2.0", entityType = {VMSnapshot.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class DeleteVMSnapshotCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(DeleteVMSnapshotCmd.class.getName());
-    private static final String s_name = "deletevmsnapshotresponse";
 
     @ACL(accessType = AccessType.OperateEntry)
     @Parameter(name = ApiConstants.VM_SNAPSHOT_ID,
@@ -51,11 +49,6 @@ public class DeleteVMSnapshotCmd extends BaseAsyncCmd {
 
     public Long getId() {
         return id;
-    }
-
-    @Override
-    public String getCommandName() {
-        return s_name;
     }
 
     @Override
@@ -89,4 +82,13 @@ public class DeleteVMSnapshotCmd extends BaseAsyncCmd {
         return EventTypes.EVENT_VM_SNAPSHOT_DELETE;
     }
 
+    @Override
+    public Long getApiResourceId() {
+        return getId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VmSnapshot;
+    }
 }

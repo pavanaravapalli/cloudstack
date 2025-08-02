@@ -21,20 +21,17 @@
       <a-row>
         <a-col :span="14" style="padding-left: 6px">
           <breadcrumb :resource="resource">
-            <span slot="end">
-              <template slot="title">
-                {{ $t('label.refresh') }}
-              </template>
+            <template #end>
               <a-button
                 style="margin-top: 4px"
                 :loading="loading"
                 shape="round"
                 size="small"
-                icon="reload"
                 @click="fetchData()">
+                <template #icon><ReloadOutlined /></template>
                 {{ $t('label.refresh') }}
               </a-button>
-            </span>
+            </template>
           </breadcrumb>
         </a-col>
         <a-col :span="10">
@@ -60,12 +57,15 @@
         :tabs="$route.meta.tabs" />
       <tree-view
         v-else
+        :key="treeViewKey"
         :treeData="treeData"
         :treeSelected="treeSelected"
+        :treeStore="domainStore"
         :loading="loading"
         :tabs="$route.meta.tabs"
+        :treeDeletedKey="treeDeletedKey"
         @change-resource="changeResource"
-        :actionData="actionData"/>
+        @change-tree-store="changeDomainStore"/>
     </div>
 
     <div v-if="showAction">
@@ -78,7 +78,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, callAPI } from '@/api'
 import store from '@/store'
 import { mixinDevice } from '@/utils/mixin.js'
 
@@ -87,6 +87,7 @@ import ActionButton from '@/components/view/ActionButton'
 import TreeView from '@/components/view/TreeView'
 import DomainActionForm from '@/views/iam/DomainActionForm'
 import ResourceView from '@/components/view/ResourceView'
+import eventBus from '@/config/eventBus'
 
 export default {
   name: 'DomainView',
@@ -103,12 +104,14 @@ export default {
       resource: {},
       loading: false,
       selectedRowKeys: [],
+      treeViewKey: 0,
       treeData: [],
-      actionData: [],
       treeSelected: {},
       showAction: false,
       action: {},
-      dataView: false
+      dataView: false,
+      domainStore: {},
+      treeDeletedKey: null
     }
   },
   computed: {
@@ -122,26 +125,27 @@ export default {
       return actions
     }
   },
-  beforeCreate () {
-    this.form = this.$form.createForm(this)
-  },
-  mounted () {
-    this.fetchData()
-  },
   beforeRouteUpdate (to, from, next) {
     next()
   },
   beforeRouteLeave (to, from, next) {
+    this.changeDomainStore({})
     next()
+  },
+  created () {
+    this.domainStore = store.getters.domainStore
+    this.fetchData()
+    eventBus.on('refresh-domain-icon', () => {
+      if (this.$showIcon()) {
+        this.fetchData()
+      }
+    })
   },
   watch: {
     '$route' (to, from) {
-      if (to.fullPath !== from.fullPath && !to.fullPath.includes('action/')) {
-        this.fetchData()
-      }
-    },
-    '$i18n.locale' (to, from) {
-      if (to !== from) {
+      // When the route changes from /domain/:id to /domain or vice versa, the component is not destroyed and created again
+    // So, we need to watch the route params to fetch the data again to update the component
+      if (to.path.startsWith('/domain') && from.params.id !== to.params.id) {
         this.fetchData()
       }
     }
@@ -149,8 +153,8 @@ export default {
   provide () {
     return {
       parentCloseAction: this.closeAction,
-      parentUpdActionData: this.updateActionData,
-      parentFetchData: this.fetchData
+      parentFetchData: this.fetchData,
+      parentForceRerender: this.forceRerender
     }
   },
   methods: {
@@ -168,8 +172,8 @@ export default {
       }
 
       this.loading = true
-
-      api('listDomains', params).then(json => {
+      params.showicon = true
+      getAPI('listDomains', params).then(json => {
         const domains = json.listdomainsresponse.domain || []
         this.treeData = this.generateTreeData(domains)
         this.resource = domains[0] || {}
@@ -201,6 +205,7 @@ export default {
       })
     },
     execAction (action) {
+      this.treeDeletedKey = action.api === 'deleteDomain' ? this.resource.key : null
       this.actionData = []
       this.action = action
       this.action.params = store.getters.apis[this.action.api].params
@@ -269,24 +274,20 @@ export default {
       }
       param.loading = true
       param.opts = []
-      api(possibleApi, params).then(json => {
-        param.loading = false
-        for (const obj in json) {
-          if (obj.includes('response')) {
-            for (const res in json[obj]) {
-              if (res === 'count') {
-                continue
-              }
-              param.opts = json[obj][res]
-              this.$forceUpdate()
-              break
+      callAPI(possibleApi, params)
+        .then(json => {
+          param.loading = false
+          const responseObj = Object.values(json).find(obj => obj.includes('response'))
+          if (responseObj) {
+            const responseData = Object.entries(responseObj).find(([res, value]) => res !== 'count')
+            if (responseData) {
+              param.opts = responseData[1]
             }
-            break
           }
-        }
-      }).catch(() => {
-        param.loading = false
-      })
+        })
+        .catch(() => {
+          param.loading = false
+        })
     },
     generateTreeData (treeData) {
       const result = []
@@ -294,6 +295,8 @@ export default {
 
       rootItem[0].title = rootItem[0].title ? rootItem[0].title : rootItem[0].name
       rootItem[0].key = rootItem[0].id ? rootItem[0].id : 0
+      rootItem[0].resourceIcon = rootItem[0].icon || {}
+      delete rootItem[0].icon
 
       if (!rootItem[0].haschild) {
         rootItem[0].isLeaf = true
@@ -306,11 +309,15 @@ export default {
       this.treeSelected = resource
       this.resource = this.treeSelected
     },
+    changeDomainStore (domainStore) {
+      this.domainStore = domainStore
+      store.dispatch('SetDomainStore', domainStore)
+    },
     closeAction () {
       this.showAction = false
     },
-    updateActionData (data) {
-      this.actionData.push(data)
+    forceRerender () {
+      this.treeViewKey += 1
     }
   }
 }

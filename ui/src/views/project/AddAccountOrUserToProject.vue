@@ -17,136 +17,169 @@
 <template>
   <div>
     <a-tabs class="form-layout">
-      <a-tab-pane key="1" :tab="$t('label.action.project.add.account')">
+      <a-tab-pane
+        key="1"
+        :tab="$t('label.action.project.add.account')"
+        v-ctrl-enter="addAccountToProject">
         <a-form
-          :form="form"
-          @submit="addAccountToProject"
-          layout="vertical">
-          <a-form-item>
-            <span slot="label">
-              {{ $t('label.account') }}
-              <a-tooltip :title="apiParams.addAccountToProject.account.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
-            <a-input
-              v-decorator="['account']"
-              :placeholder="apiParams.addAccountToProject.account.description"/>
+          :ref="formRef"
+          :model="form"
+          :rules="rules"
+          layout="vertical"
+         >
+          <a-form-item name="account" ref="account">
+            <template #label>
+              <tooltip-label :title="$t('label.account')" :tooltip="apiParams.addAccountToProject.account.description"/>
+            </template>
+            <a-auto-complete
+                v-model:value="form.account"
+                :placeholder="apiParams.addAccountToProject.account.description"
+                :filterOption="filterOption"
+                :options="accounts"
+            >
+              <template v-if="load.accounts" #notFoundContent>
+                <a-spin size="small" />
+              </template>
+              <template v-if="!load.accounts" #option="account">
+                <span v-if="account.icon">
+                  <resource-icon :image="account.icon.base64image" size="1x" style="margin-right: 5px"/>
+                </span>
+                <block-outlined v-else style="margin-right: 5px" />
+                {{ account.name }}
+              </template>
+            </a-auto-complete>
           </a-form-item>
-          <a-form-item>
-            <span slot="label">
-              {{ $t('label.email') }}
-              <a-tooltip :title="apiParams.addAccountToProject.email.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
+          <a-form-item name="email" ref="email">
+            <template #label>
+              <tooltip-label :title="$t('label.email')" :tooltip="apiParams.addAccountToProject.email.description"/>
+            </template>
             <a-input
-              v-decorator="['email']"
+              v-model:value="form.email"
               :placeholder="apiParams.addAccountToProject.email.description"></a-input>
           </a-form-item>
-          <a-form-item v-if="apiParams.addAccountToProject.projectroleid">
-            <span slot="label">
-              {{ $t('label.project.role') }}
-              <a-tooltip :title="apiParams.addAccountToProject.projectroleid.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
+          <a-form-item name="projectroleid" ref="projectroleid" v-if="apiParams.addAccountToProject.projectroleid">
+            <template #label>
+              <tooltip-label :title="$t('label.project.role')" :tooltip="apiParams.addAccountToProject.projectroleid.description"/>
+            </template>
             <a-select
-              showSearch
-              v-decorator="['projectroleid']"
+              v-model:value="form.projectroleid"
               :loading="loading"
-              :placeholder="$t('label.project.role')"
-            >
-              <a-select-option v-for="role in projectRoles" :key="role.id">
+              :placeholder="apiParams.addAccountToProject.projectroleid.description"
+              showSearch
+              optionFilterProp="label"
+              :filterOption="(input, option) => {
+                return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }" >
+              <a-select-option v-for="role in projectRoles" :key="role.id" :label="role.name">
                 {{ role.name }}
               </a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item v-if="apiParams.addAccountToProject.roletype">
-            <span slot="label">
-              {{ $t('label.roletype') }}
-              <a-tooltip :title="apiParams.addAccountToProject.roletype.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
+          <a-form-item name="roletype" ref="roletype" v-if="apiParams.addAccountToProject.roletype">
+            <template #label>
+              <tooltip-label :title="$t('label.roletype')" :tooltip="apiParams.addAccountToProject.roletype.description"/>
+            </template>
             <a-select
+              v-model:value="form.roletype"
+              :placeholder="apiParams.addAccountToProject.roletype.description"
               showSearch
-              v-decorator="['roletype']"
-              :placeholder="$t('label.roletype')">
+              optionFilterProp="value"
+              :filterOption="(input, option) => {
+                return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }" >
               <a-select-option value="Admin">Admin</a-select-option>
               <a-select-option value="Regular">Regular</a-select-option>
             </a-select>
           </a-form-item>
           <div :span="24" class="action-button">
-            <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-            <a-button type="primary" @click="addAccountToProject" :loading="loading">{{ $t('label.ok') }}</a-button>
+            <a-button @click="closeAction">{{ $t('label.cancel') }}</a-button>
+            <a-button type="primary" ref="submit" @click="addAccountToProject" :loading="loading">{{ $t('label.ok') }}</a-button>
           </div>
         </a-form>
       </a-tab-pane>
-      <a-tab-pane key="2" :tab="$t('label.action.project.add.user')" v-if="apiParams.addUserToProject">
+      <a-tab-pane
+        key="2"
+        :tab="$t('label.action.project.add.user')"
+        v-if="apiParams.addUserToProject"
+        v-ctrl-enter="addUserToProject">
         <a-form
-          :form="form"
-          @submit="addUserToProject"
-          layout="vertical">
-          <p v-html="$t('message.add.user.to.project')"></p>
-          <a-form-item>
-            <span slot="label">
-              {{ $t('label.user') }}
-              <a-tooltip :title="apiParams.addUserToProject.username.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
-            <a-input
-              v-decorator="['username']"
-              :placeholder="apiParams.addUserToProject.username.description"/>
+          :ref="formRef"
+          :model="form"
+          :rules="rules"
+          layout="vertical"
+         >
+          <a-alert type="warning" style="margin-bottom: 20px">
+            <template #message>
+              <div v-html="$t('message.add.user.to.project')"></div>
+            </template>
+          </a-alert>
+          <a-form-item name="username" ref="username">
+            <template #label>
+              <tooltip-label :title="$t('label.name')" :tooltip="apiParams.addUserToProject.username.description"/>
+            </template>
+              <a-auto-complete
+                v-model:value="form.username"
+                :placeholder="apiParams.addUserToProject.username.description"
+                :filterOption="filterOption"
+                :options="users"
+              >
+                <template v-if="load.users" #notFoundContent>
+                  <a-spin size="small" />
+                </template>
+                <template v-if="!load.users" #option="user">
+                  <span v-if="user.icon">
+                    <resource-icon :image="user.icon.base64image" size="1x" style="margin-right: 5px"/>
+                  </span>
+                  <block-outlined v-else style="margin-right: 5px" />
+                  {{ user.firstName + ' ' + user.lastName + " (" + user.username + ")" }}
+                </template>
+              </a-auto-complete>
           </a-form-item>
-          <a-form-item>
-            <span slot="label">
-              {{ $t('label.email') }}
-              <a-tooltip :title="apiParams.addUserToProject.email.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
+          <a-form-item name="email" ref="email">
+            <template #label>
+              <tooltip-label :title="$t('label.email')" :tooltip="apiParams.addUserToProject.email.description"/>
+            </template>
             <a-input
-              v-decorator="['email']"
+              v-model:value="form.email"
               :placeholder="apiParams.addUserToProject.email.description"></a-input>
           </a-form-item>
-          <a-form-item>
-            <span slot="label">
-              {{ $t('label.project.role') }}
-              <a-tooltip :title="apiParams.addUserToProject.roletype.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
+          <a-form-item name="projectroleid" ref="projectroleid">
+            <template #label>
+              <tooltip-label :title="$t('label.project.role')" :tooltip="apiParams.addUserToProject.roletype.description"/>
+            </template>
             <a-select
-              showSearch
-              v-decorator="['projectroleid']"
+              v-model:value="form.projectroleid"
               :loading="loading"
-              :placeholder="$t('label.project.role')"
-            >
-              <a-select-option v-for="role in projectRoles" :key="role.id">
+              :placeholder="apiParams.addUserToProject.roletype.description"
+              showSearch
+              optionFilterProp="label"
+              :filterOption="(input, option) => {
+                return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }" >
+              <a-select-option v-for="role in projectRoles" :key="role.id" :label="role.name">
                 {{ role.name }}
               </a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item>
-            <span slot="label">
-              {{ $t('label.roletype') }}
-              <a-tooltip :title="apiParams.addUserToProject.roletype.description">
-                <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-              </a-tooltip>
-            </span>
+          <a-form-item name="roletype" ref="roletype">
+            <template #label>
+              <tooltip-label :title="$t('label.roletype')" :tooltip="apiParams.addUserToProject.roletype.description"/>
+            </template>
             <a-select
+              v-model:value="form.roletype"
+              :placeholder="apiParams.addUserToProject.roletype.description"
               showSearch
-              v-decorator="['roletype']"
-              :placeholder="$t('label.roletype')">
+              optionFilterProp="value"
+              :filterOption="(input, option) => {
+                return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }" >
               <a-select-option value="Admin">Admin</a-select-option>
               <a-select-option value="Regular">Regular</a-select-option>
             </a-select>
           </a-form-item>
           <div :span="24" class="action-button">
-            <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-            <a-button type="primary" @click="addUserToProject" :loading="loading">{{ $t('label.ok') }}</a-button>
+            <a-button @click="closeAction">{{ $t('label.cancel') }}</a-button>
+            <a-button type="primary" ref="submit" @click="addUserToProject" :loading="loading">{{ $t('label.ok') }}</a-button>
           </div>
         </a-form>
       </a-tab-pane>
@@ -154,9 +187,17 @@
   </div>
 </template>
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import TooltipLabel from '@/components/widgets/TooltipLabel'
+
 export default {
   name: 'AddAccountOrUserToProject',
+  components: {
+    ResourceIcon,
+    TooltipLabel
+  },
   props: {
     resource: {
       type: Object,
@@ -178,26 +219,26 @@ export default {
       }
     }
   },
-  mounted () {
+  created () {
+    this.initForm()
     this.fetchData()
   },
   beforeCreate () {
-    this.form = this.$form.createForm(this)
     const apis = ['addAccountToProject']
     if ('addUserToProject' in this.$store.getters.apis) {
       apis.push('addUserToProject')
     }
     this.apiParams = {}
     for (var api of apis) {
-      const details = {}
-      const apiConfig = this.$store.getters.apis[api]
-      apiConfig.params.forEach(param => {
-        details[param.name] = param
-      })
-      this.apiParams[api] = details
+      this.apiParams[api] = this.$getApiParams(api)
     }
   },
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({})
+      this.rules = reactive({})
+    },
     fetchData () {
       this.fetchUsers()
       this.fetchAccounts()
@@ -205,31 +246,70 @@ export default {
         this.fetchProjectRoles()
       }
     },
-    fetchUsers () {
+    filterOption (input, option) {
+      return (
+        option.value.toUpperCase().indexOf(input.toUpperCase()) >= 0
+      )
+    },
+    fetchUsers (keyword) {
       this.load.users = true
-      api('listUsers', { listall: true }).then(response => {
-        this.users = response.listusersresponse.user ? response.listusersresponse.user : []
+      const params = { listall: true, showicon: true }
+      if (keyword) {
+        params.keyword = keyword
+      }
+      getAPI('listUsers', params).then(response => {
+        this.users = this.parseUsers(response?.listusersresponse?.user)
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
         this.load.users = false
       })
     },
-    fetchAccounts () {
+    parseUsers (users) {
+      if (!users) {
+        return []
+      }
+
+      return users.map(user => {
+        return {
+          value: user.username,
+          username: user.username,
+          firstName: user.firstname,
+          lastName: user.lastname,
+          icon: user.icon
+        }
+      })
+    },
+    fetchAccounts (keyword) {
       this.load.accounts = true
-      api('listAccounts', {
-        domainid: this.resource.domainid
-      }).then(response => {
-        this.accounts = response.listaccountsresponse.account || []
+      const params = { domainid: this.resource.domainid, showicon: true }
+      if (keyword) {
+        params.keyword = keyword
+      }
+      getAPI('listAccounts', params).then(response => {
+        this.accounts = this.parseAccounts(response?.listaccountsresponse?.account)
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
         this.load.accounts = false
       })
     },
+    parseAccounts (accounts) {
+      if (!accounts) {
+        return []
+      }
+
+      return accounts.map(account => {
+        return {
+          value: account.name,
+          name: account.name,
+          icon: account.icon
+        }
+      })
+    },
     fetchProjectRoles () {
       this.load.projectRoles = true
-      api('listProjectRoles', {
+      getAPI('listProjectRoles', {
         projectid: this.resource.id
       }).then(response => {
         this.projectRoles = response.listprojectrolesresponse.projectrole || []
@@ -244,10 +324,9 @@ export default {
     },
     addAccountToProject (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
-        if (err) {
-          return
-        }
+      if (this.loading) return
+      this.formRef.value.validate().then(() => {
+        const values = toRaw(this.form)
         this.loading = true
         var params = {
           projectid: this.resource.id
@@ -259,7 +338,7 @@ export default {
           }
           params[key] = input
         }
-        api('addAccountToProject', params).then(response => {
+        postAPI('addAccountToProject', params).then(response => {
           this.$pollJob({
             jobId: response.addaccounttoprojectresponse.jobid,
             successMessage: `Successfully added account ${params.account} to project`,
@@ -267,21 +346,21 @@ export default {
             loadingMessage: `Adding Account: ${params.account} to project...`,
             catchMessage: 'Error encountered while fetching async job result'
           })
-          this.$emit('refresh-data')
           this.closeAction()
         }).catch(error => {
           this.$notifyError(error)
         }).finally(() => {
           this.loading = false
         })
+      }).catch((error) => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     addUserToProject (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
-        if (err) {
-          return
-        }
+      if (this.loading) return
+      this.formRef.value.validate().then(() => {
+        const values = toRaw(this.form)
 
         this.loading = true
         var params = {
@@ -294,7 +373,7 @@ export default {
           }
           params[key] = input
         }
-        api('addUserToProject', params).then(response => {
+        postAPI('addUserToProject', params).then(response => {
           this.$pollJob({
             jobId: response.addusertoprojectresponse.jobid,
             successMessage: `Successfully added user ${params.username} to project`,
@@ -302,7 +381,6 @@ export default {
             loadingMessage: `Adding User ${params.username} to project...`,
             catchMessage: 'Error encountered while fetching async job result'
           })
-          this.$emit('refresh-data')
           this.closeAction()
         }).catch(error => {
           console.log('catch')
@@ -310,6 +388,8 @@ export default {
         }).finally(() => {
           this.loading = false
         })
+      }).catch((error) => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     closeAction () {
@@ -324,13 +404,6 @@ export default {
 
     @media (min-width: 600px) {
       width: 450px;
-    }
-  }
-.action-button {
-    text-align: right;
-
-    button {
-      margin-right: 5px;
     }
   }
 </style>

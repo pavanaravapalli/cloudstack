@@ -6,9 +6,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -38,22 +38,22 @@ if [ ! -d ${EXPORT_PATH} ]; then
 	exit 3
 fi
 
-URL="http://jenkins.buildacloud.org/job/build-systemvm64-master/lastSuccessfulBuild/artifact/tools/appliance/dist"
+URL="http://jenkins.buildacloud.org/job/build-systemvm64-main/lastSuccessfulBuild/artifact/tools/appliance/dist"
 case $HYPERVISOR in
  	kvm)
-		TO_DOWNLOAD=${URL}/systemvm64template-master-4.6.0-kvm.qcow2.bz2
+		TO_DOWNLOAD=${URL}/systemvm64template-main-4.6.0-kvm.qcow2.bz2
 		;;
 	xenserver)
-		TO_DOWNLOAD=${URL}/systemvm64template-master-4.6.0-xen.vhd.bz2
+		TO_DOWNLOAD=${URL}/systemvm64template-main-4.6.0-xen.vhd.bz2
 		;;
 	vmware)
-		TO_DOWNLOAD=${URL}/systemvm64template-master-4.6.0-vmware.ova
+		TO_DOWNLOAD=${URL}/systemvm64template-main-4.6.0-vmware.ova
 		;;
 	lxc)
-		TO_DOWNLOAD=${URL}/systemvm64template-master-4.6.0-kvm.qcow2.bz2
+		TO_DOWNLOAD=${URL}/systemvm64template-main-4.6.0-kvm.qcow2.bz2
 		;;
 	ovm)
-		TO_DOWNLOAD=${URL}/systemvm64template-master-4.6.0-ovm.raw.bz2
+		TO_DOWNLOAD=${URL}/systemvm64template-main-4.6.0-ovm.raw.bz2
 		;;
 	*)
 		echo "ERROR: hypervisor not found"

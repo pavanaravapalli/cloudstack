@@ -18,7 +18,6 @@ package org.apache.cloudstack.api.command.user.project;
 
 import java.util.List;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -37,9 +36,7 @@ import com.cloud.projects.Project;
 @APICommand(name = "deleteProject", description = "Deletes a project", responseObject = SuccessResponse.class, since = "3.0.0",
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class DeleteProjectCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(DeleteProjectCmd.class.getName());
 
-    private static final String s_name = "deleteprojectresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -47,6 +44,9 @@ public class DeleteProjectCmd extends BaseAsyncCmd {
 
     @Parameter(name = ApiConstants.ID, type = CommandType.UUID, entityType = ProjectResponse.class, required = true, description = "id of the project to be deleted")
     private Long id;
+
+    @Parameter(name = ApiConstants.CLEANUP, type = CommandType.BOOLEAN, since = "4.16.0", description = "true if all project resources have to be cleaned up, false otherwise")
+    private Boolean cleanup;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -56,9 +56,8 @@ public class DeleteProjectCmd extends BaseAsyncCmd {
         return id;
     }
 
-    @Override
-    public String getCommandName() {
-        return s_name;
+    public Boolean isCleanup() {
+        return cleanup;
     }
 
     /////////////////////////////////////////////////////
@@ -68,7 +67,7 @@ public class DeleteProjectCmd extends BaseAsyncCmd {
     @Override
     public void execute() {
         CallContext.current().setEventDetails("Project Id: " + id);
-        boolean result = _projectService.deleteProject(id);
+        boolean result = _projectService.deleteProject(id, isCleanup());
         if (result) {
             SuccessResponse response = new SuccessResponse(getCommandName());
             this.setResponseObject(response);

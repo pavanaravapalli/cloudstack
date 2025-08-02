@@ -6,9 +6,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -27,7 +27,7 @@ Mandatory arguments:
    -v, --version string                    Set the next version to be applied
 
 Optional arguments:
-   -b, --branch string                     Set the branch to update the version into (default "master")
+   -b, --branch string                     Set the branch to update the version into (default "main")
    -s, --sourcedir string                  Set the source directory to clone repo into (default "$sourcedir")
    -n, --no-commit                         Apply only the version change and don't git commit them (default "false")
 
@@ -103,7 +103,7 @@ if [ -z "$version" ]; then
 fi
 
 if [ -z "$branch" ]; then
-    branch="master"
+    branch="main"
 fi
 
 if [ -z "$sourcedir" ]; then
@@ -131,7 +131,6 @@ echo "setting new version numbers"
 mvn versions:set -DnewVersion=$version -P vmware -P developer -P systemvm -P simulator -Dnoredist versions:commit
 
 perl -pi -e "s/$currentversion/$version/" debian/changelog
-perl -pi -e "s/$currentversion/$version/" tools/apidoc/pom.xml
 perl -pi -e "s/$currentversion/$version/" tools/checkstyle/pom.xml
 perl -pi -e "s/$currentversion/$version/" tools/marvin/setup.py
 

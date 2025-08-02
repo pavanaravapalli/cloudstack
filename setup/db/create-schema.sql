@@ -398,7 +398,7 @@ CREATE TABLE `cloud`.`op_lock` (
   `waiters` int NOT NULL DEFAULT 0 COMMENT 'How many have the thread acquired this lock (reentrant)',
   PRIMARY KEY (`key`),
   INDEX `i_op_lock__mac_ip_thread`(`mac`, `ip`, `thread`)
-) ENGINE=Memory DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE  `cloud`.`configuration` (
   `category` varchar(255) NOT NULL DEFAULT 'Advanced',
@@ -801,7 +801,7 @@ CREATE TABLE `cloud`.`port_forwarding_rules` (
   `instance_id` bigint unsigned NOT NULL COMMENT 'vm instance id',
   `dest_ip_address` char(40) NOT NULL COMMENT 'id_address',
   `dest_port_start` int(10) NOT NULL COMMENT 'starting port of the port range to map to',
-  `dest_port_end` int(10) NOT NULL COMMENT 'end port of the the port range to map to',
+  `dest_port_end` int(10) NOT NULL COMMENT 'end port of the port range to map to',
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_port_forwarding_rules__id` FOREIGN KEY(`id`) REFERENCES `firewall_rules`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_port_forwarding_rules__instance_id` FOREIGN KEY `fk_port_forwarding_rules__instance_id` (`instance_id`) REFERENCES `vm_instance` (`id`) ON DELETE CASCADE
@@ -1793,7 +1793,7 @@ CREATE TABLE `cloud`.`op_nwgrp_work` (
   INDEX `i_op_nwgrp_work__taken`(`taken`),
   INDEX `i_op_nwgrp_work__step`(`step`),
   INDEX `i_op_nwgrp_work__seq_no`(`seq_no`)
-) ENGINE=MEMORY DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `cloud`.`op_vm_ruleset_log` (
   `id` bigint unsigned UNIQUE NOT NULL AUTO_INCREMENT COMMENT 'id',
@@ -1927,7 +1927,7 @@ CREATE TABLE `cloud`.`keystore` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'id',
   `name` varchar(64) NOT NULL COMMENT 'unique name for the certifiation',
   `certificate` text NOT NULL COMMENT 'the actual certificate being stored in the db',
-  `key` text COMMENT 'private key associated wih the certificate',
+  `key` text COMMENT 'private key associated with the certificate',
   `domain_suffix` varchar(256) NOT NULL COMMENT 'DNS domain suffix associated with the certificate',
   `seq` int,
   PRIMARY KEY (`id`),
@@ -1948,8 +1948,8 @@ CREATE TABLE `cloud`.`swift` (
 
 CREATE TABLE `cloud`.`op_host_transfer` (
   `id` bigint unsigned UNIQUE NOT NULL COMMENT 'Id of the host',
-  `initial_mgmt_server_id` bigint unsigned COMMENT 'management server the host is transfered from',
-  `future_mgmt_server_id` bigint unsigned COMMENT 'management server the host is transfered to',
+  `initial_mgmt_server_id` bigint unsigned COMMENT 'management server the host is transferred from',
+  `future_mgmt_server_id` bigint unsigned COMMENT 'management server the host is transferred to',
   `state` varchar(32) NOT NULL COMMENT 'the transfer state of the host',
   `created` datetime NOT NULL COMMENT 'date created',
   PRIMARY KEY (`id`),
@@ -2137,8 +2137,8 @@ CREATE TABLE `cloud`.`external_load_balancer_devices` (
   `allocation_state` varchar(32) NOT NULL DEFAULT 'Free' COMMENT 'Allocation state (Free/Shared/Dedicated/Provider) of the device',
   `is_dedicated` int(1) unsigned NOT NULL DEFAULT 0 COMMENT '1 if device/appliance is provisioned for dedicated use only',
   `is_inline` int(1) unsigned NOT NULL DEFAULT 0 COMMENT '1 if load balancer will be used in in-line configuration with firewall',
-  `is_managed` int(1) unsigned NOT NULL DEFAULT 0 COMMENT '1 if load balancer appliance is provisioned and its life cycle is managed by by cloudstack',
-  `host_id` bigint unsigned NOT NULL COMMENT 'host id coresponding to the external load balancer device',
+  `is_managed` int(1) unsigned NOT NULL DEFAULT 0 COMMENT '1 if load balancer appliance is provisioned and its life cycle is managed by cloudstack',
+  `host_id` bigint unsigned NOT NULL COMMENT 'host id corresponding to the external load balancer device',
   `parent_host_id` bigint unsigned COMMENT 'if the load balancer appliance is cloudstack managed, then host id on which this appliance is provisioned',
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_external_lb_devices_host_id` FOREIGN KEY (`host_id`) REFERENCES `host`(`id`) ON DELETE CASCADE,
@@ -2155,7 +2155,7 @@ CREATE TABLE `cloud`.`external_firewall_devices` (
   `device_state` varchar(32) NOT NULL DEFAULT 'Disabled' COMMENT 'state (enabled/disabled/shutdown) of the device',
   `is_dedicated` int(1) unsigned NOT NULL DEFAULT 0 COMMENT '1 if device/appliance meant for dedicated use only',
   `allocation_state` varchar(32) NOT NULL DEFAULT 'Free' COMMENT 'Allocation state (Free/Allocated) of the device',
-  `host_id` bigint unsigned NOT NULL COMMENT 'host id coresponding to the external firewall device',
+  `host_id` bigint unsigned NOT NULL COMMENT 'host id corresponding to the external firewall device',
   `capacity` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Capacity of the external firewall device',
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_external_firewall_devices__host_id` FOREIGN KEY (`host_id`) REFERENCES `host`(`id`) ON DELETE CASCADE,
@@ -2459,7 +2459,7 @@ CREATE TABLE `cloud`.`external_nicira_nvp_devices` (
   `physical_network_id` bigint unsigned NOT NULL COMMENT 'id of the physical network in to which nicira nvp device is added',
   `provider_name` varchar(255) NOT NULL COMMENT 'Service Provider name corresponding to this nicira nvp device',
   `device_name` varchar(255) NOT NULL COMMENT 'name of the nicira nvp device',
-  `host_id` bigint unsigned NOT NULL COMMENT 'host id coresponding to the external nicira nvp device',
+  `host_id` bigint unsigned NOT NULL COMMENT 'host id corresponding to the external nicira nvp device',
   PRIMARY KEY  (`id`),
   CONSTRAINT `fk_external_nicira_nvp_devices__host_id` FOREIGN KEY (`host_id`) REFERENCES `host`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_external_nicira_nvp_devices__physical_network_id` FOREIGN KEY (`physical_network_id`) REFERENCES `physical_network`(`id`) ON DELETE CASCADE
@@ -2475,4 +2475,3 @@ CREATE TABLE `cloud`.`nicira_nvp_nic_map` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 SET foreign_key_checks = 1;
-

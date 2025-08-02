@@ -19,6 +19,7 @@
 
 package org.apache.cloudstack.storage.to;
 
+import com.cloud.agent.api.LogLevel;
 import org.apache.cloudstack.engine.subsystem.api.storage.VolumeInfo;
 
 import com.cloud.agent.api.to.DataObjectType;
@@ -29,13 +30,19 @@ import com.cloud.offering.DiskOffering.DiskCacheMode;
 import com.cloud.storage.MigrationOptions;
 import com.cloud.storage.Storage;
 import com.cloud.storage.Volume;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
-public class VolumeObjectTO implements DataTO {
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+
+public class VolumeObjectTO extends DownloadableObjectTO implements DataTO {
     private String uuid;
     private Volume.Type volumeType;
     private DataStoreTO dataStore;
     private String name;
     private Long size;
+    private Long usableSize;
     private String path;
     private Long volumeId;
     private String vmName;
@@ -67,6 +74,12 @@ public class VolumeObjectTO implements DataTO {
     private boolean deployAsIs;
     private String updatedDataStoreUUID;
     private String vSphereStoragePolicyId;
+
+    @LogLevel(LogLevel.Log4jLevel.Off)
+    private byte[] passphrase;
+    private String encryptFormat;
+    private List<String> checkpointPaths;
+    private Set<String> checkpointImageStoreUrls;
 
     public VolumeObjectTO() {
 
@@ -110,6 +123,11 @@ public class VolumeObjectTO implements DataTO {
         this.directDownload = volume.isDirectDownload();
         this.deployAsIs = volume.isDeployAsIs();
         this.vSphereStoragePolicyId = volume.getvSphereStoragePolicyId();
+        this.passphrase = volume.getPassphrase();
+        this.encryptFormat = volume.getEncryptFormat();
+        this.followRedirects = volume.isFollowRedirects();
+        this.checkpointPaths = volume.getCheckpointPaths();
+        this.checkpointImageStoreUrls = volume.getCheckpointImageStoreUrls();
     }
 
     public String getUuid() {
@@ -151,6 +169,10 @@ public class VolumeObjectTO implements DataTO {
         return size;
     }
 
+    public Long getUsableSize() {
+        return usableSize;
+    }
+
     @Override
     public DataObjectType getObjectType() {
         return DataObjectType.VOLUME;
@@ -166,6 +188,10 @@ public class VolumeObjectTO implements DataTO {
 
     public void setSize(long size) {
         this.size = size;
+    }
+
+    public void setUsableSize(Long usableSize) {
+        this.usableSize = usableSize;
     }
 
     public void setPath(String path) {
@@ -239,7 +265,9 @@ public class VolumeObjectTO implements DataTO {
 
     @Override
     public String toString() {
-        return new StringBuilder("volumeTO[uuid=").append(uuid).append("|path=").append(path).append("|datastore=").append(dataStore).append("]").toString();
+        return String.format("volumeTO %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "id", "uuid", "name", "path", "dataStore"));
     }
 
     public void setBytesReadRate(Long bytesReadRate) {
@@ -356,5 +384,40 @@ public class VolumeObjectTO implements DataTO {
 
     public void setvSphereStoragePolicyId(String vSphereStoragePolicyId) {
         this.vSphereStoragePolicyId = vSphereStoragePolicyId;
+    }
+
+    public String getEncryptFormat() { return encryptFormat; }
+
+    public void setEncryptFormat(String encryptFormat) { this.encryptFormat = encryptFormat; }
+
+    public byte[] getPassphrase() { return passphrase; }
+
+    public void setPassphrase(byte[] passphrase) { this.passphrase = passphrase; }
+
+    public void clearPassphrase() {
+        if (this.passphrase != null) {
+            Arrays.fill(this.passphrase, (byte) 0);
+        }
+    }
+
+    public boolean requiresEncryption() {
+        return passphrase != null && passphrase.length > 0;
+    }
+
+
+    public List<String> getCheckpointPaths() {
+        return checkpointPaths;
+    }
+
+    public void setCheckpointPaths(List<String> checkpointPaths) {
+        this.checkpointPaths = checkpointPaths;
+    }
+
+    public Set<String> getCheckpointImageStoreUrls() {
+        return checkpointImageStoreUrls;
+    }
+
+    public void setCheckpointImageStoreUrls(Set<String> checkpointImageStoreUrls) {
+        this.checkpointImageStoreUrls = checkpointImageStoreUrls;
     }
 }

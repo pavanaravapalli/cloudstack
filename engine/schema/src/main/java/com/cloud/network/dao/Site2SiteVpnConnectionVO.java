@@ -32,10 +32,11 @@ import org.apache.cloudstack.api.InternalIdentity;
 
 import com.cloud.network.Site2SiteVpnConnection;
 import com.cloud.utils.db.GenericDao;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
 
 @Entity
-@Table(name = ("s2s_vpn_connection"))
+@Table(name = "s2s_vpn_connection")
 public class Site2SiteVpnConnectionVO implements Site2SiteVpnConnection, InternalIdentity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -176,5 +177,17 @@ public class Site2SiteVpnConnectionVO implements Site2SiteVpnConnection, Interna
     @Override
     public Class<?> getEntityType() {
         return Site2SiteVpnConnection.class;
+    }
+
+    @Override
+    public String getName() {
+        return null;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Site2SiteVpnConnection %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "id", "uuid", "state"));
     }
 }

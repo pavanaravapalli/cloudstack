@@ -16,7 +16,7 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vpn;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
@@ -40,9 +40,7 @@ import com.cloud.network.RemoteAccessVpn;
 @APICommand(name = "createRemoteAccessVpn", description = "Creates a l2tp/ipsec remote access vpn", responseObject = RemoteAccessVpnResponse.class, entityType = {RemoteAccessVpn.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class CreateRemoteAccessVpnCmd extends BaseAsyncCreateCmd {
-    public static final Logger s_logger = Logger.getLogger(CreateRemoteAccessVpnCmd.class.getName());
 
-    private static final String s_name = "createremoteaccessvpnresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -73,7 +71,7 @@ public class CreateRemoteAccessVpnCmd extends BaseAsyncCreateCmd {
 
     @Parameter(name = ApiConstants.OPEN_FIREWALL,
                type = CommandType.BOOLEAN,
-               description = "if true, firewall rule for source/end public port is automatically created; if false - firewall rule has to be created explicitely. Has value true by default")
+               description = "if true, firewall rule for source/end public port is automatically created; if false - firewall rule has to be created explicitly. Has value true by default")
     private Boolean openFirewall;
 
     @Parameter(name = ApiConstants.FOR_DISPLAY, type = CommandType.BOOLEAN, description = "an optional field, whether to the display the vpn to the end user or not", since = "4.4", authorized = {RoleType.Admin})
@@ -117,11 +115,6 @@ public class CreateRemoteAccessVpnCmd extends BaseAsyncCreateCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         IpAddress ip = _networkService.getIp(publicIpId);
 
@@ -153,8 +146,8 @@ public class CreateRemoteAccessVpnCmd extends BaseAsyncCreateCmd {
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to create remote access vpn");
             }
         } catch (NetworkRuleConflictException e) {
-            s_logger.info("Network rule conflict: " + e.getMessage());
-            s_logger.trace("Network Rule Conflict: ", e);
+            logger.info("Network rule conflict: " + e.getMessage());
+            logger.trace("Network Rule Conflict: ", e);
             throw new ServerApiException(ApiErrorCode.NETWORK_RULE_CONFLICT_ERROR, e.getMessage());
         }
     }
@@ -171,7 +164,7 @@ public class CreateRemoteAccessVpnCmd extends BaseAsyncCreateCmd {
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to create remote access vpn");
             }
         } catch (ResourceUnavailableException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, ex.getMessage());
         }
     }
@@ -200,5 +193,15 @@ public class CreateRemoteAccessVpnCmd extends BaseAsyncCreateCmd {
             return true;
         else
             return display;
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return getPublicIpId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.IpAddress;
     }
 }

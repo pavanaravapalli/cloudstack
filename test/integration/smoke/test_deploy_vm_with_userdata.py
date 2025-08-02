@@ -33,13 +33,13 @@ class TestDeployVmWithUserData(cloudstackTestCase):
     @classmethod
     def setUpClass(cls):
         testClient = super(TestDeployVmWithUserData, cls).getClsTestClient()
-        cls.apiClient = testClient.getApiClient() 
+        cls.apiClient = testClient.getApiClient()
         cls.services = testClient.getParsedTestDataConfig()
 
         cls.zone = get_zone(cls.apiClient, testClient.getZoneForTests())
         cls.hypervisor = testClient.getHypervisorInfo()
         if cls.zone.localstorageenabled:
-            #For devcloud since localstroage is enabled
+            #For devcloud since localstorage is enabled
             cls.services["service_offerings"]["tiny"]["storagetype"] = "local"
         cls.service_offering = ServiceOffering.create(
             cls.apiClient,
@@ -91,10 +91,10 @@ class TestDeployVmWithUserData(cloudstackTestCase):
             domainid=self.account.domainid,
             id=deployVmResponse.id
         )
-        self.assert_(len(vms) > 0, "There are no Vms deployed in the account %s" % self.account.name)
+        self.assertTrue(len(vms) > 0, "There are no Vms deployed in the account %s" % self.account.name)
         vm = vms[0]
-        self.assert_(vm.id == str(deployVmResponse.id), "Vm deployed is different from the test")
-        self.assert_(vm.state == "Running", "VM is not in Running state")
+        self.assertTrue(vm.id == str(deployVmResponse.id), "Vm deployed is different from the test")
+        self.assertTrue(vm.state == "Running", "VM is not in Running state")
 
     @attr(tags=["devcloud", "basic", "advanced"], required_hardware="true")
     def test_deployvm_userdata(self):
@@ -115,10 +115,10 @@ class TestDeployVmWithUserData(cloudstackTestCase):
             domainid=self.account.domainid,
             id=deployVmResponse.id
         )
-        self.assert_(len(vms) > 0, "There are no Vms deployed in the account %s" % self.account.name)
+        self.assertTrue(len(vms) > 0, "There are no Vms deployed in the account %s" % self.account.name)
         vm = vms[0]
-        self.assert_(vm.id == str(deployVmResponse.id), "Vm deployed is different from the test")
-        self.assert_(vm.state == "Running", "VM is not in Running state")
+        self.assertTrue(vm.id == str(deployVmResponse.id), "Vm deployed is different from the test")
+        self.assertTrue(vm.state == "Running", "VM is not in Running state")
 
     @classmethod
     def tearDownClass(cls):

@@ -19,6 +19,7 @@ package com.cloud.network.vpc.dao;
 import java.util.List;
 
 
+import com.cloud.network.Network;
 import org.springframework.stereotype.Component;
 
 import com.cloud.network.Network.Service;
@@ -65,9 +66,9 @@ public class VpcOfferingServiceMapDaoImpl extends GenericDaoBase<VpcOfferingServ
     }
 
     @Override
-    public boolean areServicesSupportedByNetworkOffering(long networkOfferingId, Service... services) {
+    public boolean areServicesSupportedByVpcOffering(long vpcOfferingId, Service... services) {
         SearchCriteria<VpcOfferingServiceMapVO> sc = MultipleServicesSearch.create();
-        sc.setParameters("vpcOffId", networkOfferingId);
+        sc.setParameters("vpcOffId", vpcOfferingId);
 
         if (services != null) {
             String[] servicesStr = new String[services.length];
@@ -109,5 +110,23 @@ public class VpcOfferingServiceMapDaoImpl extends GenericDaoBase<VpcOfferingServ
         sc.setParameters("provider", provider);
 
         return findOneBy(sc);
+    }
+
+    @Override
+    public boolean isProviderForVpcOffering(Network.Provider provider, long vpcOfferingId) {
+        SearchCriteria<VpcOfferingServiceMapVO> sc = AllFieldsSearch.create();
+        sc.setParameters("vpcOffId", vpcOfferingId);
+        sc.setParameters("provider", provider.getName());
+        return findOneBy(sc) != null;
+    }
+
+    @Override
+    public List<VpcOfferingServiceMapVO> listProvidersForServiceForVpcOffering(long vpcOfferingId, Service service) {
+        SearchCriteria<VpcOfferingServiceMapVO> sc = AllFieldsSearch.create();
+
+        sc.setParameters("vpcOffId", vpcOfferingId);
+        sc.setParameters("service", service.getName());
+
+        return customSearch(sc, null);
     }
 }

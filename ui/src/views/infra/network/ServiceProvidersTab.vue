@@ -23,19 +23,23 @@
         :animated="false"
         @change="onTabChange">
         <a-tab-pane
+          class="custom-tab-pane"
           v-for="item in hardcodedNsps"
           :key="item.title">
-          <span slot="tab">
-            {{ $t(item.title) }}
-            <status :text="item.title in nsps ? nsps[item.title].state : $t('label.disabled')" style="margin-bottom: 6px; margin-left: 6px" />
-          </span>
+          <template #tab>
+            <span>
+              {{ $t(item.title) }}
+              <status :text="item.title in nsps ? nsps[item.title].state : $t('label.disabled')" style="margin-bottom: 6px; margin-left: 6px" />
+            </span>
+          </template>
           <provider-item
             v-if="tabKey===item.title"
             :loading="loading"
             :itemNsp="item"
             :nsp="nsps[item.title]"
             :resourceId="resource.id"
-            :zoneId="resource.zoneid"/>
+            :zoneId="resource.zoneid"
+            :tabKey="tabKey"/>
         </a-tab-pane>
       </a-tabs>
     </a-spin>
@@ -46,16 +50,17 @@
           :visible="showFormAction"
           :closable="true"
           :maskClosable="false"
-          :cancelText="$t('label.cancel')"
           style="top: 20px;"
           @cancel="onCloseAction"
           :confirmLoading="actionLoading"
           :footer="null"
           centered>
-          <component
-            :is="currentAction.component"
-            :resource="nsp"
-            :action="currentAction" />
+          <keep-alive>
+            <component
+              :is="currentAction.component"
+              :resource="nsp"
+              :action="currentAction" />
+          </keep-alive>
         </a-modal>
       </keep-alive>
       <a-modal
@@ -63,72 +68,69 @@
         :title="$t(currentAction.label)"
         :visible="showFormAction"
         :confirmLoading="actionLoading"
+        :closable="true"
         :maskClosable="false"
-        :okText="$t('label.ok')"
-        :cancelText="$t('label.cancel')"
-        style="top: 20px;"
-        @ok="handleSubmit"
+        :footer="null"
         @cancel="onCloseAction"
+        style="top: 20px;"
         centered
       >
         <a-form
-          :form="form"
-          layout="vertical">
+          :ref="formRef"
+          :model="form"
+          :rules="rules"
+          @finish="handleSubmit"
+          v-ctrl-enter="handleSubmit"
+          layout="vertical"
+         >
           <a-form-item
+            :name="field.name"
+            :ref="field.name"
             v-for="(field, index) in currentAction.fieldParams"
             :key="index"
             :label="$t('label.' + field.name)">
             <span v-if="field.name==='password'">
               <a-input-password
-                v-decorator="[field.name, {
-                  rules: [
-                    {
-                      required: field.required,
-                      message: $t('message.error.required.input')
-                    }
-                  ]
-                }]"
+                v-focus="index===0"
+                v-model:value="form[field.name]"
                 :placeholder="field.description" />
             </span>
             <span v-else-if="field.type==='boolean'">
               <a-switch
-                v-decorator="[field.name, {
-                  rules: [{
-                    required: field.required,
-                    message: $t('message.error.required.input')
-                  }]
-                }]"
+                v-focus="index===0"
+                v-model:checked="form[field.name]"
                 :placeholder="field.description"
               />
             </span>
             <span v-else-if="field.type==='uuid'">
               <a-select
-                v-decorator="[field.name, {
-                  rules: [{
-                    required: field.required,
-                    message: $t('message.error.select')
-                  }]
-                }]"
+                v-focus="index===0"
+                v-model:value="form[field.name]"
                 :loading="field.loading"
-                :placeholder="field.description">
+                :placeholder="field.description"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }" >
                 <a-select-option
                   v-for="(opt, idx) in field.opts"
-                  :key="idx">{{ opt.name || opt.description }}</a-select-option>
+                  :key="idx"
+                  :label="opt.name || opt.description">{{ opt.name || opt.description }}</a-select-option>
               </a-select>
             </span>
             <span v-else>
               <a-input
-                v-decorator="[field.name, {
-                  rules: [
-                    {
-                      required: field.required,
-                      message: $t('message.error.required.input')
-                    }
-                  ]
-                }]"
+                v-focus="index===0"
+                v-model:value="form[field.name]"
                 :placeholder="field.description" />
             </span>
           </a-form-item>
+
+          <div :span="24" class="action-button">
+            <a-button @click="onCloseAction">{{ $t('label.cancel') }}</a-button>
+            <a-button type="primary" ref="submit" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
+          </div>
         </a-form>
       </a-modal>
     </div>
@@ -136,8 +138,9 @@
 </template>
 
 <script>
+import { ref, reactive, toRaw, shallowRef, defineAsyncComponent } from 'vue'
 import store from '@/store'
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
 import { mixinDevice } from '@/utils/mixin.js'
 import Status from '@/components/widgets/Status'
 import ProviderItem from '@/views/infra/network/providers/ProviderItem'
@@ -179,7 +182,7 @@ export default {
             {
               api: 'addBaremetalDhcp',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.add.baremetal.dhcp.device',
               args: ['url', 'username', 'password'],
               mapping: {
@@ -190,7 +193,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -203,7 +206,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -217,7 +220,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -243,7 +246,7 @@ export default {
             {
               api: 'addBaremetalPxeKickStartServer',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.baremetal.pxe.device',
               args: ['url', 'username', 'password', 'tftpdir'],
               mapping: {
@@ -254,7 +257,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -267,7 +270,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -281,7 +284,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -307,13 +310,13 @@ export default {
             {
               api: 'addBigSwitchBcfDevice',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.add.bigswitchbcf.device',
               args: ['hostname', 'username', 'password', 'nat']
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -326,7 +329,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -340,7 +343,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -356,7 +359,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['hostname', 'action']
+              columns: ['hostname', 'actions']
             }
           ]
         },
@@ -366,13 +369,13 @@ export default {
             {
               api: 'addBrocadeVcsDevice',
               listView: true,
-              icon: 'plus',
-              label: 'label.add.bigswitchbcf.device',
+              icon: 'plus-outlined',
+              label: 'label.add.brocadevcs.device',
               args: ['hostname', 'username', 'password']
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -385,7 +388,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -399,7 +402,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -415,7 +418,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['hostname', 'action']
+              columns: ['hostname', 'actions']
             }
           ]
         },
@@ -425,14 +428,14 @@ export default {
             {
               api: 'addCiscoVnmcResource',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.add.vnmc.device',
               args: ['hostname', 'username', 'password']
             },
             {
               api: 'addCiscoAsa1000vResource',
               listView: true,
-              icon: 'plus-circle',
+              icon: 'plus-circle-outlined',
               label: 'label.add.ciscoasa1000v',
               args: ['hostname', 'insideportprofile', 'clusterid'],
               mapping: {
@@ -443,7 +446,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -456,7 +459,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -470,7 +473,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -496,7 +499,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['hostname', 'insideportprofile', 'action']
+              columns: ['hostname', 'insideportprofile', 'actions']
             }
           ]
         },
@@ -505,7 +508,7 @@ export default {
           actions: [
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -518,7 +521,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -538,13 +541,13 @@ export default {
             {
               api: 'addF5LoadBalancer',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.add.f5.device',
-              component: () => import('@/views/infra/network/providers/AddF5LoadBalancer.vue')
+              component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/providers/AddF5LoadBalancer.vue')))
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -557,7 +560,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -571,7 +574,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -587,7 +590,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['ipaddress', 'lbdevicestate', 'action']
+              columns: ['ipaddress', 'lbdevicestate', 'actions']
             }
           ]
         },
@@ -597,13 +600,13 @@ export default {
             {
               api: 'addGloboDnsHost',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.globo.dns.configuration',
               args: ['url', 'username', 'password']
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -616,7 +619,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -630,7 +633,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -643,7 +646,7 @@ export default {
           actions: [
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -656,7 +659,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -683,77 +686,18 @@ export default {
           ]
         },
         {
-          title: 'JuniperSRX',
-          actions: [
-            {
-              api: 'addSrxFirewall',
-              listView: true,
-              icon: 'plus',
-              label: 'label.add.srx.device',
-              component: () => import('@/views/infra/network/providers/AddSrxFirewall.vue')
-            },
-            {
-              api: 'updateNetworkServiceProvider',
-              icon: 'stop',
-              listView: true,
-              label: 'label.disable.provider',
-              confirm: 'message.confirm.disable.provider',
-              show: (record) => { return record && record.id && record.state === 'Enabled' },
-              mapping: {
-                state: {
-                  value: (record) => { return 'Disabled' }
-                }
-              }
-            },
-            {
-              api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
-              listView: true,
-              label: 'label.enable.provider',
-              confirm: 'message.confirm.enable.provider',
-              show: (record) => { return record && record.id && record.state === 'Disabled' },
-              mapping: {
-                state: {
-                  value: (record) => { return 'Enabled' }
-                }
-              }
-            },
-            {
-              api: 'deleteNetworkServiceProvider',
-              listView: true,
-              icon: 'poweroff',
-              label: 'label.shutdown.provider',
-              confirm: 'message.confirm.delete.provider',
-              show: (record) => { return record && record.id }
-            }
-          ],
-          details: ['name', 'state', 'id', 'servicelist'],
-          lists: [
-            {
-              title: 'label.devices',
-              api: 'listSrxFirewalls',
-              mapping: {
-                physicalnetworkid: {
-                  value: (record) => { return record.physicalnetworkid }
-                }
-              },
-              columns: ['ipaddress', 'fwdevicestate', 'action']
-            }
-          ]
-        },
-        {
           title: 'Netscaler',
           actions: [
             {
               api: 'addNetscalerLoadBalancer',
-              icon: 'plus',
+              icon: 'plus-outlined',
               listView: true,
               label: 'label.add.netscaler.device',
-              component: () => import('@/views/infra/network/providers/AddNetscalerLoadBalancer.vue')
+              component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/providers/AddNetscalerLoadBalancer.vue')))
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -766,7 +710,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -780,7 +724,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -796,7 +740,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['ipaddress', 'lbdevicestate', 'action']
+              columns: ['ipaddress', 'lbdevicestate', 'actions']
             }
           ]
         },
@@ -805,14 +749,14 @@ export default {
           actions: [
             {
               api: 'addNiciraNvpDevice',
-              icon: 'plus',
+              icon: 'plus-outlined',
               listView: true,
               label: 'label.add.niciranvp.device',
-              component: () => import('@/views/infra/network/providers/AddNiciraNvpDevice.vue')
+              component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/providers/AddNiciraNvpDevice.vue')))
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -825,7 +769,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -839,7 +783,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -855,7 +799,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['hostname', 'transportzoneuuid', 'l3gatewayserviceuuid', 'l2gatewayserviceuuid', 'action']
+              columns: ['hostname', 'transportzoneuuid', 'l3gatewayserviceuuid', 'l2gatewayserviceuuid', 'actions']
             }
           ]
         },
@@ -865,13 +809,13 @@ export default {
             {
               api: 'addOpenDaylightController',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.add.opendaylight.device',
               args: ['url', 'username', 'password']
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -884,7 +828,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -898,7 +842,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -914,7 +858,7 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['name', 'url', 'username', 'action']
+              columns: ['name', 'url', 'username', 'actions']
             }
           ]
         },
@@ -930,7 +874,7 @@ export default {
                   value: (record) => { return record.id }
                 }
               },
-              columns: ['account', 'domain', 'enabled', 'project', 'action']
+              columns: ['account', 'domain', 'enabled', 'project', 'actions']
             }
           ]
         },
@@ -940,13 +884,13 @@ export default {
             {
               api: 'addPaloAltoFirewall',
               listView: true,
-              icon: 'plus',
+              icon: 'plus-outlined',
               label: 'label.add.pa.device',
-              component: () => import('@/views/infra/network/providers/AddPaloAltoFirewall.vue')
+              component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/providers/AddPaloAltoFirewall.vue')))
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -959,7 +903,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -973,7 +917,7 @@ export default {
             {
               api: 'deleteNetworkServiceProvider',
               listView: true,
-              icon: 'poweroff',
+              icon: 'poweroff-outlined',
               label: 'label.shutdown.provider',
               confirm: 'message.confirm.delete.provider',
               show: (record) => { return record && record.id }
@@ -989,20 +933,17 @@ export default {
                   value: (record) => { return record.physicalnetworkid }
                 }
               },
-              columns: ['ipaddress', 'fwdevicestate', 'type', 'action']
+              columns: ['ipaddress', 'fwdevicestate', 'type', 'actions']
             }
           ]
         },
-        // {
-        //   title: 'SecurityGroupProvider',
-        //   details: ['name', 'state', 'id', 'servicelist'],
-        // },
         {
-          title: 'VirtualRouter',
+          title: 'SecurityGroupProvider',
+          details: ['name', 'state', 'id', 'servicelist'],
           actions: [
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -1015,7 +956,38 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
+              listView: true,
+              label: 'label.enable.provider',
+              confirm: 'message.confirm.enable.provider',
+              show: (record) => { return record && record.id && record.state === 'Disabled' },
+              mapping: {
+                state: {
+                  value: (record) => { return 'Enabled' }
+                }
+              }
+            }
+          ]
+        },
+        {
+          title: 'VirtualRouter',
+          actions: [
+            {
+              api: 'updateNetworkServiceProvider',
+              icon: 'stop-outlined',
+              listView: true,
+              label: 'label.disable.provider',
+              confirm: 'message.confirm.disable.provider',
+              show: (record) => { return record && record.id && record.state === 'Enabled' },
+              mapping: {
+                state: {
+                  value: (record) => { return 'Disabled' }
+                }
+              }
+            },
+            {
+              api: 'updateNetworkServiceProvider',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -1052,7 +1024,7 @@ export default {
           actions: [
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'stop',
+              icon: 'stop-outlined',
               listView: true,
               label: 'label.disable.provider',
               confirm: 'message.confirm.disable.provider',
@@ -1065,7 +1037,7 @@ export default {
             },
             {
               api: 'updateNetworkServiceProvider',
-              icon: 'play-circle',
+              icon: 'play-circle-outlined',
               listView: true,
               label: 'label.enable.provider',
               confirm: 'message.confirm.enable.provider',
@@ -1096,14 +1068,116 @@ export default {
               columns: ['name', 'state', 'hostname', 'zonename']
             }
           ]
+        },
+        {
+          title: 'Tungsten',
+          details: ['name', 'state', 'id', 'physicalnetworkid', 'servicelist'],
+          lists: [
+            {
+              title: 'label.tungsten.fabric.provider',
+              api: 'listTungstenFabricProviders',
+              mapping: {
+                zoneid: {
+                  value: (record) => { return record.zoneid }
+                }
+              },
+              columns: ['name', 'tungstenproviderhostname', 'tungstenproviderport', 'tungstengateway', 'tungstenprovidervrouterport', 'tungstenproviderintrospectport']
+            }
+          ]
+        },
+        {
+          title: 'Nsx',
+          details: ['name', 'state', 'id', 'physicalnetworkid', 'servicelist'],
+          actions: [
+            {
+              api: 'updateNetworkServiceProvider',
+              icon: 'stop-outlined',
+              listView: true,
+              label: 'label.disable.provider',
+              confirm: 'message.confirm.disable.provider',
+              // show: (record) => { return record && record.id && record.state === 'Enabled' },
+              mapping: {
+                state: {
+                  value: (record) => { return 'Disabled' }
+                }
+              }
+            },
+            {
+              api: 'updateNetworkServiceProvider',
+              icon: 'play-circle-outlined',
+              listView: true,
+              label: 'label.enable.provider',
+              confirm: 'message.confirm.enable.provider',
+              // show: (record) => { return record && record.id && record.state === 'Disabled' },
+              mapping: {
+                state: {
+                  value: (record) => { return 'Enabled' }
+                }
+              }
+            }
+          ],
+          lists: [
+            {
+              title: 'label.nsx.provider',
+              api: 'listNsxControllers',
+              mapping: {
+                zoneid: {
+                  value: (record) => { return record.zoneid }
+                }
+              },
+              columns: ['name', 'hostname', 'port', 'tier0gateway', 'edgecluster', 'transportzone']
+            }
+          ]
+        },
+        {
+          title: 'Netris',
+          details: ['name', 'state', 'id', 'physicalnetworkid', 'servicelist'],
+          actions: [
+            {
+              api: 'updateNetworkServiceProvider',
+              icon: 'stop-outlined',
+              listView: true,
+              label: 'label.disable.provider',
+              confirm: 'message.confirm.disable.provider',
+              show: (record) => { return (record && record.id && record.state === 'Enabled') },
+              mapping: {
+                state: {
+                  value: (record) => { return 'Disabled' }
+                }
+              }
+            },
+            {
+              api: 'updateNetworkServiceProvider',
+              icon: 'play-circle-outlined',
+              listView: true,
+              label: 'label.enable.provider',
+              confirm: 'message.confirm.enable.provider',
+              show: (record) => { return (record && record.id && record.state === 'Disabled') },
+              mapping: {
+                state: {
+                  value: (record) => { return 'Enabled' }
+                }
+              }
+            }
+          ],
+          lists: [
+            {
+              title: 'label.netris.provider',
+              api: 'listNetrisProviders',
+              mapping: {
+                zoneid: {
+                  value: (record) => { return record.zoneid }
+                }
+              },
+              columns: ['name', 'hostname', 'port', 'site', 'tenantname', 'netristag']
+            }
+          ]
         }
       ]
     }
   },
-  beforeCreate () {
-    this.form = this.$form.createForm(this)
-  },
-  mounted () {
+  created () {
+    this.initForm()
     this.fetchData()
   },
   watch: {
@@ -1123,12 +1197,20 @@ export default {
     }
   },
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({})
+      this.rules = reactive({})
+    },
     fetchData () {
+      if (!this.resource || !('id' in this.resource)) {
+        return
+      }
       this.fetchServiceProvider()
     },
     fetchServiceProvider (name) {
       this.fetchLoading = true
-      api('listNetworkServiceProviders', { physicalnetworkid: this.resource.id, name: name }).then(json => {
+      getAPI('listNetworkServiceProviders', { physicalnetworkid: this.resource.id, name: name }).then(json => {
         const sps = json.listnetworkserviceprovidersresponse.networkserviceprovider || []
         if (sps.length > 0) {
           for (const sp of sps) {
@@ -1147,16 +1229,14 @@ export default {
     setNsp (nsp) {
       this.nsp = nsp
     },
-    async handleSubmit () {
+    handleSubmit () {
       if (this.currentAction.confirm) {
-        await this.executeConfirmAction()
+        this.executeConfirmAction()
         return
       }
 
-      await this.form.validateFields(async (err, values) => {
-        if (err) {
-          return
-        }
+      this.formRef.value.validate().then(async () => {
+        const values = toRaw(this.form)
         const params = {}
         params.physicalnetworkid = this.nsp.physicalnetworkid
         for (const key in values) {
@@ -1207,6 +1287,8 @@ export default {
             description: error
           })
         }
+      }).catch(error => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     onCloseAction () {
@@ -1216,7 +1298,7 @@ export default {
     addNetworkServiceProvider (args) {
       return new Promise((resolve, reject) => {
         let message = ''
-        api('addNetworkServiceProvider', args).then(async json => {
+        postAPI('addNetworkServiceProvider', args).then(async json => {
           const jobId = json.addnetworkserviceproviderresponse.jobid
           if (jobId) {
             const result = await this.pollJob(jobId)
@@ -1236,7 +1318,7 @@ export default {
     async pollJob (jobId) {
       return new Promise(resolve => {
         const asyncJobInterval = setInterval(() => {
-          api('queryAsyncJobResult', { jobId }).then(async json => {
+          getAPI('queryAsyncJobResult', { jobId }).then(async json => {
             const result = json.queryasyncjobresultresponse
             if (result.jobstatus === 0) {
               return
@@ -1270,8 +1352,24 @@ export default {
           if (this.currentAction.api === 'addCiscoVnmcResource') {
             this.currentAction.method = 'POST'
           }
+          this.setFormRules()
         }
       }
+    },
+    setFormRules () {
+      this.form = reactive({})
+      this.rules = reactive({})
+      this.currentAction.fieldParams.forEach(field => {
+        this.rules[field.name] = []
+        const rule = {}
+        rule.required = field.required
+        if (field.type === 'uuid') {
+          rule.message = this.$t('message.error.select')
+        } else {
+          rule.message = this.$t('message.error.required.input')
+        }
+        this.rules[field.name].push(rule)
+      })
     },
     listFieldOpts (field) {
       const paramName = field.name
@@ -1296,7 +1394,7 @@ export default {
       }
       field.loading = true
       field.opts = []
-      api(possibleApi, params).then(json => {
+      postAPI(possibleApi, params).then(json => {
         field.loading = false
         for (const obj in json) {
           if (obj.includes('response')) {
@@ -1305,7 +1403,6 @@ export default {
                 continue
               }
               field.opts = json[obj][res]
-              this.$forceUpdate()
               break
             }
             break
@@ -1348,19 +1445,13 @@ export default {
       return new Promise((resolve, reject) => {
         let hasJobId = false
         let message = ''
-        const promise = (method === 'POST') ? api(apiName, {}, method, args) : api(apiName, args)
+        const promise = postAPI(apiName, args)
         promise.then(json => {
           for (const obj in json) {
             if (obj.includes('response') || obj.includes(apiName)) {
               for (const res in json[obj]) {
                 if (res === 'jobid') {
-                  this.$store.dispatch('AddAsyncJob', {
-                    title: this.$t(this.currentAction.label),
-                    jobid: json[obj][res],
-                    description: this.$t(this.nsp.name),
-                    status: 'progress'
-                  })
-                  this.parentPollActionCompletion(json[obj][res], this.currentAction)
+                  this.parentPollActionCompletion(json[obj][res], this.currentAction, this.$t(this.nsp.name))
                   hasJobId = true
                   break
                 }
@@ -1379,3 +1470,28 @@ export default {
   }
 }
 </script>
+
+<style scoped lang="less">
+:deep(.ant-tabs) {
+  &-left-bar {
+    .ant-tabs-tab {
+      display: flex;
+      justify-content: flex-end;
+
+      .ant-badge {
+        margin-left: 10px;
+      }
+    }
+  }
+
+  &-tab {
+    justify-content: end;
+  }
+
+  &-tab-btn {
+    span {
+      display: flex;
+    }
+  }
+}
+</style>

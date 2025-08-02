@@ -29,8 +29,11 @@ import javax.management.MalformedObjectNameException;
 import javax.management.NotCompliantMBeanException;
 import javax.naming.ConfigurationException;
 
-import org.apache.log4j.Logger;
+import org.apache.commons.collections.MapUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.aop.framework.Advised;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
 import org.springframework.context.ApplicationContext;
@@ -48,7 +51,7 @@ import com.cloud.utils.mgmt.ManagementBean;
  */
 @SuppressWarnings("unchecked")
 public class ComponentContext implements ApplicationContextAware {
-    private static final Logger s_logger = Logger.getLogger(ComponentContext.class);
+    protected static Logger LOGGER = LogManager.getLogger(ComponentContext.class);
 
     private static ApplicationContext s_appContext;
     private static Map<Class<?>, ApplicationContext> s_appContextDelegates;
@@ -56,7 +59,7 @@ public class ComponentContext implements ApplicationContextAware {
 
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
-        s_logger.info("Setup Spring Application context");
+        LOGGER.info("Setup Spring Application context");
         s_appContext = applicationContext;
     }
 
@@ -72,8 +75,14 @@ public class ComponentContext implements ApplicationContextAware {
 
         Map<String, ComponentMethodInterceptable> interceptableComponents = getApplicationContext().getBeansOfType(ComponentMethodInterceptable.class);
         for (Map.Entry<String, ComponentMethodInterceptable> entry : interceptableComponents.entrySet()) {
-            Object bean = getTargetObject(entry.getValue());
-            beanFactory.configureBean(bean, entry.getKey());
+            try {
+                Object bean = getTargetObject(entry.getValue());
+                beanFactory.configureBean(bean, entry.getKey());
+            } catch (BeansException e){
+                LOGGER.error(String.format("Could not load bean due to: [%s]. The service will be stopped. Please investigate the cause of the error or contact your support team.", e.getMessage()), e);
+                System.exit(1);
+            }
+
         }
 
         Map<String, ComponentLifecycle> lifecycleComponents = getApplicationContext().getBeansOfType(ComponentLifecycle.class);
@@ -90,11 +99,11 @@ public class ComponentContext implements ApplicationContextAware {
         // Run the SystemIntegrityCheckers first
         Map<String, SystemIntegrityChecker> integrityCheckers = getApplicationContext().getBeansOfType(SystemIntegrityChecker.class);
         for (Entry<String, SystemIntegrityChecker> entry : integrityCheckers.entrySet()) {
-            s_logger.info("Running SystemIntegrityChecker " + entry.getKey());
+            LOGGER.info("Running SystemIntegrityChecker " + entry.getKey());
             try {
                 entry.getValue().check();
-            } catch (Throwable e) {
-                s_logger.error("System integrity check failed. Refuse to startup", e);
+            } catch (RuntimeException e) {
+                LOGGER.error("System integrity check failed. Refuse to startup", e);
                 System.exit(1);
             }
         }
@@ -105,17 +114,17 @@ public class ComponentContext implements ApplicationContextAware {
             for (Map.Entry<String, ComponentLifecycle> entry : classifiedComponents[i].entrySet()) {
                 ComponentLifecycle component = entry.getValue();
                 String implClassName = ComponentContext.getTargetClass(component).getName();
-                s_logger.info("Configuring " + implClassName);
+                LOGGER.info("Configuring " + implClassName);
 
                 if (avoidMap.containsKey(implClassName)) {
-                    s_logger.info("Skip configuration of " + implClassName + " as it is already configured");
+                    LOGGER.info("Skip configuration of " + implClassName + " as it is already configured");
                     continue;
                 }
 
                 try {
                     component.configure(component.getName(), component.getConfigParams());
                 } catch (ConfigurationException e) {
-                    s_logger.error("Unhandled exception", e);
+                    LOGGER.error("Unhandled exception", e);
                     throw new RuntimeException("Unable to configure " + implClassName, e);
                 }
 
@@ -129,10 +138,10 @@ public class ComponentContext implements ApplicationContextAware {
             for (Map.Entry<String, ComponentLifecycle> entry : classifiedComponents[i].entrySet()) {
                 ComponentLifecycle component = entry.getValue();
                 String implClassName = ComponentContext.getTargetClass(component).getName();
-                s_logger.info("Starting " + implClassName);
+                LOGGER.info("Starting " + implClassName);
 
                 if (avoidMap.containsKey(implClassName)) {
-                    s_logger.info("Skip configuration of " + implClassName + " as it is already configured");
+                    LOGGER.info("Skip configuration of " + implClassName + " as it is already configured");
                     continue;
                 }
 
@@ -142,7 +151,7 @@ public class ComponentContext implements ApplicationContextAware {
                     if (getTargetObject(component) instanceof ManagementBean)
                         registerMBean((ManagementBean)getTargetObject(component));
                 } catch (Exception e) {
-                    s_logger.error("Unhandled exception", e);
+                    LOGGER.error("Unhandled exception", e);
                     throw new RuntimeException("Unable to start " + implClassName, e);
                 }
 
@@ -155,15 +164,15 @@ public class ComponentContext implements ApplicationContextAware {
         try {
             JmxUtil.registerMBean(mbean);
         } catch (MalformedObjectNameException e) {
-            s_logger.warn("Unable to register MBean: " + mbean.getName(), e);
+            LOGGER.warn("Unable to register MBean: " + mbean.getName(), e);
         } catch (InstanceAlreadyExistsException e) {
-            s_logger.warn("Unable to register MBean: " + mbean.getName(), e);
+            LOGGER.warn("Unable to register MBean: " + mbean.getName(), e);
         } catch (MBeanRegistrationException e) {
-            s_logger.warn("Unable to register MBean: " + mbean.getName(), e);
+            LOGGER.warn("Unable to register MBean: " + mbean.getName(), e);
         } catch (NotCompliantMBeanException e) {
-            s_logger.warn("Unable to register MBean: " + mbean.getName(), e);
+            LOGGER.warn("Unable to register MBean: " + mbean.getName(), e);
         }
-        s_logger.info("Registered MBean: " + mbean.getName());
+        LOGGER.info("Registered MBean: " + mbean.getName());
     }
 
     public static <T> T getComponent(String name) {
@@ -171,6 +180,13 @@ public class ComponentContext implements ApplicationContextAware {
         return (T)s_appContext.getBean(name);
     }
 
+    /**
+     * only ever used to get the event bus
+     *
+     * @param beanType the component type to return
+     * @return one of the component registered for the requested type
+     * @param <T>
+     */
     public static <T> T getComponent(Class<T> beanType) {
         assert (s_appContext != null);
         Map<String, T> matchedTypes = getComponentsOfType(beanType);
@@ -182,9 +198,9 @@ public class ComponentContext implements ApplicationContextAware {
             }
 
             if (matchedTypes.size() > 1) {
-                s_logger.warn("Unable to uniquely locate bean type " + beanType.getName());
+                LOGGER.warn("Unable to uniquely locate bean type " + beanType.getName());
                 for (Map.Entry<String, T> entry : matchedTypes.entrySet()) {
-                    s_logger.warn("Candidate " + getTargetClass(entry.getValue()).getName());
+                    LOGGER.warn("Candidate " + getTargetClass(entry.getValue()).getName());
                 }
             }
 
@@ -227,10 +243,10 @@ public class ComponentContext implements ApplicationContextAware {
             instance = clz.newInstance();
             return inject(instance);
         } catch (InstantiationException e) {
-            s_logger.error("Unhandled InstantiationException", e);
+            LOGGER.error("Unhandled InstantiationException", e);
             throw new RuntimeException("Unable to instantiate object of class " + clz.getName() + ", make sure it has public constructor");
         } catch (IllegalAccessException e) {
-            s_logger.error("Unhandled IllegalAccessException", e);
+            LOGGER.error("Unhandled IllegalAccessException", e);
             throw new RuntimeException("Unable to instantiate object of class " + clz.getName() + ", make sure it has public constructor");
         }
     }
@@ -278,5 +294,23 @@ public class ComponentContext implements ApplicationContextAware {
 
     private static synchronized void initInitializeBeans(boolean initializeBeans) {
         s_initializeBeans = initializeBeans;
+    }
+
+    public static <T> T getDelegateComponentOfType(Class<T> beanType) {
+        if (s_appContextDelegates == null) {
+            throw new NoSuchBeanDefinitionException(beanType.getName());
+        }
+        T bean = null;
+        for (ApplicationContext context : s_appContextDelegates.values()) {
+            Map<String, T> map = context.getBeansOfType(beanType);
+            if (MapUtils.isNotEmpty(map)) {
+                bean = (T)map.values().toArray()[0];
+                break;
+            }
+        }
+        if (bean == null) {
+            throw new NoSuchBeanDefinitionException(beanType.getName());
+        }
+        return bean;
     }
 }

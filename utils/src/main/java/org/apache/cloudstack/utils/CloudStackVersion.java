@@ -24,10 +24,10 @@ import com.google.common.collect.ImmutableList;
 
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
+
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import static org.apache.commons.lang.StringUtils.isNotBlank;
-import static org.apache.commons.lang.StringUtils.substringBefore;
 
 /**
  *
@@ -87,9 +87,9 @@ public final class CloudStackVersion implements Comparable<CloudStackVersion> {
     public static CloudStackVersion parse(final String value) {
 
         // Strip out any legacy patch information from the version string ...
-        final String trimmedValue = substringBefore(value, "-");
+        final String trimmedValue = StringUtils.substringBefore(value, "-");
 
-        checkArgument(isNotBlank(trimmedValue), CloudStackVersion.class.getName() + ".parse(String) requires a non-blank value");
+        checkArgument(StringUtils.isNotBlank(trimmedValue), CloudStackVersion.class.getName() + ".parse(String) requires a non-blank value");
         checkArgument(NUMBER_VERSION_FORMAT.matcher(trimmedValue).matches(), CloudStackVersion.class.getName() + ".parse(String) passed " +
                 value + ", but requires a value in the format of int.int.int(.int)(-<legacy patch>)");
 
@@ -271,5 +271,22 @@ public final class CloudStackVersion implements Comparable<CloudStackVersion> {
     @Override
     public String toString() {
         return Joiner.on(".").join(asList());
+    }
+
+    /**
+     * Get the parent version of VMware hypervisor version
+     * @since 4.18.1.0
+     */
+    public static String getVMwareParentVersion(String hypervisorVersion) {
+        try {
+            CloudStackVersion version = CloudStackVersion.parse(hypervisorVersion);
+            String parentVersion = String.format("%s.%s", version.getMajorRelease(), version.getMinorRelease());
+            if (version.getPatchRelease() != 0) {
+                parentVersion = String.format("%s.%s", parentVersion, version.getPatchRelease());
+            }
+            return parentVersion;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }

@@ -18,7 +18,7 @@
 <template>
   <a-spin :spinning="fetchLoading">
     <a-list size="small">
-      <a-list-item>
+      <a-list-item v-if="host.hypervisorversion || (host.details && host.details['Host.OS'])">
         <div>
           <strong>{{ $t('label.hypervisorversion') }}</strong>
           <div>
@@ -26,11 +26,8 @@
             <span v-if="host.hypervisorversion">
               {{ host.hypervisorversion }}
             </span>
-            <span v-else-if="host.details">
+            <span v-else-if="host.details && host.details['Host.OS']">
               {{ host.details['Host.OS'] + ' ' + host.details['Host.OS.Version'] }}
-            </span>
-            <span v-else>
-              {{ host.version }}
             </span>
           </div>
         </div>
@@ -43,15 +40,61 @@
           </div>
         </div>
       </a-list-item>
-      <a-list-item>
+      <a-list-item v-if="host.encryptionsupported">
         <div>
-          <strong>{{ $t('label.hosttags') }}</strong>
+          <strong>{{ $t('label.volume.encryption.support') }}</strong>
           <div>
-            {{ host.hosttags }}
+            {{ host.encryptionsupported }}
           </div>
         </div>
       </a-list-item>
-      <a-list-item>
+      <a-list-item v-if="host.instanceconversionsupported">
+        <div>
+          <strong>{{ $t('label.instance.conversion.support') }}</strong>
+          <div>
+            {{ host.instanceconversionsupported }}
+          </div>
+        </div>
+      </a-list-item>
+      <a-list-item v-if="host.details && host.details['host.virtv2v.version']">
+        <div>
+          <strong>{{ $t('label.host.virtv2v.version') }}</strong>
+          <div>
+            {{ host.details['host.virtv2v.version'] }}
+          </div>
+        </div>
+      </a-list-item>
+      <a-list-item v-if="host.details && host.details['host.ovftool.version']">
+        <div>
+          <strong>{{ $t('label.host.ovftool.version') }}</strong>
+          <div>
+            {{ host.details['host.ovftool.version'] }}
+          </div>
+        </div>
+      </a-list-item>
+      <a-list-item v-if="host.hosttags">
+        <div>
+          <strong>{{ $t('label.hosttags') }}</strong>
+          <div v-for="hosttag in host.allhosttags" :key="hosttag.tag">
+            {{ hosttag.tag }}
+            <span v-if="hosttag.isexplicit">
+              <a-tag color="blue">{{ $t('label.hosttags.explicit.abbr') }}</a-tag>
+            </span>
+            <span v-if="hosttag.isimplicit">
+              <a-tag color="orange">{{ $t('label.hosttags.implicit.abbr') }}</a-tag>
+            </span>
+          </div>
+        </div>
+      </a-list-item>
+      <a-list-item v-if="host.storageaccessgroups">
+        <div>
+          <strong>{{ $t('label.storageaccessgroups') }}</strong>
+          <div>
+            {{ host.storageaccessgroups }}
+          </div>
+        </div>
+      </a-list-item>
+      <a-list-item v-if="host.oscategoryid">
         <div>
           <strong>{{ $t('label.oscategoryid') }}</strong>
           <div>
@@ -67,14 +110,48 @@
           </div>
         </div>
       </a-list-item>
-      <a-list-item v-if="host.outofbandmanagement">
-        <div>
-          <strong>{{ $t('label.powerstate') }}</strong>
+      <span v-if="host?.outofbandmanagement?.enabled">
+        <a-list-item>
           <div>
-            {{ host.outofbandmanagement.powerstate }}
+            <strong>{{ $t('label.oobm.username') }}</strong>
+            <div>
+              {{ host.outofbandmanagement.username }}
+            </div>
           </div>
-        </div>
-      </a-list-item>
+        </a-list-item>
+        <a-list-item>
+          <div>
+            <strong>{{ $t('label.oobm.powerstate') }}</strong>
+            <div>
+              {{ host.outofbandmanagement.powerstate }}
+            </div>
+          </div>
+        </a-list-item>
+        <a-list-item>
+          <div>
+            <strong>{{ $t('label.oobm.driver') }}</strong>
+            <div>
+              {{ host.outofbandmanagement.driver }}
+            </div>
+          </div>
+        </a-list-item>
+        <a-list-item>
+          <div>
+            <strong>{{ $t('label.oobm.address') }}</strong>
+            <div>
+              {{ host.outofbandmanagement.address }}
+            </div>
+          </div>
+        </a-list-item>
+        <a-list-item>
+          <div>
+            <strong>{{ $t('label.oobm.port') }}</strong>
+            <div>
+              {{ host.outofbandmanagement.port }}
+            </div>
+          </div>
+        </a-list-item>
+      </span>
       <a-list-item v-if="host.hostha">
         <div>
           <strong>{{ $t('label.haenable') }}</strong>
@@ -83,7 +160,7 @@
           </div>
         </div>
       </a-list-item>
-      <a-list-item v-if="host.hostha">
+      <a-list-item v-if="host.hostha && host.hostha.haenable">
         <div>
           <strong>{{ $t('label.hastate') }}</strong>
           <div>
@@ -91,7 +168,7 @@
           </div>
         </div>
       </a-list-item>
-      <a-list-item v-if="host.hostha">
+      <a-list-item v-if="host.hostha && host.hostha.haenable">
         <div>
           <strong>{{ $t('label.haprovider') }}</strong>
           <div>
@@ -99,13 +176,20 @@
           </div>
         </div>
       </a-list-item>
-
+      <a-list-item>
+        <div>
+          <strong>{{ $t('label.uefi.supported') }}</strong>
+          <div>
+            {{ host.ueficapability }}
+          </div>
+        </div>
+      </a-list-item>
     </a-list>
   </a-spin>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 
 export default {
   name: 'HostInfo',
@@ -125,23 +209,43 @@ export default {
       fetchLoading: false
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    resource (newItem, oldItem) {
-      if (this.resource && this.resource.id && newItem && newItem.id !== oldItem.id) {
-        this.fetchData()
+    resource: {
+      deep: true,
+      handler (newItem, oldItem) {
+        if (this.resource) {
+          this.host = this.resource
+          if (this.resource.id && newItem && newItem.id !== oldItem.id) {
+            this.fetchData()
+          }
+        }
       }
     }
   },
   methods: {
     fetchData () {
-      this.dataSource = []
-      this.itemCount = 0
       this.fetchLoading = true
-      api('listHosts', { id: this.resource.id }).then(json => {
+      getAPI('listHosts', { id: this.resource.id }).then(json => {
         this.host = json.listhostsresponse.host[0]
+        const hosttags = this.host.hosttags?.split(',') || []
+        const explicithosttags = this.host.explicithosttags?.split(',') || []
+        const implicithosttags = this.host.implicithosttags?.split(',') || []
+        const allHostTags = []
+        for (const hosttag of hosttags) {
+          var isexplicit = false
+          var isimplicit = false
+          if (explicithosttags.includes(hosttag)) {
+            isexplicit = true
+          }
+          if (implicithosttags.includes(hosttag)) {
+            isimplicit = true
+          }
+          allHostTags.push({ tag: hosttag, isexplicit: isexplicit, isimplicit: isimplicit })
+        }
+        this.host.allhosttags = allHostTags
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {

@@ -18,19 +18,45 @@
 #
 # This scripts before ssh.service but after cloud-early-config
 
-# Eject cdrom if any
-eject || true
+log_it() {
+  echo "$(date) $@" >> /var/log/cloud.log
+  log_action_msg "$@"
+}
 
 # Restart journald for setting changes to apply
 systemctl restart systemd-journald
 
-TYPE=$(grep -Po 'type=\K[a-zA-Z]*' /var/cache/cloud/cmdline)
+# Restore the persistent iptables nat, rules and filters for IPv4 and IPv6 if they exist
+nftables="/etc/iptables/rules.nftables"
+if [ -e $nftables ]
+then
+  nft -f $nftables
+fi
+
+ipv4="/etc/iptables/rules.v4"
+if [ -e $ipv4 ]
+then
+  iptables-restore < $ipv4
+fi
+
+ipv6="/etc/iptables/rules.v6"
+if [ -e $ipv6 ]
+then
+  ip6tables-restore < $ipv6
+fi
+
+CMDLINE=/var/cache/cloud/cmdline
+TYPE=$(grep -Po 'type=\K[a-zA-Z]*' $CMDLINE)
 if [ "$TYPE" == "router" ] || [ "$TYPE" == "vpcrouter" ] || [ "$TYPE" == "dhcpsrvr" ]
 then
   if [ -x /opt/cloud/bin/update_config.py ]
   then
     /opt/cloud/bin/update_config.py cmd_line.json || true
   fi
+fi
+
+if [ "$TYPE" == "cksnode" ] || [ "$TYPE" == "sharedfsvm" ]; then
+  pkill -9 dhclient
 fi
 
 [ ! -f /var/cache/cloud/enabled_svcs ] && touch /var/cache/cloud/enabled_svcs
@@ -44,24 +70,5 @@ for svc in $(cat /var/cache/cloud/disabled_svcs)
 do
   systemctl disable --now --no-block $svc
 done
-
-# Restore the persistent iptables nat, rules and filters for IPv4 and IPv6 if they exist
-ipv4="/etc/iptables/rules.v4"
-if [ -e $ipv4 ]
-then
-  iptables-restore < $ipv4
-fi
-
-ipv6="/etc/iptables/rules.v6"
-if [ -e $ipv6 ]
-then
-  ip6tables-restore < $ipv6
-fi
-
-# Patch known systemd/sshd memory leak - https://github.com/systemd/systemd/issues/8015#issuecomment-476160981
-echo '@include null' >> /etc/pam.d/systemd-user
-
-# Enable and Start SSH
-systemctl enable --now --no-block ssh
 
 date > /var/cache/cloud/boot_up_done

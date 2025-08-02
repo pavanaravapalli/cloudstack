@@ -16,19 +16,25 @@
 // under the License.
 package com.cloud.vm;
 
+import com.cloud.storage.Snapshot;
+import com.cloud.storage.Volume;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.cloud.deploy.DeploymentPlan;
 import org.apache.cloudstack.api.BaseCmd.HTTPMethod;
 import org.apache.cloudstack.api.command.admin.vm.AssignVMCmd;
 import org.apache.cloudstack.api.command.admin.vm.RecoverVMCmd;
 import org.apache.cloudstack.api.command.user.vm.AddNicToVMCmd;
+import org.apache.cloudstack.api.command.user.vm.CreateVMFromBackupCmd;
 import org.apache.cloudstack.api.command.user.vm.DeployVMCmd;
 import org.apache.cloudstack.api.command.user.vm.DestroyVMCmd;
 import org.apache.cloudstack.api.command.user.vm.RebootVMCmd;
 import org.apache.cloudstack.api.command.user.vm.RemoveNicFromVMCmd;
 import org.apache.cloudstack.api.command.user.vm.ResetVMPasswordCmd;
 import org.apache.cloudstack.api.command.user.vm.ResetVMSSHKeyCmd;
+import org.apache.cloudstack.api.command.user.vm.ResetVMUserDataCmd;
 import org.apache.cloudstack.api.command.user.vm.RestoreVMCmd;
 import org.apache.cloudstack.api.command.user.vm.ScaleVMCmd;
 import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
@@ -40,9 +46,11 @@ import org.apache.cloudstack.api.command.user.vmgroup.CreateVMGroupCmd;
 import org.apache.cloudstack.api.command.user.vmgroup.DeleteVMGroupCmd;
 
 import com.cloud.dc.DataCenter;
+import com.cloud.deploy.DeploymentPlanner;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.ManagementServerException;
+import com.cloud.exception.OperationTimedoutException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.exception.StorageUnavailableException;
@@ -64,10 +72,7 @@ public interface UserVmService {
     /**
      * Destroys one virtual machine
      *
-     * @param userId
-     *            the id of the user performing the action
-     * @param vmId
-     *            the id of the virtual machine.
+     * @param cmd the API Command Object containg the parameters to use for this service action
      * @throws ConcurrentOperationException
      * @throws ResourceUnavailableException
      */
@@ -103,10 +108,18 @@ public interface UserVmService {
      */
     UserVm resetVMSSHKey(ResetVMSSHKeyCmd cmd) throws ResourceUnavailableException, InsufficientCapacityException;
 
+    UserVm resetVMUserData(ResetVMUserDataCmd cmd) throws ResourceUnavailableException, InsufficientCapacityException;
+
     UserVm startVirtualMachine(StartVMCmd cmd) throws StorageUnavailableException, ExecutionException, ConcurrentOperationException, ResourceUnavailableException,
         InsufficientCapacityException, ResourceAllocationException;
 
-    UserVm rebootVirtualMachine(RebootVMCmd cmd) throws InsufficientCapacityException, ResourceUnavailableException;
+    UserVm rebootVirtualMachine(RebootVMCmd cmd) throws InsufficientCapacityException, ResourceUnavailableException, ResourceAllocationException;
+
+    void startVirtualMachine(UserVm vm, DeploymentPlan plan) throws OperationTimedoutException, ResourceUnavailableException, InsufficientCapacityException;
+
+    void startVirtualMachineForHA(VirtualMachine vm, Map<VirtualMachineProfile.Param, Object> params,
+          DeploymentPlanner planner) throws InsufficientCapacityException, ResourceUnavailableException,
+            ConcurrentOperationException, OperationTimedoutException;
 
     UserVm updateVirtualMachine(UpdateVMCmd cmd) throws ResourceUnavailableException, InsufficientCapacityException;
 
@@ -144,8 +157,6 @@ public interface UserVmService {
      * Creates a Basic Zone User VM in the database and returns the VM to the
      * caller.
      *
-     *
-     *
      * @param zone
      *            - availability zone for the virtual machine
      * @param serviceOffering
@@ -181,9 +192,8 @@ public interface UserVmService {
      *            base64 encoded before adding it to the request. Currently only
      *            HTTP GET is supported. Using HTTP GET (via querystring), you
      *            can send up to 2KB of data after base64 encoding
-     * @param sshKeyPair
-     *            - name of the ssh key pair used to login to the virtual
-     *            machine
+     * @param userDataId
+     * @param userDataDetails
      * @param requestedIps
      *            TODO
      * @param defaultIp
@@ -191,19 +201,16 @@ public interface UserVmService {
      * @param displayVm
      *            - Boolean flag whether to the display the vm to the end user or not
      * @param affinityGroupIdList
-     * @param cpuSpeed
-     * @param memory
-     * @param cpuNumber
      * @param customId
      * @param dhcpOptionMap
      *           - Maps the dhcp option code and the dhcp value to the network uuid
-     * @return UserVm object if successful.
      * @param dataDiskTemplateToDiskOfferingMap
      *            - Datadisk template to Disk offering Map
      *             an optional parameter that creates additional data disks for the virtual machine
      *             For each of the templates in the map, a data disk will be created from the corresponding
      *             disk offering obtained from the map
      *
+     * @return UserVm object if successful.
      * @throws InsufficientCapacityException
      *             if there is insufficient capacity to deploy the VM.
      * @throws ConcurrentOperationException
@@ -214,18 +221,16 @@ public interface UserVmService {
      *             available.
      */
     UserVm createBasicSecurityGroupVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, List<Long> securityGroupIdList,
-        Account owner, String hostName, String displayName, Long diskOfferingId, Long diskSize, String group, HypervisorType hypervisor, HTTPMethod httpmethod,
-        String userData, String sshKeyPair, Map<Long, IpAddresses> requestedIps, IpAddresses defaultIp, Boolean displayVm, String keyboard,
-        List<Long> affinityGroupIdList, Map<String, String> customParameter, String customId, Map<String, Map<Integer, String>> dhcpOptionMap,
-        Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap,
-        Map<String, String> userVmOVFProperties) throws InsufficientCapacityException,
+                                                  Account owner, String hostName, String displayName, Long diskOfferingId, Long diskSize, List<VmDiskInfo> dataDiskInfoList, String group, HypervisorType hypervisor, HTTPMethod httpmethod,
+                                                  String userData, Long userDataId, String userDataDetails, List<String> sshKeyPairs, Map<Long, IpAddresses> requestedIps, IpAddresses defaultIp, Boolean displayVm, String keyboard,
+                                                  List<Long> affinityGroupIdList, Map<String, String> customParameter, String customId, Map<String, Map<Integer, String>> dhcpOptionMap,
+                                                  Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap,
+                                                  Map<String, String> userVmOVFProperties, boolean dynamicScalingEnabled, Long overrideDiskOfferingId, Volume volume, Snapshot snapshot) throws InsufficientCapacityException,
         ConcurrentOperationException, ResourceUnavailableException, StorageUnavailableException, ResourceAllocationException;
 
     /**
      * Creates a User VM in Advanced Zone (Security Group feature is enabled) in
      * the database and returns the VM to the caller.
-     *
-     *
      *
      * @param zone
      *            - availability zone for the virtual machine
@@ -264,9 +269,8 @@ public interface UserVmService {
      *            base64 encoded before adding it to the request. Currently only
      *            HTTP GET is supported. Using HTTP GET (via querystring), you
      *            can send up to 2KB of data after base64 encoding
-     * @param sshKeyPair
-     *            - name of the ssh key pair used to login to the virtual
-     *            machine
+     * @param userDataId
+     * @param userDataDetails
      * @param requestedIps
      *            TODO
      * @param defaultIps
@@ -274,8 +278,6 @@ public interface UserVmService {
      * @param displayVm
      *            - Boolean flag whether to the display the vm to the end user or not
      * @param affinityGroupIdList
-     * @param memory
-     * @param cpuNumber
      * @param customId
      * @param dhcpOptionMap
      *             - Maps the dhcp option code and the dhcp value to the network uuid
@@ -296,18 +298,14 @@ public interface UserVmService {
      *             available.
      */
     UserVm createAdvancedSecurityGroupVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, List<Long> networkIdList,
-        List<Long> securityGroupIdList, Account owner, String hostName, String displayName, Long diskOfferingId, Long diskSize, String group, HypervisorType hypervisor,
-        HTTPMethod httpmethod, String userData, String sshKeyPair, Map<Long, IpAddresses> requestedIps, IpAddresses defaultIps, Boolean displayVm, String keyboard,
-        List<Long> affinityGroupIdList, Map<String, String> customParameters, String customId, Map<String, Map<Integer, String>> dhcpOptionMap,
-        Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap,
-        Map<String, String> userVmOVFProperties) throws InsufficientCapacityException,
-        ConcurrentOperationException, ResourceUnavailableException, StorageUnavailableException, ResourceAllocationException;
+                                                     List<Long> securityGroupIdList, Account owner, String hostName, String displayName, Long diskOfferingId, Long diskSize, List<VmDiskInfo> dataDiskInfoList, String group, HypervisorType hypervisor,
+                                                     HTTPMethod httpmethod, String userData, Long userDataId, String userDataDetails, List<String> sshKeyPairs, Map<Long, IpAddresses> requestedIps, IpAddresses defaultIps, Boolean displayVm, String keyboard,
+                                                     List<Long> affinityGroupIdList, Map<String, String> customParameters, String customId, Map<String, Map<Integer, String>> dhcpOptionMap,
+                                                     Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap, Map<String, String> userVmOVFProperties, boolean dynamicScalingEnabled, Long overrideDiskOfferingId, String vmType, Volume volume, Snapshot snapshot) throws InsufficientCapacityException, ConcurrentOperationException, ResourceUnavailableException, StorageUnavailableException, ResourceAllocationException;
 
     /**
      * Creates a User VM in Advanced Zone (Security Group feature is disabled)
      * in the database and returns the VM to the caller.
-     *
-     *
      *
      * @param zone
      *            - availability zone for the virtual machine
@@ -343,9 +341,8 @@ public interface UserVmService {
      *            base64 encoded before adding it to the request. Currently only
      *            HTTP GET is supported. Using HTTP GET (via querystring), you
      *            can send up to 2KB of data after base64 encoding
-     * @param sshKeyPair
-     *            - name of the ssh key pair used to login to the virtual
-     *            machine
+     * @param userDataId
+     * @param userDataDetails
      * @param requestedIps
      *            TODO
      * @param defaultIps
@@ -353,9 +350,6 @@ public interface UserVmService {
      * @param displayVm
      *            - Boolean flag whether to the display the vm to the end user or not
      * @param affinityGroupIdList
-     * @param cpuSpeed
-     * @param memory
-     * @param cpuNumber
      * @param customId
      * @param dhcpOptionMap
      *             - Map that maps the DhcpOption code and their value on the Network uuid
@@ -376,10 +370,10 @@ public interface UserVmService {
      *             available.
      */
     UserVm createAdvancedVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, List<Long> networkIdList, Account owner,
-        String hostName, String displayName, Long diskOfferingId, Long diskSize, String group, HypervisorType hypervisor, HTTPMethod httpmethod, String userData,
-        String sshKeyPair, Map<Long, IpAddresses> requestedIps, IpAddresses defaultIps, Boolean displayVm, String keyboard, List<Long> affinityGroupIdList,
-        Map<String, String> customParameters, String customId, Map<String, Map<Integer, String>> dhcpOptionMap, Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap,
-        Map<String, String> templateOvfPropertiesMap)
+                                        String hostName, String displayName, Long diskOfferingId, Long diskSize, List<VmDiskInfo> dataDiskInfoList, String group, HypervisorType hypervisor, HTTPMethod httpmethod, String userData,
+                                        Long userDataId, String userDataDetails, List<String> sshKeyPairs, Map<Long, IpAddresses> requestedIps, IpAddresses defaultIps, Boolean displayVm, String keyboard, List<Long> affinityGroupIdList,
+                                        Map<String, String> customParameters, String customId, Map<String, Map<Integer, String>> dhcpOptionMap, Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap,
+                                        Map<String, String> templateOvfPropertiesMap, boolean dynamicScalingEnabled, String vmType, Long overrideDiskOfferingId, Volume volume, Snapshot snapshot)
 
         throws InsufficientCapacityException, ConcurrentOperationException, ResourceUnavailableException, StorageUnavailableException, ResourceAllocationException;
 
@@ -401,10 +395,7 @@ public interface UserVmService {
     /**
      * Creates a vm group.
      *
-     * @param name
-     *            - name of the group
-     * @param accountId
-     *            - accountId
+     * @param cmd The command specifying domain ID, account name, group name, and project ID
      */
     InstanceGroup createVmGroup(CreateVMGroupCmd cmd);
 
@@ -429,20 +420,24 @@ public interface UserVmService {
     UserVm createVirtualMachine(DeployVMCmd cmd) throws InsufficientCapacityException, ResourceUnavailableException, ConcurrentOperationException,
         StorageUnavailableException, ResourceAllocationException;
 
+    /**
+     * This API is mostly to trigger VM.CREATE event for deployVirtualMachine with startvm=false, because there is no code in "execute" part of VM creation.
+     * However, it can be used for additional VM customization in the future.
+     * @param vmId - Virtual Machine Id
+     * @return - Virtual Machine
+     */
+    UserVm finalizeCreateVirtualMachine(long vmId);
+
     UserVm getUserVm(long vmId);
+
+    VirtualMachine getVm(long vmId);
 
     /**
      * Migrate the given VM to the destination host provided. The API returns the migrated VM if migration succeeds.
-     * Only Root
-     * Admin can migrate a VM.
+     * Only Root Admin can migrate a VM.
      *
-     * @param destinationStorage
-     *            TODO
-     * @param Long
-     *            vmId
-     *            vmId of The VM to migrate
-     * @param Host
-     *            destinationHost to migrate the VM
+     * @param vmId The ID of the VM to be migrated
+     * @param destinationHost The destination host to where the VM will be migrated
      *
      * @return VirtualMachine migrated VM
      * @throws ManagementServerException
@@ -461,14 +456,9 @@ public interface UserVmService {
      * Migrate the given VM with its volumes to the destination host. The API returns the migrated VM if it succeeds.
      * Only root admin can migrate a VM.
      *
-     * @param destinationStorage
-     *            TODO
-     * @param Long
-     *            vmId of The VM to migrate
-     * @param Host
-     *            destinationHost to migrate the VM
-     * @param Map
-     *            A map of volume to which pool it should be migrated
+     * @param vmId The ID of the VM to be migrated
+     * @param destinationHost The destination host to where the VM will be migrated
+     * @param volumeToPool A map of volume to which pool it should be migrated
      *
      * @return VirtualMachine migrated VM
      * @throws ManagementServerException
@@ -483,16 +473,16 @@ public interface UserVmService {
     VirtualMachine migrateVirtualMachineWithVolume(Long vmId, Host destinationHost, Map<String, String> volumeToPool) throws ResourceUnavailableException,
         ConcurrentOperationException, ManagementServerException, VirtualMachineMigrationException;
 
-    UserVm moveVMToUser(AssignVMCmd moveUserVMCmd) throws ResourceAllocationException, ConcurrentOperationException, ResourceUnavailableException,
+    UserVm moveVmToUser(AssignVMCmd moveUserVMCmd) throws ResourceAllocationException, ConcurrentOperationException, ResourceUnavailableException,
         InsufficientCapacityException;
 
     VirtualMachine vmStorageMigration(Long vmId, StoragePool destPool);
 
     VirtualMachine vmStorageMigration(Long vmId, Map<String, String> volumeToPool);
 
-    UserVm restoreVM(RestoreVMCmd cmd) throws InsufficientCapacityException, ResourceUnavailableException;
+    UserVm restoreVM(RestoreVMCmd cmd) throws InsufficientCapacityException, ResourceUnavailableException, ResourceAllocationException;
 
-    UserVm restoreVirtualMachine(Account caller, long vmId, Long newTemplateId) throws InsufficientCapacityException, ResourceUnavailableException;
+    UserVm restoreVirtualMachine(Account caller, long vmId, Long newTemplateId, Long rootDiskOfferingId, boolean expunge, Map<String, String> details) throws InsufficientCapacityException, ResourceUnavailableException;
 
     UserVm upgradeVirtualMachine(ScaleVMCmd cmd) throws ResourceUnavailableException, ConcurrentOperationException, ManagementServerException,
         VirtualMachineMigrationException;
@@ -502,13 +492,13 @@ public interface UserVmService {
     /**
      * Finds and returns an encrypted password for a VM.
      *
-     * @param  userVmId
+     * @param  vmId
      * @return Base64 encoded userdata
      */
     String getVmUserData(long vmId);
 
     /**
-     * determin whether the uservm should be visible to the end user
+     * determine whether the uservm should be visible to the end user
      * @return  value of the display flag
      */
     public boolean isDisplayResourceEnabled(Long vmId);
@@ -519,11 +509,16 @@ public interface UserVmService {
 
     UserVm importVM(final DataCenter zone, final Host host, final VirtualMachineTemplate template, final String instanceName, final String displayName, final Account owner, final String userData, final Account caller, final Boolean isDisplayVm, final String keyboard,
                     final long accountId, final long userId, final ServiceOffering serviceOffering, final String sshPublicKey,
-                    final String hostName, final HypervisorType hypervisorType, final Map<String, String> customParameters, final VirtualMachine.PowerState powerState) throws InsufficientCapacityException;
+                    final String hostName, final HypervisorType hypervisorType, final Map<String, String> customParameters,
+                    final VirtualMachine.PowerState powerState, final LinkedHashMap<String, List<NicProfile>> networkNicMap) throws InsufficientCapacityException;
 
     /**
      * Unmanage a guest VM from CloudStack
      * @return true if the VM is successfully unmanaged, false if not.
      */
     boolean unmanageUserVM(Long vmId);
+
+    UserVm allocateVMFromBackup(CreateVMFromBackupCmd cmd) throws InsufficientCapacityException, ResourceAllocationException, ResourceUnavailableException;
+
+    UserVm restoreVMFromBackup(CreateVMFromBackupCmd cmd) throws ResourceUnavailableException, InsufficientCapacityException, ResourceAllocationException;
 }

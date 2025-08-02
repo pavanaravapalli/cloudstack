@@ -32,7 +32,7 @@
 
     <bean id="storageSystemSnapshotStrategy"
         class="org.apache.cloudstack.storage.snapshot.StorageSystemSnapshotStrategy" />
-        
+
     <bean id="cephSnapshotStrategy"
         class="org.apache.cloudstack.storage.snapshot.CephSnapshotStrategy" />
 
@@ -42,7 +42,13 @@
     <bean id="DefaultVMSnapshotStrategy"
         class="org.apache.cloudstack.storage.vmsnapshot.DefaultVMSnapshotStrategy" />
 
+	<bean id="StorageVMSnapshotStrategy"
+        class="org.apache.cloudstack.storage.vmsnapshot.StorageVMSnapshotStrategy" />
+
     <bean id="ScaleIOVMSnapshotStrategy"
           class="org.apache.cloudstack.storage.vmsnapshot.ScaleIOVMSnapshotStrategy" />
+
+    <bean id="KvmFileBasedStorageVmSnapshotStrategy"
+          class="org.apache.cloudstack.storage.vmsnapshot.KvmFileBasedStorageVmSnapshotStrategy" />
 
 </beans>

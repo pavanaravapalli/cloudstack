@@ -21,11 +21,11 @@ package com.cloud.hypervisor.xenserver.resource.wrapper.xenbase;
 
 import java.util.Map;
 
-import org.apache.log4j.Logger;
 
 import com.cloud.agent.api.Answer;
 import com.cloud.agent.api.DeleteStoragePoolCommand;
 import com.cloud.agent.api.to.StorageFilerTO;
+import com.cloud.hypervisor.xenserver.resource.CitrixHelper;
 import com.cloud.hypervisor.xenserver.resource.CitrixResourceBase;
 import com.cloud.resource.CommandWrapper;
 import com.cloud.resource.ResourceWrapper;
@@ -34,7 +34,6 @@ import com.xensource.xenapi.SR;
 
 @ResourceWrapper(handles =  DeleteStoragePoolCommand.class)
 public final class CitrixDeleteStoragePoolCommandWrapper extends CommandWrapper<DeleteStoragePoolCommand, Answer, CitrixResourceBase> {
-    private static final Logger s_logger = Logger.getLogger(CitrixDeleteStoragePoolCommandWrapper.class);
 
     @Override
     public Answer execute(final DeleteStoragePoolCommand command, final CitrixResourceBase citrixResourceBase) {
@@ -46,16 +45,16 @@ public final class CitrixDeleteStoragePoolCommandWrapper extends CommandWrapper<
 
             // getRemoveDatastore being true indicates we are using managed storage and need to pull the SR name out of a Map
             // instead of pulling it out using getUuid of the StorageFilerTO instance.
+
+            String srNameLabel;
             if (command.getRemoveDatastore()) {
                 Map<String, String> details = command.getDetails();
-
-                String srNameLabel = details.get(DeleteStoragePoolCommand.DATASTORE_NAME);
-
-                sr = citrixResourceBase.getStorageRepository(conn, srNameLabel);
+                srNameLabel = details.get(DeleteStoragePoolCommand.DATASTORE_NAME);
             }
             else {
-                sr = citrixResourceBase.getStorageRepository(conn, poolTO.getUuid());
+                srNameLabel = CitrixHelper.getSRNameLabel(poolTO.getUuid(), poolTO.getType(), poolTO.getPath());
             }
+            sr = citrixResourceBase.getStorageRepository(conn, srNameLabel);
 
             citrixResourceBase.removeSR(conn, sr);
 
@@ -66,7 +65,7 @@ public final class CitrixDeleteStoragePoolCommandWrapper extends CommandWrapper<
             final String msg = "DeleteStoragePoolCommand XenAPIException:" + e.getMessage() + " host:" + citrixResourceBase.getHost().getUuid() +
                     " pool: " + poolTO.getHost() + poolTO.getPath();
 
-            s_logger.error(msg, e);
+            logger.error(msg, e);
 
             return new Answer(command, false, msg);
         }

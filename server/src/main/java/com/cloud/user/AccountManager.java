@@ -25,9 +25,12 @@ import org.apache.cloudstack.api.command.admin.account.UpdateAccountCmd;
 import org.apache.cloudstack.api.command.admin.user.DeleteUserCmd;
 import org.apache.cloudstack.api.command.admin.user.MoveUserCmd;
 import org.apache.cloudstack.api.command.admin.user.UpdateUserCmd;
+import org.apache.cloudstack.api.response.UserTwoFactorAuthenticationSetupResponse;
+import org.apache.cloudstack.auth.UserTwoFactorAuthenticator;
 import org.apache.cloudstack.framework.config.ConfigKey;
 import org.apache.cloudstack.framework.config.Configurable;
 
+import com.cloud.api.auth.SetupUserTwoFactorAuthenticationCmd;
 import com.cloud.api.query.vo.ControlledViewEntity;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.ResourceUnavailableException;
@@ -52,7 +55,7 @@ public interface AccountManager extends AccountService, Configurable {
 
     Long checkAccessAndSpecifyAuthority(Account caller, Long zoneId);
 
-    Account createAccount(String accountName, short accountType, Long roleId, Long domainId, String networkDomain, Map<String, String> details, String uuid);
+    Account createAccount(String accountName, Account.Type accountType, Long roleId, Long domainId, String networkDomain, Map<String, String> details, String uuid);
 
     /**
      * Logs out a user
@@ -188,4 +191,20 @@ public interface AccountManager extends AccountService, Configurable {
             "This parameter allows the users to enable or disable of showing secret key as a part of response for various APIs. By default it is set to false.", true);
 
     boolean moveUser(long id, Long domainId, Account newAccount);
+
+    UserTwoFactorAuthenticator getUserTwoFactorAuthenticator(final Long domainId, final Long userAccountId);
+
+    void verifyUsingTwoFactorAuthenticationCode(String code, Long domainId, Long userAccountId);
+
+    UserTwoFactorAuthenticationSetupResponse setupUserTwoFactorAuthentication(SetupUserTwoFactorAuthenticationCmd cmd);
+
+    List<String> getApiNameList();
+
+    void validateUserPasswordAndUpdateIfNeeded(String newPassword, UserVO user, String currentPassword, boolean skipCurrentPassValidation);
+
+    void checkApiAccess(Account caller, String command);
+
+    UserAccount clearUserTwoFactorAuthenticationInSetupStateOnLogin(UserAccount user);
+
+    void verifyCallerPrivilegeForUserOrAccountOperations(Account userAccount);
 }

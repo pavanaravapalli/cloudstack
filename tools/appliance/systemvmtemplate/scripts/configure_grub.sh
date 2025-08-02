@@ -20,6 +20,9 @@ set -e
 set -x
 
 function configure_grub() {
+  # Remove the old/unused kernel
+  dpkg --list | grep linux-image | awk '{ print $2 }' | sort -V | sed -n '/'`uname -r`'/q;p' | xargs sudo apt-get remove -y --purge || true
+  apt-get -y autoremove --purge
   echo "blacklist floppy" > /etc/modprobe.d/blacklist-floppy.conf
   rmmod floppy || true
   update-initramfs -u
@@ -31,7 +34,7 @@ function configure_grub() {
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=0
 GRUB_DISTRIBUTOR=Debian
-GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet fsck.mode=force fsck.repair=yes"
 GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8 console=hvc0 earlyprintk=xen net.ifnames=0 biosdevname=0 debian-installer=en_US nomodeset"
 GRUB_CMDLINE_XEN="com1=115200 console=com1"
 GRUB_TERMINAL="console serial"

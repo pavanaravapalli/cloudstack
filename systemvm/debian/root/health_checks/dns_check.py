@@ -24,7 +24,7 @@ def main():
     vMs = getHealthChecksData("virtualMachines")
 
     if vMs is None or len(vMs) == 0:
-        print "No VMs running data available, skipping"
+        print("No VMs running data available, skipping")
         exit(0)
 
     with open('/etc/hosts', 'r') as hostsFile:
@@ -33,7 +33,11 @@ def main():
 
     failedCheck = False
     failureMessage = "Missing entries for VMs in /etc/hosts -\n"
+    COUNT = 0
     for vM in vMs:
+        if vM["dns"] == "false":
+            continue
+        COUNT = COUNT + 1
         foundEntry = False
         for host in allHosts:
             components = host.split('\t')
@@ -47,10 +51,10 @@ def main():
             failureMessage = failureMessage + vM["ip"] + " " + vM["vmName"] + ", "
 
     if failedCheck:
-        print failureMessage[:-2]
+        print(failureMessage[:-2])
         exit(1)
     else:
-        print "All " + str(len(vMs)) + " VMs are present in /etc/hosts"
+        print("All " + str(COUNT) + " VMs are present in /etc/hosts")
         exit(0)
 
 

@@ -19,28 +19,27 @@ package org.apache.cloudstack.api.command.admin.offering;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.cloudstack.acl.RoleType;
+import com.cloud.offering.DiskOffering.State;
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.DiskOfferingResponse;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import com.cloud.dc.DataCenter;
 import com.cloud.domain.Domain;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.offering.DiskOffering;
 import com.cloud.user.Account;
-import com.google.common.base.Strings;
 
 @APICommand(name = "updateDiskOffering", description = "Updates a disk offering.", responseObject = DiskOfferingResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateDiskOfferingCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateDiskOfferingCmd.class.getName());
-    private static final String s_name = "updatediskofferingresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -69,7 +68,8 @@ public class UpdateDiskOfferingCmd extends BaseCmd {
     @Parameter(name = ApiConstants.DOMAIN_ID,
             type = CommandType.STRING,
             description = "the ID of the containing domain(s) as comma separated string, public for public offerings",
-            since = "4.13")
+            since = "4.13",
+            length = 4096)
     private String domainIds;
 
     @Parameter(name = ApiConstants.ZONE_ID,
@@ -81,7 +81,6 @@ public class UpdateDiskOfferingCmd extends BaseCmd {
     @Parameter(name = ApiConstants.TAGS,
             type = CommandType.STRING,
             description = "comma-separated list of tags for the disk offering, tags should match with existing storage pool tags",
-            authorized = {RoleType.Admin},
             since = "4.15")
     private String tags;
 
@@ -124,6 +123,9 @@ public class UpdateDiskOfferingCmd extends BaseCmd {
     @Parameter(name = ApiConstants.CACHE_MODE, type = CommandType.STRING, description = "the cache mode to use for this disk offering", since = "4.15")
     private String cacheMode;
 
+    @Parameter(name = ApiConstants.STATE, type = CommandType.STRING, description = "state of the disk offering")
+    private String diskOfferingState;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -150,7 +152,7 @@ public class UpdateDiskOfferingCmd extends BaseCmd {
 
     public List<Long> getDomainIds() {
         List<Long> validDomainIds = new ArrayList<>();
-        if (!Strings.isNullOrEmpty(domainIds)) {
+        if (StringUtils.isNotEmpty(domainIds)) {
             if (domainIds.contains(",")) {
                 String[] domains = domainIds.split(",");
                 for (String domain : domains) {
@@ -180,7 +182,7 @@ public class UpdateDiskOfferingCmd extends BaseCmd {
 
     public List<Long> getZoneIds() {
         List<Long> validZoneIds = new ArrayList<>();
-        if (!Strings.isNullOrEmpty(zoneIds)) {
+        if (StringUtils.isNotEmpty(zoneIds)) {
             if (zoneIds.contains(",")) {
                 String[] zones = zoneIds.split(",");
                 for (String zone : zones) {
@@ -263,19 +265,31 @@ public class UpdateDiskOfferingCmd extends BaseCmd {
     public Long getIopsWriteRateMaxLength() {
         return iopsWriteRateMaxLength;
     }
+    public State getState() {
+        State state = EnumUtils.getEnumIgnoreCase(State.class, diskOfferingState);
+        if (StringUtils.isNotBlank(diskOfferingState) && state == null) {
+            throw new InvalidParameterValueException("Invalid state value: " + diskOfferingState);
+        }
+        return state;
+    }
 
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
+    public long getEntityOwnerId() {
+        return Account.ACCOUNT_ID_SYSTEM;
     }
 
     @Override
-    public long getEntityOwnerId() {
-        return Account.ACCOUNT_ID_SYSTEM;
+    public Long getApiResourceId() {
+        return id;
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.DiskOffering;
     }
 
     @Override

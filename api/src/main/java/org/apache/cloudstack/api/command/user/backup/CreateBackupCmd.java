@@ -21,11 +21,10 @@ import javax.inject.Inject;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCreateCmd;
-import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.SuccessResponse;
@@ -41,12 +40,11 @@ import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.utils.exception.CloudRuntimeException;
 
-@APICommand(name = CreateBackupCmd.APINAME,
+@APICommand(name = "createBackup",
         description = "Create VM backup",
         responseObject = SuccessResponse.class, since = "4.14.0",
         authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class CreateBackupCmd extends BaseAsyncCreateCmd {
-    public static final String APINAME = "createBackup";
 
     @Inject
     private BackupManager backupManager;
@@ -62,12 +60,45 @@ public class CreateBackupCmd extends BaseAsyncCreateCmd {
             description = "ID of the VM")
     private Long vmId;
 
+    @Parameter(name = ApiConstants.NAME,
+            type = CommandType.STRING,
+            description = "the name of the backup",
+            since = "4.21.0")
+    private String name;
+
+    @Parameter(name = ApiConstants.DESCRIPTION,
+            type = CommandType.STRING,
+            description = "the description for the backup",
+            since = "4.21.0")
+    private String description;
+
+    @Parameter(name = ApiConstants.QUIESCE_VM,
+            type = CommandType.BOOLEAN,
+            required = false,
+            description = "Quiesce the instance before checkpointing the disks for backup. Applicable only to NAS backup provider. " +
+                    "The filesystem is frozen before the backup starts and thawed immediately after. " +
+                    "Requires the instance to have the QEMU Guest Agent installed and running.",
+            since = "4.21.0")
+    private Boolean quiesceVM;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
 
     public Long getVmId() {
         return vmId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public Boolean getQuiesceVM() {
+        return quiesceVM;
     }
 
     /////////////////////////////////////////////////////
@@ -77,7 +108,7 @@ public class CreateBackupCmd extends BaseAsyncCreateCmd {
     @Override
     public void execute() throws ResourceUnavailableException, InsufficientCapacityException, ServerApiException, ConcurrentOperationException, ResourceAllocationException, NetworkRuleConflictException {
         try {
-            boolean result = backupManager.createBackup(getVmId());
+            boolean result = backupManager.createBackup(this, getJob());
             if (result) {
                 SuccessResponse response = new SuccessResponse(getCommandName());
                 response.setResponseName(getCommandName());
@@ -91,13 +122,8 @@ public class CreateBackupCmd extends BaseAsyncCreateCmd {
     }
 
     @Override
-    public String getCommandName() {
-        return APINAME.toLowerCase() + BaseCmd.RESPONSE_SUFFIX;
-    }
-
-    @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Backup;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Backup;
     }
 
     @Override

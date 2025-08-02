@@ -16,55 +16,35 @@
 // under the License.
 package com.cloud.hypervisor.kvm.resource;
 
-import com.cloud.utils.script.OutputInterpreter;
-import com.cloud.utils.script.Script;
-import org.apache.log4j.Logger;
+import com.cloud.agent.api.to.HostTO;
 import org.joda.time.Duration;
 
 import java.util.concurrent.Callable;
 
 public class KVMHAVMActivityChecker extends KVMHABase implements Callable<Boolean> {
-    private static final Logger LOG = Logger.getLogger(KVMHAVMActivityChecker.class);
 
-    final private NfsStoragePool nfsStoragePool;
-    final private String hostIP;
-    final private String volumeUuidList;
-    final private String vmActivityCheckPath;
-    final private Duration activityScriptTimeout = Duration.standardSeconds(3600L);
-    final private long suspectTimeInSeconds;
+    private final HAStoragePool storagePool;
+    private final String volumeUuidList;
+    private final String vmActivityCheckPath;
+    private final Duration activityScriptTimeout = Duration.standardSeconds(3600L);
+    private final long suspectTimeInSeconds;
+    private final HostTO host;
 
-    public KVMHAVMActivityChecker(final NfsStoragePool pool, final String host, final String volumeUUIDListString, String vmActivityCheckPath, final long suspectTime) {
-        this.nfsStoragePool = pool;
-        this.hostIP = host;
+    public KVMHAVMActivityChecker(final HAStoragePool pool, final HostTO host, final String volumeUUIDListString, String vmActivityCheckPath, final long suspectTime) {
+        this.storagePool = pool;
         this.volumeUuidList = volumeUUIDListString;
         this.vmActivityCheckPath = vmActivityCheckPath;
         this.suspectTimeInSeconds = suspectTime;
+        this.host = host;
     }
 
     @Override
-    public Boolean checkingHB() {
-        Script cmd = new Script(vmActivityCheckPath, activityScriptTimeout.getStandardSeconds(), LOG);
-        cmd.add("-i", nfsStoragePool._poolIp);
-        cmd.add("-p", nfsStoragePool._poolMountSourcePath);
-        cmd.add("-m", nfsStoragePool._mountDestPath);
-        cmd.add("-h", hostIP);
-        cmd.add("-u", volumeUuidList);
-        cmd.add("-t", String.valueOf(String.valueOf(System.currentTimeMillis() / 1000)));
-        cmd.add("-d", String.valueOf(suspectTimeInSeconds));
-        OutputInterpreter.OneLineParser parser = new OutputInterpreter.OneLineParser();
-        String result = cmd.execute(parser);
-        LOG.debug("KVMHAVMActivityChecker pool: " + nfsStoragePool._poolIp);
-        LOG.debug("KVMHAVMActivityChecker result: " + result);
-        LOG.debug("KVMHAVMActivityChecker parser: " + parser.getLine());
-        if (result == null && parser.getLine().contains("DEAD")) {
-            return false;
-        } else {
-            return true;
-        }
+    public Boolean checkingHeartBeat() {
+        return this.storagePool.getPool().vmActivityCheck(storagePool, host, activityScriptTimeout, volumeUuidList, vmActivityCheckPath, suspectTimeInSeconds);
     }
 
     @Override
     public Boolean call() throws Exception {
-        return checkingHB();
+        return checkingHeartBeat();
     }
 }

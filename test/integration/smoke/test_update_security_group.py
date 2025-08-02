@@ -21,7 +21,8 @@ Tests for updating security group name
 
 # Import Local Modules
 from nose.plugins.attrib import attr
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.cloudstackAPI import updateSecurityGroup, createSecurityGroup
 from marvin.sshClient import SshClient
 from marvin.lib.utils import (validateList,
@@ -295,7 +296,7 @@ class TestUpdateSecurityGroup(cloudstackTestCase):
         #
         # 1. Create a security group
         # 2. Update the security group and change its name to "default"
-        # 3. Exception should be thrown as "default" name cant be used
+        # 3. Exception should be thrown as "default" name can't be used
 
         security_group = SecurityGroup.create(
             self.apiclient,

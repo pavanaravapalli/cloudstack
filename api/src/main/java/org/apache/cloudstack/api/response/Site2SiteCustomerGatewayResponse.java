@@ -21,7 +21,7 @@ import java.util.Date;
 import com.google.gson.annotations.SerializedName;
 
 import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.BaseResponse;
+import org.apache.cloudstack.api.BaseResponseWithAnnotations;
 import org.apache.cloudstack.api.EntityReference;
 
 import com.cloud.network.Site2SiteCustomerGateway;
@@ -29,7 +29,7 @@ import com.cloud.serializer.Param;
 
 @EntityReference(value = Site2SiteCustomerGateway.class)
 @SuppressWarnings("unused")
-public class Site2SiteCustomerGatewayResponse extends BaseResponse implements ControlledEntityResponse {
+public class Site2SiteCustomerGatewayResponse extends BaseResponseWithAnnotations implements ControlledEntityResponse {
     @SerializedName(ApiConstants.ID)
     @Param(description = "the vpn gateway ID")
     private String id;
@@ -98,9 +98,21 @@ public class Site2SiteCustomerGatewayResponse extends BaseResponse implements Co
     @Param(description = "the domain name of the owner")
     private String domain;
 
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "the domain path of the owner", since = "4.19.2.0")
+    private String domainPath;
+
     @SerializedName(ApiConstants.REMOVED)
     @Param(description = "the date and time the host was removed")
     private Date removed;
+
+    @SerializedName(ApiConstants.SPLIT_CONNECTIONS)
+    @Param(description = "For IKEv2, whether to split multiple right subnet cidrs into multiple connection statements.")
+    private Boolean splitConnections;
+
+    @SerializedName(ApiConstants.IKE_VERSION)
+    @Param(description = "Which IKE Version to use, one of ike (autoselect), ikev1, or ikev2. Defaults to ike")
+    private String ikeVersion;
 
     public void setId(String id) {
         this.id = id;
@@ -148,6 +160,14 @@ public class Site2SiteCustomerGatewayResponse extends BaseResponse implements Co
 
     public void setEncap(Boolean encap) { this.encap = encap; }
 
+    public void setSplitConnections(Boolean splitConnections) {
+        this.splitConnections = splitConnections;
+    }
+
+    public void setIkeVersion(String ikeVersion) {
+        this.ikeVersion = ikeVersion;
+    }
+
     public void setRemoved(Date removed) {
         this.removed = removed;
     }
@@ -175,6 +195,11 @@ public class Site2SiteCustomerGatewayResponse extends BaseResponse implements Co
     @Override
     public void setDomainName(String domainName) {
         this.domain = domainName;
+    }
+
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
     }
 
 }

@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.cloudstack</groupId>
         <artifactId>cloudstack</artifactId>
-        <version>4.16.0.0-SNAPSHOT</version>
+        <version>4.21.0.0-SNAPSHOT</version>
     </parent>
     <dependencies>
         <dependency>
@@ -52,18 +52,20 @@
             <artifactId>gson</artifactId>
         </dependency>
         <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+            <version>${cs.jakarta.xml.bind.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sun.xml.bind</groupId>
+            <artifactId>jaxb-impl</artifactId>
+            <version>${cs.jaxb.impl.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.cloud.com.vmware</groupId>
             <artifactId>vmware-vim25</artifactId>
             <version>${cs.vmware.api.version}</version>
             <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.axis</groupId>
-            <artifactId>axis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.axis</groupId>
-            <artifactId>axis-jaxrpc</artifactId>
         </dependency>
         <dependency>
             <groupId>wsdl4j</groupId>
@@ -79,6 +81,17 @@
             <groupId>com.cloud.com.vmware</groupId>
             <artifactId>vmware-pbm</artifactId>
             <version>${cs.vmware.api.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-artifact</artifactId>
+            <version>3.6.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.cloudstack</groupId>
+            <artifactId>cloud-core</artifactId>
+            <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
     </dependencies>

@@ -16,13 +16,12 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.volume;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCustomIdCmd;
@@ -41,7 +40,6 @@ import com.cloud.storage.Volume;
 @APICommand(name = "updateVolume", description = "Updates the volume.", responseObject = VolumeResponse.class, responseView = ResponseView.Restricted, entityType = {Volume.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateVolumeCmd extends BaseAsyncCustomIdCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateVolumeCmd.class.getName());
     private static final String s_name = "updatevolumeresponse";
 
     /////////////////////////////////////////////////////
@@ -52,29 +50,40 @@ public class UpdateVolumeCmd extends BaseAsyncCustomIdCmd implements UserCmd {
     @Parameter(name=ApiConstants.ID, type=CommandType.UUID, entityType=VolumeResponse.class, description="the ID of the disk volume")
     private Long id;
 
-    @Parameter(name = ApiConstants.PATH, type = CommandType.STRING, description = "The path of the volume")
+    @Parameter(name = ApiConstants.PATH, type = CommandType.STRING, description = "The path of the volume", authorized = {RoleType.Admin})
     private String path;
 
     @Parameter(name = ApiConstants.CHAIN_INFO,
             type = CommandType.STRING,
             description = "The chain info of the volume",
-            since = "4.4")
+            since = "4.4", authorized = {RoleType.Admin})
     private String chainInfo;
 
     @Parameter(name = ApiConstants.STORAGE_ID,
                type = CommandType.UUID,
                entityType = StoragePoolResponse.class,
                description = "Destination storage pool UUID for the volume",
-               since = "4.3")
+               since = "4.3", authorized = {RoleType.Admin})
     private Long storageId;
 
-    @Parameter(name = ApiConstants.STATE, type = CommandType.STRING, description = "The state of the volume", since = "4.3")
+    @Parameter(name = ApiConstants.STATE, type = CommandType.STRING, description = "The state of the volume", since = "4.3", authorized = {RoleType.Admin})
     private String state;
 
     @Parameter(name = ApiConstants.DISPLAY_VOLUME,
                type = CommandType.BOOLEAN,
  description = "an optional field, whether to the display the volume to the end user or not.", authorized = {RoleType.Admin})
     private Boolean displayVolume;
+
+    @Parameter(name = ApiConstants.NAME, type = CommandType.STRING, description = "new name of the volume", since = "4.16")
+    private String name;
+
+    @Parameter(name = ApiConstants.DELETE_PROTECTION,
+            type = CommandType.BOOLEAN,  since = "4.20.0",
+            description = "Set delete protection for the volume. If true, The volume " +
+                    "will be protected from deletion. Note: If the volume is managed by " +
+                    "another service like autoscaling groups or CKS, delete protection will be " +
+                    "ignored.")
+    private Boolean deleteProtection;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -103,6 +112,15 @@ public class UpdateVolumeCmd extends BaseAsyncCustomIdCmd implements UserCmd {
     public String getChainInfo() {
         return chainInfo;
     }
+
+    public String getName() {
+        return name;
+    }
+
+    public Boolean getDeleteProtection() {
+        return deleteProtection;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
@@ -113,12 +131,12 @@ public class UpdateVolumeCmd extends BaseAsyncCustomIdCmd implements UserCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Volume;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Volume;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 
@@ -150,6 +168,11 @@ public class UpdateVolumeCmd extends BaseAsyncCustomIdCmd implements UserCmd {
         if (getState() != null) {
             desc.append(", state " + getState());
         }
+
+        if (getName() != null) {
+            desc.append(", name " + getName());
+        }
+
         return desc.toString();
     }
 
@@ -157,7 +180,7 @@ public class UpdateVolumeCmd extends BaseAsyncCustomIdCmd implements UserCmd {
     public void execute() {
         CallContext.current().setEventDetails("Volume Id: " + this._uuidMgr.getUuid(Volume.class, getId()));
         Volume result = _volumeService.updateVolume(getId(), getPath(), getState(), getStorageId(), getDisplayVolume(),
-                getCustomId(), getEntityOwnerId(), getChainInfo());
+                getDeleteProtection(), getCustomId(), getEntityOwnerId(), getChainInfo(), getName());
         if (result != null) {
             VolumeResponse response = _responseGenerator.createVolumeResponse(getResponseView(), result);
             response.setResponseName(getCommandName());

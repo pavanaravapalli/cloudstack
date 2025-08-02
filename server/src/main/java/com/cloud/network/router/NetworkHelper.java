@@ -20,8 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.cloud.network.router.deployment.RouterDeploymentDefinition;
-import com.cloud.network.lb.LoadBalancingRule;
+import org.apache.cloudstack.framework.config.ConfigKey;
+import org.apache.cloudstack.network.router.deployment.RouterDeploymentDefinition;
 
 import com.cloud.agent.api.to.NicTO;
 import com.cloud.agent.manager.Commands;
@@ -34,6 +34,7 @@ import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.exception.StorageUnavailableException;
 import com.cloud.hypervisor.Hypervisor.HypervisorType;
 import com.cloud.network.Network;
+import com.cloud.network.lb.LoadBalancingRule;
 import com.cloud.storage.VMTemplateVO;
 import com.cloud.user.Account;
 import com.cloud.user.User;
@@ -65,6 +66,7 @@ public interface NetworkHelper {
      * @return
      */
     public abstract boolean checkRouterVersion(VirtualRouter router);
+    public abstract boolean checkRouterTemplateVersion(VirtualRouter router);
 
     public abstract List<DomainRouterVO> startRouters(
             RouterDeploymentDefinition routerDeploymentDefinition)
@@ -92,4 +94,6 @@ public interface NetworkHelper {
             throws ConcurrentOperationException, InsufficientAddressCapacityException;
 
     public boolean validateHAProxyLBRule(final LoadBalancingRule rule);
+
+    public Map<HypervisorType, ConfigKey<String>> getHypervisorRouterTemplateConfigMap();
 }

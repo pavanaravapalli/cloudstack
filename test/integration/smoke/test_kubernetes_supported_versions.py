@@ -17,7 +17,8 @@
 """ Tests for Kubernetes supported version """
 
 #Import Local Modules
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.cloudstackAPI import (listInfrastructure,
                                   listKubernetesSupportedVersions,
                                   addKubernetesSupportedVersion,
@@ -44,7 +45,8 @@ class TestKubernetesSupportedVersion(cloudstackTestCase):
         cls.services = cls.testClient.getParsedTestDataConfig()
         cls.zone = get_zone(cls.apiclient, cls.testClient.getZoneForTests())
         cls.mgtSvrDetails = cls.config.__dict__["mgtSvr"][0].__dict__
-        cls.kubernetes_version_iso_url = 'http://download.cloudstack.org/cks/setup-1.16.3.iso'
+        cls.kubernetes_version = cls.services["cks_kubernetes_version"]
+        cls.kubernetes_version_iso_url = cls.services["cks_kubernetes_versions"][cls.kubernetes_version]["url"]
 
         cls.initial_configuration_cks_enabled = Configurations.list(cls.apiclient,
                                                                     name="cloud.kubernetes.service.enabled")[0].value
@@ -93,7 +95,9 @@ class TestKubernetesSupportedVersion(cloudstackTestCase):
         #Waits for management to come up in 5 mins, when it's up it will continue
         timeout = time.time() + 300
         while time.time() < timeout:
-            if cls.isManagementUp() is True: return
+            if cls.isManagementUp() is True:
+                time.sleep(30)
+                return
             time.sleep(5)
         return cls.fail("Management server did not come up, failing")
 

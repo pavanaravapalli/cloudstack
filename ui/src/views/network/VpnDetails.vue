@@ -21,55 +21,126 @@
       <p>{{ $t('message.enabled.vpn') }} <strong>{{ remoteAccessVpn.publicip }}</strong></p>
       <p>{{ $t('message.enabled.vpn.ip.sec') }} <strong>{{ remoteAccessVpn.presharedkey }}</strong></p>
       <a-divider/>
-      <a-button><router-link :to="{ path: '/vpnuser'}">{{ $t('label.manage.vpn.user') }}</router-link></a-button>
-      <a-button style="margin-left: 10px" type="danger" @click="disableVpn = true" :disabled="!('deleteRemoteAccessVpn' in $store.getters.apis)">
+      <a-button
+        style="margin-left: 10px"
+        type="primary"
+        danger
+        @click="disableVpn = true"
+        :disabled="!('deleteRemoteAccessVpn' in $store.getters.apis)">
         {{ $t('label.disable.vpn') }}
       </a-button>
+      <a-button><router-link :to="{ path: '/vpnuser'}">{{ $t('label.manage.vpn.user') }}</router-link></a-button>
     </div>
 
     <a-modal
-      v-model="disableVpn"
+      :visible="disableVpn"
       :footer="null"
-      oncancel="disableVpn = false"
       :title="$t('label.disable.vpn')"
-      :maskClosable="false">
-      <p>{{ $t('message.disable.vpn') }}</p>
+      :closable="true"
+      :maskClosable="false"
+      @cancel="disableVpn = false">
+      <div v-ctrl-enter="handleDisableVpn">
+        <p>{{ $t('message.disable.vpn') }}</p>
 
-      <a-divider></a-divider>
+        <a-divider />
 
-      <div class="actions">
-        <a-button @click="() => disableVpn = false">{{ $t('label.cancel') }}</a-button>
-        <a-button type="primary" @click="handleDisableVpn">{{ $t('label.yes') }}</a-button>
+        <div class="actions">
+          <a-button @click="() => disableVpn = false">{{ $t('label.cancel') }}</a-button>
+          <a-button type="primary" @click="handleDisableVpn">{{ $t('label.yes') }}</a-button>
+        </div>
       </div>
     </a-modal>
 
   </div>
   <div v-else>
-    <a-button :disabled="!('createRemoteAccessVpn' in $store.getters.apis)" type="primary" @click="enableVpn = true">
+    <a-button
+      :disabled="!('createRemoteAccessVpn' in $store.getters.apis)"
+      type="primary"
+      style="margin-left: 10px"
+      @click="enableVpn = true">
       {{ $t('label.enable.vpn') }}
     </a-button>
 
     <a-modal
-      v-model="enableVpn"
+      :visible="enableVpn"
       :footer="null"
-      onCancel="enableVpn = false"
       :title="$t('label.enable.vpn')"
-      :maskClosable="false">
-      <p>{{ $t('message.enable.vpn') }}</p>
+      :maskClosable="false"
+      :closable="true"
+      @cancel="enableVpn = false">
+      <div v-ctrl-enter="handleCreateVpn">
+        <p>{{ $t('message.enable.vpn') }}</p>
 
-      <a-divider></a-divider>
+        <a-divider />
 
-      <div class="actions">
-        <a-button @click="() => enableVpn = false">{{ $t('label.cancel') }}</a-button>
-        <a-button type="primary" @click="handleCreateVpn">{{ $t('label.yes') }}</a-button>
+        <div class="actions">
+          <a-button @click="() => enableVpn = false">{{ $t('label.cancel') }}</a-button>
+          <a-button type="primary" ref="submit" @click="handleCreateVpn">{{ $t('label.yes') }}</a-button>
+        </div>
       </div>
     </a-modal>
 
   </div>
+
+  <br>
+  <div v-if="vpnGateway">
+    <div>
+      <a-button
+        :disabled="!('deleteVpnGateway' in $store.getters.apis)"
+        style="margin-left: 10px"
+        danger
+        type="primary"
+        @click="deleteVpnGateway = true">
+        {{ $t('label.delete.vpn.gateway') }}
+      </a-button>
+    </div>
+    <a-modal
+      :visible="deleteVpnGateway"
+      :footer="null"
+      :title="$t('label.enable.vpn')"
+      :maskClosable="false"
+      :closable="true"
+      @cancel="deleteVpnGateway = false">
+      <div v-ctrl-enter="handleDeleteVpnGateway">
+        <p>{{ $t('message.delete.vpn.gateway') }}</p>
+        <div :span="24" class="action-button">
+          <a-button @click="deleteVpnGateway = false">{{ $t('label.cancel') }}</a-button>
+          <a-button :loading="loading" type="primary" @click="handleDeleteVpnGateway" ref="submit">{{ $t('label.ok') }}</a-button>
+        </div>
+      </div>
+    </a-modal>
+  </div>
+  <div v-else-if="vpnGatewayEnabled">
+    <div>
+      <a-button
+        :disabled="!('createVpnGateway' in $store.getters.apis)"
+        style="margin-left: 10px"
+        type="primary"
+        @click="createVpnGateway = true">
+        {{ $t('label.add.vpn.gateway') }}
+      </a-button>
+    </div>
+    <a-modal
+      :visible="createVpnGateway"
+      :footer="null"
+      :title="$t('label.add.vpn.gateway')"
+      :maskClosable="false"
+      :closable="true"
+      @cancel="createVpnGateway = false">
+      <div v-ctrl-enter="handleCreateVpnGateway">
+        <p>{{ $t('message.add.vpn.gateway') }}</p>
+        <div :span="24" class="action-button">
+          <a-button @click="createVpnGateway = false">{{ $t('label.cancel') }}</a-button>
+          <a-button :loading="loading" type="primary" @click="handleCreateVpnGateway" ref="submit">{{ $t('label.ok') }}</a-button>
+        </div>
+      </div>
+    </a-modal>
+  </div>
+
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
 
 export default {
   props: {
@@ -82,25 +153,32 @@ export default {
     return {
       remoteAccessVpn: null,
       enableVpn: false,
-      disableVpn: false
+      disableVpn: false,
+      vpnGateway: null,
+      vpnGatewayEnabled: false,
+      createVpnGateway: false,
+      deleteVpnGateway: false,
+      isSubmitted: false
     }
   },
   inject: ['parentFetchData', 'parentToggleLoading'],
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    resource: function (newItem, oldItem) {
-      if (!newItem || !newItem.id) {
-        return
+    resource: {
+      deep: true,
+      handler (newItem) {
+        if (!newItem || !newItem.id) {
+          return
+        }
+        this.fetchData()
       }
-      this.resource = newItem
-      this.fetchData()
     }
   },
   methods: {
     fetchData () {
-      api('listRemoteAccessVpns', {
+      getAPI('listRemoteAccessVpns', {
         publicipid: this.resource.id,
         listAll: true
       }).then(response => {
@@ -110,11 +188,30 @@ export default {
         console.log(error)
         this.$notifyError(error)
       })
+      if (this.resource.vpcid) {
+        this.vpnGatewayEnabled = true
+        getAPI('listVpnGateways', {
+          vpcid: this.resource.vpcid,
+          listAll: true
+        }).then(response => {
+          const vpnGateways = response.listvpngatewaysresponse.vpngateway || []
+          for (const vpnGateway of vpnGateways) {
+            if (vpnGateway.publicip === this.resource.ipaddress) {
+              this.vpnGateway = vpnGateway
+            }
+          }
+        }).catch(error => {
+          console.log(error)
+          this.$notifyError(error)
+        })
+      }
     },
     handleCreateVpn () {
+      if (this.isSubmitted) return
+      this.isSubmitted = true
       this.parentToggleLoading()
       this.enableVpn = false
-      api('createRemoteAccessVpn', {
+      postAPI('createRemoteAccessVpn', {
         publicipid: this.resource.id,
         domainid: this.resource.domainid,
         account: this.resource.account
@@ -130,14 +227,14 @@ export default {
               duration: 0
             })
             this.fetchData()
-            this.parentFetchData()
             this.parentToggleLoading()
+            this.isSubmitted = false
           },
           errorMessage: this.$t('message.enable.vpn.failed'),
           errorMethod: () => {
             this.fetchData()
-            this.parentFetchData()
             this.parentToggleLoading()
+            this.isSubmitted = false
           },
           loadingMessage: this.$t('message.enable.vpn.processing'),
           catchMessage: this.$t('error.fetching.async.job.result'),
@@ -145,6 +242,7 @@ export default {
             this.fetchData()
             this.parentFetchData()
             this.parentToggleLoading()
+            this.isSubmitted = false
           }
         })
       }).catch(error => {
@@ -152,12 +250,15 @@ export default {
         this.fetchData()
         this.parentFetchData()
         this.parentToggleLoading()
+        this.isSubmitted = false
       })
     },
     handleDisableVpn () {
+      if (this.isSubmitted) return
+      this.isSubmitted = true
       this.parentToggleLoading()
       this.disableVpn = false
-      api('deleteRemoteAccessVpn', {
+      postAPI('deleteRemoteAccessVpn', {
         publicipid: this.resource.id,
         domainid: this.resource.domainid
       }).then(response => {
@@ -166,14 +267,14 @@ export default {
           successMessage: this.$t('message.success.disable.vpn'),
           successMethod: () => {
             this.fetchData()
-            this.parentFetchData()
             this.parentToggleLoading()
+            this.isSubmitted = false
           },
           errorMessage: this.$t('message.disable.vpn.failed'),
           errorMethod: () => {
             this.fetchData()
-            this.parentFetchData()
             this.parentToggleLoading()
+            this.isSubmitted = false
           },
           loadingMessage: this.$t('message.disable.vpn.processing'),
           catchMessage: this.$t('error.fetching.async.job.result'),
@@ -181,6 +282,7 @@ export default {
             this.fetchData()
             this.parentFetchData()
             this.parentToggleLoading()
+            this.isSubmitted = false
           }
         })
       }).catch(error => {
@@ -188,6 +290,86 @@ export default {
         this.fetchData()
         this.parentFetchData()
         this.parentToggleLoading()
+        this.isSubmitted = false
+      })
+    },
+    handleCreateVpnGateway () {
+      if (this.isSubmitted) return
+      this.isSubmitted = true
+      this.parentToggleLoading()
+      this.createVpnGateway = false
+      const params = {
+        vpcid: this.resource.vpcid,
+        ipaddressid: this.resource.id
+      }
+      postAPI('createVpnGateway', params).then(response => {
+        this.$pollJob({
+          jobId: response.createvpngatewayresponse.jobid,
+          successMessage: this.$t('message.success.add.vpn.gateway'),
+          successMethod: result => {
+            this.fetchData()
+            this.parentToggleLoading()
+            this.isSubmitted = false
+          },
+          errorMessage: this.$t('message.add.vpn.gateway.failed'),
+          errorMethod: () => {
+            this.fetchData()
+            this.parentToggleLoading()
+            this.isSubmitted = false
+          },
+          loadingMessage: this.$t('message.add.vpn.gateway.processing'),
+          catchMessage: this.$t('error.fetching.async.job.result'),
+          catchMethod: () => {
+            this.fetchData()
+            this.parentFetchData()
+            this.parentToggleLoading()
+            this.isSubmitted = false
+          }
+        })
+      }).catch(error => {
+        this.$notifyError(error)
+        this.fetchData()
+        this.parentFetchData()
+        this.parentToggleLoading()
+        this.isSubmitted = false
+      })
+    },
+    handleDeleteVpnGateway () {
+      if (this.isSubmitted) return
+      this.isSubmitted = true
+      this.parentToggleLoading()
+      this.deleteVpnGateway = false
+      postAPI('deleteVpnGateway', {
+        id: this.vpnGateway.id
+      }).then(response => {
+        this.$pollJob({
+          jobId: response.deletevpngatewayresponse.jobid,
+          successMessage: this.$t('message.success.delete.vpn.gateway'),
+          successMethod: () => {
+            this.fetchData()
+            this.parentToggleLoading()
+            this.isSubmitted = false
+          },
+          errorMessage: this.$t('message.delete.vpn.gateway.failed'),
+          errorMethod: () => {
+            this.fetchData()
+            this.parentToggleLoading()
+            this.isSubmitted = false
+          },
+          catchMessage: this.$t('error.fetching.async.job.result'),
+          catchMethod: () => {
+            this.fetchData()
+            this.parentFetchData()
+            this.parentToggleLoading()
+            this.isSubmitted = false
+          }
+        })
+      }).catch(error => {
+        this.$notifyError(error)
+        this.fetchData()
+        this.parentFetchData()
+        this.parentToggleLoading()
+        this.isSubmitted = false
       })
     }
   }

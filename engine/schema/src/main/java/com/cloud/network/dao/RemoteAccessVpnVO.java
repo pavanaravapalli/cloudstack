@@ -18,6 +18,7 @@ package com.cloud.network.dao;
 
 import com.cloud.network.RemoteAccessVpn;
 import com.cloud.utils.db.Encrypt;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -28,7 +29,7 @@ import javax.persistence.Table;
 import java.util.UUID;
 
 @Entity
-@Table(name = ("remote_access_vpn"))
+@Table(name = "remote_access_vpn")
 public class RemoteAccessVpnVO implements RemoteAccessVpn {
     @Column(name = "account_id")
     private long accountId;
@@ -84,6 +85,11 @@ public class RemoteAccessVpnVO implements RemoteAccessVpn {
         state = State.Added;
         uuid = UUID.randomUUID().toString();
         this.vpcId = vpcId;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("RemoteAccessVpn %s", ReflectionToStringBuilderUtils.reflectOnlySelectedFields(this, "id", "uuid"));
     }
 
     @Override
@@ -169,5 +175,10 @@ public class RemoteAccessVpnVO implements RemoteAccessVpn {
     @Override
     public Class<?> getEntityType() {
         return RemoteAccessVpn.class;
+    }
+
+    @Override
+    public String getName() {
+        return null;
     }
 }

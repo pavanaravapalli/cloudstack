@@ -27,7 +27,7 @@ import random
 import imaplib
 import email
 import socket
-import urlparse
+import urllib.parse
 import datetime
 from marvin.cloudstackAPI import cloudstackAPIClient, listHosts, listRouters
 from platform import system
@@ -43,11 +43,11 @@ from marvin.codes import (
                           FAILED)
 
 def _configure_ssh_credentials(hypervisor):
-    ssh_command = "ssh -i ~/.ssh/id_rsa.cloud -ostricthostkeychecking=no "
-    
+    ssh_command = "ssh -q -i ~/.ssh/id_rsa.cloud -ostricthostkeychecking=no "
+
     if (str(hypervisor).lower() == 'vmware'
         or str(hypervisor).lower() == 'hyperv'):
-        ssh_command = "ssh -i /var/cloudstack/management/.ssh/id_rsa -ostricthostkeychecking=no "
+        ssh_command = "ssh -q -i ~cloud/.ssh/id_rsa -ostricthostkeychecking=no "
 
     return ssh_command
 
@@ -156,10 +156,13 @@ def random_gen(id=None, size=6, chars=string.ascii_uppercase + string.digits):
 
 
 def cleanup_resources(api_client, resources):
-    """Delete resources"""
+    """
+       Delete resources (created during tests)
+
+       TODO move to marvin.cloudstackTestCase.cloudstackTestCase as it is really part of all test_runs
+    """
     for obj in resources:
         obj.delete(api_client)
-
 
 def is_server_ssh_ready(ipaddress, port, username, password, retries=20, retryinterv=30, timeout=10.0, keyPairFileLocation=None):
     '''
@@ -181,7 +184,7 @@ def is_server_ssh_ready(ipaddress, port, username, password, retries=20, retryin
             retries=retries,
             delay=retryinterv,
             timeout=timeout)
-    except Exception, e:
+    except Exception as e:
         raise Exception("SSH connection has Failed. Waited %ss. Error is %s" % (retries * retryinterv, str(e)))
     else:
         return ssh
@@ -220,13 +223,13 @@ def get_host_credentials(config, hostip):
             for cluster in pod.clusters:
                 for host in cluster.hosts:
                     if str(host.url).startswith('http'):
-                        hostname = urlparse.urlsplit(str(host.url)).netloc
+                        hostname = urllib.parse.urlsplit(str(host.url)).netloc
                     else:
                         hostname = str(host.url)
                     try:
                         if socket.getfqdn(hostip) == socket.getfqdn(hostname):
                             return host.username, host.password
-                    except socket.error, e:
+                    except socket.error as e:
                         raise Exception("Unresolvable host %s error is %s" % (hostip, e))
     raise KeyError("Please provide the marvin configuration file with credentials to your hosts")
 
@@ -285,6 +288,18 @@ def get_hypervisor_type(apiclient):
     assert hosts_list_validation_result[0] == PASS, "host list validation failed"
     return hosts_list_validation_result[1].hypervisor
 
+def get_hypervisor_version(apiclient):
+
+    """Return the hypervisor type of the hosts in setup"""
+
+    cmd = listHosts.listHostsCmd()
+    cmd.type = 'Routing'
+    cmd.listall = True
+    hosts = apiclient.listHosts(cmd)
+    hosts_list_validation_result = validateList(hosts)
+    assert hosts_list_validation_result[0] == PASS, "host list validation failed"
+    return hosts_list_validation_result[1].hypervisorversion
+
 def is_snapshot_on_nfs(apiclient, dbconn, config, zoneid, snapshotid):
     """
     Checks whether a snapshot with id (not UUID) `snapshotid` is present on the nfs storage
@@ -322,7 +337,7 @@ def is_snapshot_on_nfs(apiclient, dbconn, config, zoneid, snapshotid):
         #Snapshot does not exist
         return False
 
-    from base import ImageStore
+    from .base import ImageStore
     #pass store_id to get the exact storage pool where snapshot is stored
     secondaryStores = ImageStore.list(apiclient, zoneid=zoneid, id=int(qresultset[0][1]))
 
@@ -340,8 +355,7 @@ def is_snapshot_on_nfs(apiclient, dbconn, config, zoneid, snapshotid):
     snapshotPath = str(qresultset[0][0]) + snapshot_extensions[str(hypervisor).lower()]
 
     nfsurl = secondaryStore.url
-    from urllib2 import urlparse
-    parse_url = urlparse.urlsplit(nfsurl, scheme='nfs')
+    parse_url = urllib.parse.urlsplit(nfsurl, scheme='nfs')
     host, path = str(parse_url.netloc), str(parse_url.path)
 
     if not config.mgtSvr:
@@ -434,9 +448,9 @@ def verifyElementInList(inp, toverify, responsevar=None,  pos=0):
     at a given pos
     @Input:
              I   : Input to be verified whether its a list or not
-             II  : Element to verify whether it exists in the list 
-             III : variable name in response object to verify 
-                   default to None, if None, we will verify for the complete 
+             II  : Element to verify whether it exists in the list
+             III : variable name in response object to verify
+                   default to None, if None, we will verify for the complete
                    first element EX: state of response object object
              IV  : Position in the list at which the input element to verify
                    default to 0
@@ -478,7 +492,7 @@ def checkVolumeSize(ssh_handle=None,
     @Desc : provides facility to verify the volume size against the size to verify
     @Input: 1. ssh_handle : machine against which to execute the disk size cmd
             2. volume_name : The name of the volume against which to verify the size
-            3. cmd_inp : Input command used to veify the size
+            3. cmd_inp : Input command used to verify the size
             4. size_to_verify: size against which to compare.
     @Output: Returns FAILED in case of an issue, else SUCCESS
     '''
@@ -502,12 +516,12 @@ def checkVolumeSize(ssh_handle=None,
                     if m and str(m.group(1)) == str(size_to_verify):
                         return [SUCCESS,str(m.group(1))]
             return [FAILED,"Volume Not Found"]
-    except Exception, e:
-        print "\n Exception Occurred under getDiskUsage: " \
-              "%s" %GetDetailExceptionInfo(e)
+    except Exception as e:
+        print("\n Exception Occurred under getDiskUsage: " \
+              "%s" %GetDetailExceptionInfo(e))
         return [FAILED,GetDetailExceptionInfo(e)]
 
-        
+
 def verifyRouterState(apiclient, routerid, allowedstates):
     """List the router and verify that its state is in allowed states
     @output: List, containing [Result, Reason]
@@ -539,7 +553,7 @@ def wait_until(retry_interval=2, no_of_times=2, callback=None, *callback_args):
     if callback is None:
         raise ("Bad value for callback method !")
 
-    wait_result = False 
+    wait_result = False
     for i in range(0,no_of_times):
         time.sleep(retry_interval)
         wait_result, return_val = callback(*callback_args)
@@ -549,4 +563,3 @@ def wait_until(retry_interval=2, no_of_times=2, callback=None, *callback_args):
             break
 
     return wait_result, return_val
-

@@ -16,118 +16,306 @@
 // under the License.
 
 <template>
-  <div class="form-layout">
+  <div class="form-layout" @keyup.ctrl.enter="handleSubmit">
     <a-spin :spinning="loading">
       <a-form
-        :form="form"
-        @submit="handleSubmit"
+        :ref="formRef"
+        :model="form"
+        :rules="rules"
+        @finish="handleSubmit"
         layout="vertical">
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.name') }}
-            <a-tooltip :title="apiParams.name.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="name" ref="name">
+          <template #label>
+            <tooltip-label :title="$t('label.name')" :tooltip="apiParams.name.description"/>
+          </template>
           <a-input
-            v-decorator="['name', {
-              rules: [{ required: true, message: $t('message.error.name') }]
-            }]"
-            :placeholder="this.$t('label.name')"/>
+            v-focus="true"
+            v-model:value="form.name"
+            :placeholder="apiParams.name.description"/>
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.displaytext') }}
-            <a-tooltip :title="apiParams.displaytext.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="displaytext" ref="displaytext">
+          <template #label>
+            <tooltip-label :title="$t('label.displaytext')" :tooltip="apiParams.displaytext.description"/>
+          </template>
           <a-input
-            v-decorator="['displaytext', {
-              rules: [{ required: true, message: $t('message.error.description') }]
-            }]"
-            :placeholder="this.$t('label.displaytext')"/>
+            v-model:value="form.displaytext"
+            :placeholder="apiParams.displaytext.description"/>
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.networkrate') }}
-            <a-tooltip :title="apiParams.networkrate.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="networkrate" ref="networkrate" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
+          <template #label>
+            <tooltip-label :title="$t('label.networkrate')" :tooltip="apiParams.networkrate.description"/>
+          </template>
           <a-input
-            v-decorator="['networkrate', {
-              rules: [{
-                validator: (rule, value, callback) => {
-                  if (value && (isNaN(value) || value <= 0)) {
-                    callback(this.$t('message.validate.number'))
-                  }
-                  callback()
-                }
-              }]
-            }]"
-            :placeholder="this.$t('label.networkrate')"/>
+            v-model:value="form.networkrate"
+            :placeholder="apiParams.networkrate.description"/>
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.guestiptype') }}
-            <a-tooltip :title="apiParams.guestiptype.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="guestiptype" ref="guestiptype">
+          <template #label>
+            <tooltip-label :title="$t('label.guestiptype')" :tooltip="apiParams.guestiptype.description"/>
+          </template>
           <a-radio-group
-            v-decorator="['guestiptype', {
-              initialValue: this.guestType
-            }]"
+            v-model:value="form.guestiptype"
             buttonStyle="solid"
-            @change="selected => { this.handleGuestTypeChange(selected.target.value) }">
+            @change="selected => { handleGuestTypeChange(selected.target.value) }">
             <a-radio-button value="isolated">
               {{ $t('label.isolated') }}
             </a-radio-button>
-            <a-radio-button value="l2">
+            <a-radio-button value="l2" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
               {{ $t('label.l2') }}
             </a-radio-button>
-            <a-radio-button value="shared">
+            <a-radio-button value="shared" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
               {{ $t('label.shared') }}
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item v-if="this.guestType !== 'shared'">
-          <span slot="label">
-            {{ $t('label.ispersistent') }}
-            <a-tooltip :title="apiParams.ispersistent.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
+        <a-form-item name="internetprotocol" ref="internetprotocol" v-if="guestType === 'isolated'">
+          <template #label>
+            <tooltip-label :title="$t('label.internetprotocol')" :tooltip="apiParams.internetprotocol.description"/>
+          </template>
+          <span v-if="!ipv6NetworkOfferingEnabled || internetProtocolValue!=='ipv4'">
+            <a-alert type="warning">
+              <template #message>
+                <span v-html="ipv6NetworkOfferingEnabled ? $t('message.offering.internet.protocol.warning') : $t('message.offering.ipv6.warning')" />
+              </template>
+            </a-alert>
+            <br/>
           </span>
-          <a-switch v-decorator="['ispersistent', {initialValue: false}]" />
-        </a-form-item>
-        <a-form-item v-if="this.guestType !== 'shared'">
-          <span slot="label">
-            {{ $t('label.specifyvlan') }}
-            <a-tooltip :title="apiParams.specifyvlan.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-switch v-decorator="['specifyvlan', {initialValue: true}]" :defaultChecked="true" />
-        </a-form-item>
-        <a-form-item v-if="this.guestType === 'isolated'">
-          <span slot="label">
-            {{ $t('label.vpc') }}
-            <a-tooltip :title="apiParams.forvpc.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-switch v-decorator="['forvpc', {initialValue: this.forVpc}]" :defaultChecked="this.forVpc" @change="val => { this.handleForVpcChange(val) }" />
-        </a-form-item>
-        <a-form-item :label="$t('label.userdatal2')" v-if="this.guestType === 'l2'">
-          <a-switch v-decorator="['userdatal2', {initialValue: false}]" />
-        </a-form-item>
-        <a-form-item :label="$t('label.lbtype')" v-if="this.forVpc && this.lbServiceChecked">
           <a-radio-group
-            v-decorator="[' ', {
-              initialValue: 'publicLb'
-            }]"
-            buttonStyle="solid">
+            v-model:value="form.internetprotocol"
+            :disabled="!ipv6NetworkOfferingEnabled"
+            buttonStyle="solid"
+            @change="e => { internetProtocolValue = e.target.value }" >
+            <a-radio-button value="ipv4">
+              {{ $t('label.ip.v4') }}
+            </a-radio-button>
+            <a-radio-button value="dualstack">
+              {{ $t('label.ip.v4.v6') }}
+            </a-radio-button>
+          </a-radio-group>
+        </a-form-item>
+        <a-row :gutter="12" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
+          <a-col :md="12" :lg="12">
+            <a-form-item name="specifyvlan" ref="specifyvlan">
+              <template #label>
+                <tooltip-label :title="$t('label.specifyvlan')" :tooltip="apiParams.specifyvlan.description"/>
+              </template>
+              <a-switch v-model:checked="form.specifyvlan" />
+            </a-form-item>
+          </a-col>
+          <a-col :md="12" :lg="12">
+            <a-form-item name="ispersistent" ref="ispersistent" v-if="guestType !== 'shared'">
+              <template #label>
+                <tooltip-label :title="$t('label.ispersistent')" :tooltip="apiParams.ispersistent.description"/>
+              </template>
+              <a-switch v-model:checked="form.ispersistent" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-row :gutter="12">
+          <a-col :md="12" :lg="12">
+            <a-form-item name="forvpc" ref="forvpc" v-if="guestType === 'isolated'">
+              <template #label>
+                <tooltip-label :title="$t('label.vpc')" :tooltip="apiParams.forvpc.description"/>
+              </template>
+              <a-switch v-model:checked="form.forvpc" @change="handleForVpcChange" />
+            </a-form-item>
+          </a-col>
+          <a-col :md="12" :lg="12">
+            <a-form-item name="provider" ref="provider">
+              <template #label>
+                <tooltip-label :title="$t('label.provider')" :tooltip="apiParams.provider.description"/>
+              </template>
+              <a-select
+                v-model:value="form.provider"
+                v-focus="true"
+                @change="handleProviderChange"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }"
+                :placeholder="apiParams.provider.description" >
+                <a-select-option :value="'NSX'" :label="$t('label.nsx')"> {{ $t('label.nsx') }} </a-select-option>
+                <a-select-option :value="'Netris'" :label="$t('label.netris')"> {{ $t('label.netris') }} </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-row :gutter="12" v-if="form.provider === 'NSX'">
+          <a-col :md="12" :lg="12">
+            <a-form-item name="nsxsupportlb" ref="nsxsupportlb" v-if="guestType === 'isolated'">
+              <template #label>
+                <tooltip-label :title="$t('label.nsx.supports.lb')" :tooltip="apiParams.nsxsupportlb.description"/>
+              </template>
+              <a-switch v-model:checked="form.nsxsupportlb" @change="val => { handleNsxLbService(val) }" />
+            </a-form-item>
+          </a-col>
+          <a-col :md="12" :lg="12" v-if="form.nsxsupportlb && form.forvpc">
+            <a-form-item name="nsxsupportsinternallb" ref="nsxsupportsinternallb" v-if="guestType === 'isolated'">
+              <template #label>
+                <tooltip-label :title="$t('label.nsx.supports.internal.lb')" :tooltip="apiParams.nsxsupportsinternallb.description"/>
+              </template>
+              <a-switch v-model:checked="form.nsxsupportsinternallb"/>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-form-item name="networkmode" ref="networkmode" v-if="guestType === 'isolated'">
+          <template #label>
+            <tooltip-label :title="$t('label.networkmode')" :tooltip="apiParams.networkmode.description"/>
+          </template>
+          <a-select
+            optionFilterProp="label"
+            v-model:value="form.networkmode"
+            @change="val => { handleForNetworkModeChange(val) }"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            :placeholder="apiParams.networkmode.description">
+            <a-select-option v-for="(opt) in networkmodes" :key="opt.name" :label="opt.name">
+              {{ opt.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item name="routingmode" ref="routingmode" v-if="networkmode === 'ROUTED' || internetProtocolValue === 'ipv6' || internetProtocolValue === 'dualstack'">
+          <template #label>
+            <tooltip-label :title="$t('label.routingmode')" :tooltip="apiParams.routingmode.description"/>
+          </template>
+          <a-radio-group
+            v-model:value="form.routingmode"
+            buttonStyle="solid"
+            @change="selected => { routingMode = selected.target.value }">
+            <a-radio-button value="static">
+              {{ $t('label.static') }}
+            </a-radio-button>
+            <a-radio-button value="dynamic">
+              {{ $t('label.dynamic') }}
+            </a-radio-button>
+          </a-radio-group>
+        </a-form-item>
+        <a-row :gutter="12" v-if="routingMode === 'dynamic' && !forVpc && form.provider === 'NSX'">
+          <a-col :md="12" :lg="12">
+            <a-form-item name="specifyasnumber" ref="specifyasnumber">
+              <template #label>
+                <tooltip-label :title="$t('label.specifyasnumber')"/>
+              </template>
+              <a-switch v-model:checked="form.specifyasnumber" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-form-item name="userdatal2" ref="userdatal2" :label="$t('label.user.data')" v-if="guestType === 'l2'">
+          <a-switch v-model:checked="form.userdatal2" />
+        </a-form-item>
+        <a-row :gutter="12">
+          <a-col :md="12" :lg="12">
+            <a-form-item name="promiscuousmode" ref="promiscuousmode" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
+              <template #label>
+                <tooltip-label :title="$t('label.promiscuousmode')" :tooltip="$t('message.network.offering.promiscuous.mode')"/>
+              </template>
+              <a-radio-group
+                v-model:value="form.promiscuousmode"
+                buttonStyle="solid">
+                <a-radio-button value="">
+                  {{ $t('label.none') }}
+                </a-radio-button>
+                <a-radio-button value="true">
+                  {{ $t('label.accept') }}
+                </a-radio-button>
+                <a-radio-button value="false">
+                  {{ $t('label.reject') }}
+                </a-radio-button>
+              </a-radio-group>
+            </a-form-item>
+            <a-form-item name="macaddresschanges" ref="macaddresschanges" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
+              <template #label>
+                <tooltip-label :title="$t('label.macaddresschanges')" :tooltip="$t('message.network.offering.mac.address.changes')"/>
+              </template>
+              <a-radio-group
+                v-model:value="form.macaddresschanges"
+                buttonStyle="solid">
+                <a-radio-button value="">
+                  {{ $t('label.none') }}
+                </a-radio-button>
+                <a-radio-button value="true">
+                  {{ $t('label.accept') }}
+                </a-radio-button>
+                <a-radio-button value="false">
+                  {{ $t('label.reject') }}
+                </a-radio-button>
+              </a-radio-group>
+            </a-form-item>
+          </a-col>
+          <a-col :md="12" :lg="12">
+            <a-form-item name="forgedtransmits" ref="forgedtransmits" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
+              <template #label>
+                <tooltip-label :title="$t('label.forgedtransmits')" :tooltip="$t('message.network.offering.forged.transmits')"/>
+              </template>
+              <a-radio-group
+                v-model:value="form.forgedtransmits"
+                buttonStyle="solid">
+                <a-radio-button value="">
+                  {{ $t('label.none') }}
+                </a-radio-button>
+                <a-radio-button value="true">
+                  {{ $t('label.accept') }}
+                </a-radio-button>
+                <a-radio-button value="false">
+                  {{ $t('label.reject') }}
+                </a-radio-button>
+              </a-radio-group>
+            </a-form-item>
+            <a-form-item name="maclearning" ref="maclearning" v-if="form.provider !== 'NSX' && form.provider !== 'Netris'">
+              <template #label>
+                <tooltip-label :title="$t('label.maclearning')" :tooltip="$t('message.network.offering.mac.learning')"/>
+              </template>
+              <span v-if="form.maclearning !== ''">
+                <a-alert type="warning">
+                  <template #message>
+                    <div v-html="$t('message.network.offering.mac.learning.warning')"></div>
+                  </template>
+                </a-alert>
+                <br/>
+              </span>
+              <a-radio-group
+                v-model:value="form.maclearning"
+                buttonStyle="solid">
+                <a-radio-button value="">
+                  {{ $t('label.none') }}
+                </a-radio-button>
+                <a-radio-button value="true">
+                  {{ $t('label.accept') }}
+                </a-radio-button>
+                <a-radio-button value="false">
+                  {{ $t('label.reject') }}
+                </a-radio-button>
+              </a-radio-group>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-form-item v-if="guestType !== 'l2'">
+          <template #label>
+            <tooltip-label :title="$t('label.supportedservices')" :tooltip="apiParams.supportedservices.description"/>
+          </template>
+          <div class="supported-services-container" scroll-to="last-child">
+            <a-list itemLayout="horizontal" :dataSource="supportedServices">
+              <template #renderItem="{item}">
+                <a-list-item>
+                  <CheckBoxSelectPair
+                    :resourceKey="item.name"
+                    :checkBoxLabel="item.description"
+                    :forExternalNetProvider="form.provider === 'NSX' || form.provider === 'Netris'"
+                    :defaultCheckBoxValue="form.provider === 'NSX' || form.provider === 'Netris'"
+                    :selectOptions="!supportedServiceLoading ? item.provider: []"
+                    @handle-checkselectpair-change="handleSupportedServiceChange"/>
+                </a-list-item>
+              </template>
+            </a-list>
+          </div>
+        </a-form-item>
+        <a-form-item name="lbtype" ref="lbtype" :label="$t('label.lbtype')" v-if="forVpc && lbServiceChecked">
+          <a-radio-group
+            v-model:value="form.lbtype"
+            buttonStyle="solid"
+            @change="e => { handleLbTypeChange(e.target.value) }" >
             <a-radio-button value="publicLb">
               {{ $t('label.public.lb') }}
             </a-radio-button>
@@ -136,119 +324,43 @@
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item :label="$t('label.promiscuousmode')">
-          <a-radio-group
-            v-decorator="['promiscuousmode', {
-              initialValue: this.promiscuousMode
-            }]"
-            buttonStyle="solid"
-            @change="selected => { this.handlePromiscuousModeChange(selected.target.value) }">
-            <a-radio-button value="">
-              {{ $t('label.none') }}
-            </a-radio-button>
-            <a-radio-button value="true">
-              {{ $t('label.accept') }}
-            </a-radio-button>
-            <a-radio-button value="false">
-              {{ $t('label.reject') }}
-            </a-radio-button>
-          </a-radio-group>
-        </a-form-item>
-        <a-form-item :label="$t('label.macaddresschanges')">
-          <a-radio-group
-            v-decorator="['macaddresschanges', {
-              initialValue: this.macAddressChanges
-            }]"
-            buttonStyle="solid"
-            @change="selected => { this.handleMacAddressChangesChange(selected.target.value) }">
-            <a-radio-button value="">
-              {{ $t('label.none') }}
-            </a-radio-button>
-            <a-radio-button value="true">
-              {{ $t('label.accept') }}
-            </a-radio-button>
-            <a-radio-button value="false">
-              {{ $t('label.reject') }}
-            </a-radio-button>
-          </a-radio-group>
-        </a-form-item>
-        <a-form-item :label="$t('label.forgedtransmits')">
-          <a-radio-group
-            v-decorator="['forgedtransmits', {
-              initialValue: this.forgedTransmits
-            }]"
-            buttonStyle="solid"
-            @change="selected => { this.handleForgedTransmitsChange(selected.target.value) }">
-            <a-radio-button value="">
-              {{ $t('label.none') }}
-            </a-radio-button>
-            <a-radio-button value="true">
-              {{ $t('label.accept') }}
-            </a-radio-button>
-            <a-radio-button value="false">
-              {{ $t('label.reject') }}
-            </a-radio-button>
-          </a-radio-group>
-        </a-form-item>
-        <a-form-item v-if="this.guestType !== 'l2'">
-          <span slot="label">
-            {{ $t('label.supportedservices') }}
-            <a-tooltip :title="apiParams.supportedservices.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <div class="supported-services-container" scroll-to="last-child">
-            <a-list itemLayout="horizontal" :dataSource="this.supportedServices">
-              <a-list-item slot="renderItem" slot-scope="item">
-                <CheckBoxSelectPair
-                  v-decorator="['service.'+item.name, {}]"
-                  :resourceKey="item.name"
-                  :checkBoxLabel="item.description"
-                  :checkBoxDecorator="'service.' + item.name"
-                  :selectOptions="item.provider"
-                  :selectDecorator="item.name + '.provider'"
-                  @handle-checkpair-change="handleSupportedServiceChange"/>
-              </a-list-item>
-            </a-list>
-          </div>
-        </a-form-item>
-        <a-form-item v-if="this.isVirtualRouterForAtLeastOneService">
-          <span slot="label">
-            {{ $t('label.serviceofferingid') }}
-            <a-tooltip :title="apiParams.serviceofferingid.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="serviceofferingid" ref="serviceofferingid" v-if="guestType !== 'l2'">
+          <a-alert v-if="!isVirtualRouterForAtLeastOneService" type="warning" style="margin-bottom: 10px">
+            <template #message>
+              <span v-html="$t('message.vr.alert.upon.network.offering.creation.others')" />
+            </template>
+          </a-alert>
+          <template #label>
+            <tooltip-label :title="$t('label.serviceofferingid')" :tooltip="apiParams.serviceofferingid.description"/>
+          </template>
           <a-select
-            v-decorator="['serviceofferingid', {
-              rules: [
-                {
-                  required: true,
-                  message: `${this.$t('message.error.select')}`
-                }
-              ],
-              initialValue: 0
-            }]"
+            :getPopupContainer="(trigger) => trigger.parentNode"
             showSearch
-            optionFilterProp="children"
+            optionFilterProp="label"
+            v-model:value="form.serviceofferingid"
             :filterOption="(input, option) => {
-              return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
             }"
             :loading="serviceOfferingLoading"
-            :placeholder="this.$t('label.serviceofferingid')">
-            <a-select-option v-for="(opt, optIndex) in this.serviceOfferings" :key="optIndex">
-              {{ opt.name || opt.description }}
+            :placeholder="apiParams.serviceofferingid.description">
+            <a-select-option
+              v-for="(offering, index) in serviceOfferings"
+              :value="offering.id"
+              :key="index">
+              {{ offering.displaytext || offering.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item :label="$t('label.redundantrouter')" v-if="(this.guestType === 'shared' || this.guestType === 'isolated') && this.sourceNatServiceChecked && !this.isVpcVirtualRouterForAtLeastOneService">
-          <a-switch v-decorator="['redundantroutercapability', {initialValue: false}]" />
+        <a-form-item
+          name="redundantroutercapability"
+          ref="redundantroutercapability"
+          :label="$t('label.redundantrouter')"
+          v-if="(guestType === 'shared' || guestType === 'isolated') && sourceNatServiceChecked && !isVpcVirtualRouterForAtLeastOneService">
+          <a-switch v-model:checked="form.redundantroutercapability" />
         </a-form-item>
-        <a-form-item :label="$t('label.sourcenattype')" v-if="(this.guestType === 'shared' || this.guestType === 'isolated') && this.sourceNatServiceChecked">
+        <a-form-item name="sourcenattype" ref="sourcenattype" :label="$t('label.sourcenattype')" v-if="(guestType === 'shared' || guestType === 'isolated') && sourceNatServiceChecked">
           <a-radio-group
-            v-decorator="['sourcenattype', {
-              initialValue: 'peraccount'
-            }]"
+            v-model:value="form.sourcenattype"
             buttonStyle="solid">
             <a-radio-button value="peraccount">
               {{ $t('label.per.account') }}
@@ -258,14 +370,27 @@
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item :label="$t('label.service.lb.elasticlbcheckbox')" v-if="this.guestType == 'shared' && this.lbServiceChecked && this.lbServiceProvider === 'Netscaler'">
-          <a-switch v-decorator="['elasticlb', {initialValue: false}]" />
+        <a-form-item
+          name="vmautoscalingcapability"
+          ref="vmautoscalingcapability"
+          :label="$t('label.supportsvmautoscaling')"
+          v-if="lbServiceChecked && ['Netscaler', 'VirtualRouter', 'VpcVirtualRouter'].includes(lbServiceProvider)">
+          <a-switch v-model:checked="form.vmautoscalingcapability" />
         </a-form-item>
-        <a-form-item :label="$t('label.service.lb.inlinemodedropdown')" v-if="(this.guestType === 'shared' || this.guestType === 'isolated') && this.lbServiceChecked && this.firewallServiceChecked && this.lbServiceProvider === 'F5BigIp' && this.firewallServiceProvider === 'JuniperSRX'">
+        <a-form-item
+          name="elasticlb"
+          ref="elasticlb"
+          :label="$t('label.service.lb.elasticlbcheckbox')"
+          v-if="guestType === 'shared' && lbServiceChecked && lbServiceProvider === 'Netscaler'">
+          <a-switch v-model:checked="form.elasticlb" />
+        </a-form-item>
+        <a-form-item
+          name="inlinemode"
+          ref="inlinemode"
+          :label="$t('label.service.lb.inlinemodedropdown')"
+          v-if="['shared', 'isolated'].includes(guestType) && lbServiceChecked && firewallServiceChecked && ['F5BigIp', 'Netscaler'].includes(lbServiceProvider) && ['JuniperSRX'].includes(firewallServiceProvider)">
           <a-radio-group
-            v-decorator="['inlinemode', {
-              initialValue: 'false'
-            }]"
+            v-model:value="form.inlinemode"
             buttonStyle="solid">
             <a-radio-button value="false">
               {{ $t('side.by.side') }}
@@ -275,31 +400,37 @@
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item :label="$t('label.service.lb.netscaler.servicepackages')" v-if="(this.guestType === 'shared' || this.guestType === 'isolated') && this.lbServiceChecked && this.lbServiceProvider === 'Netscaler'">
+        <a-form-item
+          name="netscalerservicepackages"
+          ref="netscalerservicepackages"
+          :label="$t('label.service.lb.netscaler.servicepackages')"
+          v-if="(guestType === 'shared' || guestType === 'isolated') && lbServiceChecked && lbServiceProvider === 'Netscaler'">
           <a-select
-            v-decorator="['netscalerservicepackages', {}]"
+            v-model:value="form.netscalerservicepackages"
             showSearch
-            optionFilterProp="children"
+            optionFilterProp="label"
             :filterOption="(input, option) => {
-              return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
             }"
             :loading="registeredServicePackageLoading"
-            :placeholder="this.$t('label.service.lb.netscaler.servicepackages')">
-            <a-select-option v-for="(opt, optIndex) in this.registeredServicePackages" :key="optIndex">
+            :placeholder="$t('label.service.lb.netscaler.servicepackages')">
+            <a-select-option v-for="(opt, optIndex) in registeredServicePackages" :key="optIndex" :label="opt.name || opt.description">
               {{ opt.name || opt.description }}
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item :label="$t('label.service.lb.netscaler.servicepackages.description')" v-if="(this.guestType === 'shared' || this.guestType === 'isolated') && this.lbServiceChecked && this.lbServiceProvider === 'Netscaler'">
+        <a-form-item
+          name="netscalerservicepackagesdescription"
+          ref="netscalerservicepackagesdescription"
+          :label="$t('label.service.lb.netscaler.servicepackages.description')"
+          v-if="(guestType === 'shared' || guestType === 'isolated') && lbServiceChecked && lbServiceProvider === 'Netscaler'">
           <a-input
-            v-decorator="['netscalerservicepackagesdescription', {}]"
-            :placeholder="this.$t('label.service.lb.netscaler.servicepackages.description')"/>
+            v-model:value="form.netscalerservicepackagesdescription"
+            :placeholder="$t('label.service.lb.netscaler.servicepackages.description')"/>
         </a-form-item>
-        <a-form-item :label="$t('label.service.lb.lbisolationdropdown')" v-show="false">
+        <a-form-item name="isolation" ref="isolation" :title="$t('label.service.lb.lbisolationdropdown')" v-show="false">
           <a-radio-group
-            v-decorator="['isolation', {
-              initialValue: 'dedicated'
-            }]"
+            v-model:value="form.isolation"
             buttonStyle="solid">
             <a-radio-button value="dedicated">
               {{ $t('label.dedicated') }}
@@ -309,49 +440,54 @@
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item :label="$t('label.service.staticnat.elasticipcheckbox')" v-if="this.guestType == 'shared' && this.staticNatServiceChecked && this.staticNatServiceProvider === 'Netscaler'">
-          <a-switch v-decorator="['elasticip', {initialValue: this.isElasticIp}]" :defaultChecked="this.isElasticIp" @change="val => { this.isElasticIp = val }" />
+        <a-form-item
+          name="elasticip"
+          ref="elasticip"
+          :label="$t('label.service.staticnat.elasticipcheckbox')"
+          v-if="guestType === 'shared' && staticNatServiceChecked && staticNatServiceProvider === 'Netscaler'">
+          <a-switch v-model:checked="form.elasticip" />
         </a-form-item>
-        <a-form-item :label="$t('label.service.staticnat.associatepublicip')" v-if="this.isElasticIp && this.staticNatServiceChecked && this.staticNatServiceProvider === 'Netscaler'">
-          <a-switch v-decorator="['associatepublicip', {initialValue: false}]" />
+        <a-form-item
+          name="associatepublicip"
+          ref="associatepublicip"
+          :label="$t('label.service.staticnat.associatepublicip')"
+          v-if="isElasticIp && staticNatServiceChecked && staticNatServiceProvider === 'Netscaler'">
+          <a-switch v-model:checked="form.associatepublicip" />
         </a-form-item>
-        <a-form-item :label="$t('label.supportsstrechedl2subnet')" v-if="this.connectivityServiceChecked">
-          <a-switch v-decorator="['supportsstrechedl2subnet', {initialValue: false}]" />
+        <a-form-item
+          name="supportsstrechedl2subnet"
+          ref="supportsstrechedl2subnet"
+          :label="$t('label.supportsstrechedl2subnet')"
+          v-if="connectivityServiceChecked">
+          <a-switch v-model:checked="form.supportsstrechedl2subnet" />
         </a-form-item>
-        <a-form-item :label="$t('label.supportspublicaccess')" v-show="false">
-          <a-switch v-decorator="['supportspublicaccess', {initialValue: false}]" />
+        <a-form-item name="supportspublicaccess" ref="supportspublicaccess" :label="$t('label.supportspublicaccess')" v-show="false">
+          <a-switch v-model:checked="form.supportspublicaccess" />
         </a-form-item>
-        <a-form-item v-if="(this.guestType === 'shared' || this.guestType === 'isolated') && !this.isVpcVirtualRouterForAtLeastOneService">
-          <span slot="label">
-            {{ $t('label.conservemode') }}
-            <a-tooltip :title="apiParams.conservemode.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-switch v-decorator="['conservemode', {initialValue: true}]" :defaultChecked="true" />
+        <a-form-item
+          name="conservemode"
+          ref="conservemode"
+          v-if="(guestType === 'shared' || guestType === 'isolated') &&
+          (form.provider !== 'NSX' && form.provider !== 'Netris') && networkmode !== 'ROUTED'">
+          <template #label>
+            <tooltip-label :title="$t('label.conservemode')" :tooltip="apiParams.conservemode.description"/>
+          </template>
+          <a-switch v-model:checked="form.conservemode" />
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.tags') }}
-            <a-tooltip :title="apiParams.tags.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="tags" ref="tags">
+          <template #label>
+            <tooltip-label :title="$t('label.tags')" :tooltip="apiParams.tags.description"/>
+          </template>
           <a-input
-            v-decorator="['tags', {}]"
-            :placeholder="this.$t('label.tags')"/>
+            v-model:value="form.tags"
+            :placeholder="apiParams.tags.description"/>
         </a-form-item>
-        <a-form-item v-if="this.requiredNetworkOfferingExists && this.guestType === 'isolated' && this.sourceNatServiceChecked">
-          <span slot="label">
-            {{ $t('label.availability') }}
-            <a-tooltip :title="apiParams.availability.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="availability" ref="availability" v-if="requiredNetworkOfferingExists && guestType === 'isolated' && sourceNatServiceChecked">
+          <template #label>
+            <tooltip-label :title="$t('label.availability')" :tooltip="apiParams.availability.description"/>
+          </template>
           <a-radio-group
-            v-decorator="['availability', {
-              initialValue: 'optional'
-            }]"
+            v-model:value="form.availability"
             buttonStyle="solid">
             <a-radio-button value="optional">
               {{ $t('label.optional') }}
@@ -361,17 +497,12 @@
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item v-if="this.firewallServiceChecked">
-          <span slot="label">
-            {{ $t('label.egressdefaultpolicy') }}
-            <a-tooltip :title="apiParams.egressdefaultpolicy.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="egressdefaultpolicy" ref="egressdefaultpolicy" v-if="firewallServiceChecked">
+          <template #label>
+            <tooltip-label :title="$t('label.egressdefaultpolicy')" :tooltip="apiParams.egressdefaultpolicy.description"/>
+          </template>
           <a-radio-group
-            v-decorator="['egressdefaultpolicy', {
-              initialValue: 'allow'
-            }]"
+            v-model:value="form.egressdefaultpolicy"
             buttonStyle="solid">
             <a-radio-button value="allow">
               {{ $t('label.allow') }}
@@ -381,111 +512,104 @@
             </a-radio-button>
           </a-radio-group>
         </a-form-item>
-        <a-form-item :label="$t('label.ispublic')" v-show="this.isAdmin()">
-          <a-switch v-decorator="['ispublic', {initialValue: this.isPublic}]" :defaultChecked="this.isPublic" @change="val => { this.isPublic = val }" />
+        <a-form-item name="ispublic" ref="ispublic" :label="$t('label.ispublic')" v-show="isAdmin()">
+          <a-switch v-model:checked="form.ispublic" @change="val => { isPublic = val }" />
         </a-form-item>
-        <a-form-item v-if="!this.isPublic">
-          <span slot="label">
-            {{ $t('label.domainid') }}
-            <a-tooltip :title="apiParams.domainid.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="domainid" ref="domainid" v-if="!isPublic">
+          <template #label>
+            <tooltip-label :title="$t('label.domainid')" :tooltip="apiParams.domainid.description"/>
+          </template>
           <a-select
             mode="multiple"
-            v-decorator="['domainid', {
-              rules: [
-                {
-                  required: true,
-                  message: `${this.$t('message.error.select')}`
-                }
-              ]
-            }]"
+            :getPopupContainer="(trigger) => trigger.parentNode"
+            v-model:value="form.domainid"
             showSearch
-            optionFilterProp="children"
+            optionFilterProp="label"
             :filterOption="(input, option) => {
-              return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
             }"
             :loading="domainLoading"
-            :placeholder="this.$t('label.domain')">
-            <a-select-option v-for="(opt, optIndex) in this.domains" :key="optIndex">
-              {{ opt.name || opt.description }}
+            :placeholder="apiParams.domainid.description">
+            <a-select-option v-for="(opt, optIndex) in domains" :key="optIndex" :label="opt.path || opt.name || opt.description">
+              <span>
+                <resource-icon v-if="opt && opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                <block-outlined v-else style="margin-right: 5px" />
+                {{ opt.path || opt.name || opt.description }}
+              </span>
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item>
-          <span slot="label">
-            {{ $t('label.zoneid') }}
-            <a-tooltip :title="apiParams.zoneid.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
+        <a-form-item name="zoneid" ref="zoneid">
+          <template #label>
+            <tooltip-label :title="$t('label.zoneid')" :tooltip="apiParams.zoneid.description"/>
+          </template>
           <a-select
             id="zone-selection"
             mode="multiple"
-            v-decorator="['zoneid', {
-              rules: [
-                {
-                  validator: (rule, value, callback) => {
-                    if (value && value.length > 1 && value.indexOf(0) !== -1) {
-                      callback($t('message.error.zone.combined'))
-                    }
-                    callback()
-                  }
-                }
-              ]
-            }]"
+            :getPopupContainer="(trigger) => trigger.parentNode"
+            v-model:value="form.zoneid"
             showSearch
-            optionFilterProp="children"
+            optionFilterProp="label"
             :filterOption="(input, option) => {
-              return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
             }"
             :loading="zoneLoading"
-            :placeholder="this.$t('label.zone')">
-            <a-select-option v-for="(opt, optIndex) in this.zones" :key="optIndex">
-              {{ opt.name || opt.description }}
+            :placeholder="apiParams.zoneid.description">
+            <a-select-option v-for="(opt, optIndex) in zones" :key="optIndex" :label="opt.name || opt.description">
+              <span>
+                <resource-icon v-if="opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                <global-outlined v-else style="margin-right: 5px"/>
+                {{ opt.name || opt.description }}
+              </span>
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item v-if="apiParams.enable">
-          <span slot="label">
-            {{ $t('label.enable.network.offering') }}
-            <a-tooltip :title="apiParams.enable.description">
-              <a-icon type="info-circle" style="color: rgba(0,0,0,.45)" />
-            </a-tooltip>
-          </span>
-          <a-switch v-decorator="['enable', {initialValue: false}]" />
+        <a-form-item name="enable" ref="enable" v-if="apiParams.enable">
+          <template #label>
+            <tooltip-label :title="$t('label.enable.network.offering')" :tooltip="apiParams.enable.description"/>
+          </template>
+          <a-switch v-model:checked="form.enable" />
         </a-form-item>
       </a-form>
       <div :span="24" class="action-button">
-        <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-        <a-button :loading="loading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+        <a-button @click="closeAction">{{ $t('label.cancel') }}</a-button>
+        <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
       </div>
     </a-spin>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
+import { isAdmin } from '@/role'
+import { mixinForm } from '@/utils/mixin'
 import CheckBoxSelectPair from '@/components/CheckBoxSelectPair'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import TooltipLabel from '@/components/widgets/TooltipLabel'
 
 export default {
   name: 'AddNetworkOffering',
+  mixins: [mixinForm],
   components: {
-    CheckBoxSelectPair
+    CheckBoxSelectPair,
+    ResourceIcon,
+    TooltipLabel
   },
   data () {
     return {
       hasAdvanceZone: false,
       requiredNetworkOfferingExists: false,
       guestType: 'isolated',
-      promiscuousMode: '',
-      macAddressChanges: '',
-      forgedTransmits: '',
+      internetProtocolValue: 'ipv4',
       selectedDomains: [],
       selectedZones: [],
       forVpc: false,
+      provider: '',
+      lbType: 'publicLb',
+      macLearningValue: '',
       supportedServices: [],
+      supportedSvcs: [],
       supportedServiceLoading: false,
       isVirtualRouterForAtLeastOneService: false,
       isVpcVirtualRouterForAtLeastOneService: false,
@@ -494,6 +618,8 @@ export default {
       sourceNatServiceChecked: false,
       lbServiceChecked: false,
       lbServiceProvider: '',
+      registeredServicePackages: [],
+      registeredServicePackageLoading: false,
       isElasticIp: false,
       staticNatServiceChecked: false,
       staticNatServiceProvider: '',
@@ -506,16 +632,47 @@ export default {
       domainLoading: false,
       zones: [],
       zoneLoading: false,
-      loading: false
+      ipv6NetworkOfferingEnabled: false,
+      routedNetworkEnabled: false,
+      loading: false,
+      networkmode: '',
+      networkmodes: [
+        {
+          id: 0,
+          name: 'NATTED'
+        },
+        {
+          id: 1,
+          name: 'ROUTED'
+        }
+      ],
+      routingMode: 'static',
+      VPCVR: {
+        name: 'VPCVirtualRouter',
+        description: 'VPCVirtualRouter',
+        enabled: true
+      },
+      VR: {
+        name: 'VirtualRouter',
+        description: 'VirtualRouter',
+        enabled: true
+      },
+      NSX: {
+        name: 'Nsx',
+        description: 'Nsx',
+        enabled: true
+      },
+      Netris: {
+        name: 'Netris',
+        description: 'Netris',
+        enabled: true
+      },
+      nsxSupportedServicesMap: {},
+      netrisSupportedServicesMap: {}
     }
   },
   beforeCreate () {
-    this.form = this.$form.createForm(this)
-    this.apiParams = {}
-    var apiConfig = this.$store.getters.apis.createNetworkOffering || {}
-    apiConfig.params.forEach(param => {
-      this.apiParams[param.name] = param
-    })
+    this.apiParams = this.$getApiParams('createNetworkOffering')
   },
   created () {
     this.zones = [
@@ -524,19 +681,58 @@ export default {
         name: this.$t('label.all.zone')
       }
     ]
-  },
-  mounted () {
+    this.initForm()
     this.fetchData()
   },
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({
+        internetprotocol: this.internetProtocolValue,
+        guestiptype: this.guestType,
+        specifyvlan: true,
+        lbtype: this.lbType,
+        promiscuousmode: '',
+        macaddresschanges: '',
+        forgedtransmits: '',
+        maclearning: this.macLearningValue,
+        sourcenattype: 'peraccount',
+        inlinemode: 'false',
+        vmautoscalingcapability: true,
+        isolation: 'dedicated',
+        conservemode: true,
+        availability: 'optional',
+        egressdefaultpolicy: 'deny',
+        ispublic: this.isPublic,
+        nsxsupportlb: true,
+        routingmode: 'static'
+      })
+      this.rules = reactive({
+        name: [{ required: true, message: this.$t('message.error.name') }],
+        networkrate: [{ type: 'number', validator: this.validateNumber }],
+        serviceofferingid: [{ required: true, message: this.$t('message.error.select') }],
+        domainid: [{ type: 'array', required: true, message: this.$t('message.error.select') }],
+        zoneid: [{
+          type: 'array',
+          validator: async (rule, value) => {
+            if (value && value.length > 1 && value.indexOf(0) !== -1) {
+              return Promise.reject(this.$t('message.error.zone.combined'))
+            }
+            return Promise.resolve()
+          }
+        }]
+      })
+    },
     fetchData () {
       this.fetchDomainData()
       this.fetchZoneData()
       this.fetchSupportedServiceData()
       this.fetchServiceOfferingData()
+      this.fetchIpv6NetworkOfferingConfiguration()
+      this.fetchRoutedNetworkConfiguration()
     },
     isAdmin () {
-      return ['Admin'].includes(this.$store.getters.userInfo.roletype)
+      return isAdmin()
     },
     isSupportedServiceObject (obj) {
       return (obj !== null && obj !== undefined && Object.keys(obj).length > 0 && obj.constructor === Object && 'provider' in obj)
@@ -544,20 +740,40 @@ export default {
     fetchDomainData () {
       const params = {}
       params.listAll = true
+      params.showicon = true
       params.details = 'min'
       this.domainLoading = true
-      api('listDomains', params).then(json => {
+      getAPI('listDomains', params).then(json => {
         const listDomains = json.listdomainsresponse.domain
         this.domains = this.domains.concat(listDomains)
       }).finally(() => {
         this.domainLoading = false
       })
     },
+    fetchIpv6NetworkOfferingConfiguration () {
+      this.ipv6NetworkOfferingEnabled = false
+      var params = { name: 'ipv6.offering.enabled' }
+      getAPI('listConfigurations', params).then(json => {
+        var value = json?.listconfigurationsresponse?.configuration?.[0].value || null
+        this.ipv6NetworkOfferingEnabled = value === 'true'
+      })
+    },
+    fetchRoutedNetworkConfiguration () {
+      this.routedNetworkEnabled = false
+      var params = { name: 'routed.network.vpc.enabled' }
+      getAPI('listConfigurations', params).then(json => {
+        var value = json?.listconfigurationsresponse?.configuration?.[0].value || null
+        this.routedNetworkEnabled = value === 'true'
+        if (!this.routedNetworkEnabled) {
+          this.networkmodes.pop()
+        }
+      })
+    },
     fetchZoneData () {
       const params = {}
-      params.listAll = true
+      params.showicon = true
       this.zoneLoading = true
-      api('listZones', params).then(json => {
+      getAPI('listZones', params).then(json => {
         const listZones = json.listzonesresponse.zone
         this.zones = this.zones.concat(listZones)
       }).finally(() => {
@@ -566,22 +782,33 @@ export default {
     },
     handleGuestTypeChange (val) {
       this.guestType = val
-    },
-    handlePromiscuousModeChange (val) {
-      this.promiscuousMode = val
-    },
-    handleMacAddressChangesChange (val) {
-      this.macAddressChanges = val
-    },
-    handleForgedTransmitsChange (val) {
-      this.forgedTransmits = val
+      this.networkmode = ''
+      this.form.networkmode = ''
+      if (val === 'l2') {
+        this.form.forvpc = false
+        this.form.lbtype = 'publicLb'
+        this.isVirtualRouterForAtLeastOneService = false
+        this.isVpcVirtualRouterForAtLeastOneService = false
+        this.serviceOfferingLoading = false
+        this.sourceNatServiceChecked = false
+        this.lbServiceChecked = false
+        this.lbServiceProvider = ''
+        this.registeredServicePackages = []
+        this.registeredServicePackageLoading = false
+        this.isElasticIp = false
+        this.staticNatServiceChecked = false
+        this.staticNatServiceProvider = ''
+        this.connectivityServiceChecked = false
+        this.firewallServiceChecked = false
+        this.firewallServiceProvider = ''
+        this.selectedServiceProviderMap = {}
+      }
+      this.fetchSupportedServiceData()
     },
     fetchSupportedServiceData () {
-      const params = {}
-      params.listAll = true
       this.supportedServiceLoading = true
       this.supportedServices = []
-      api('listSupportedNetworkServices', params).then(json => {
+      getAPI('listSupportedNetworkServices').then(json => {
         this.supportedServices = json.listsupportednetworkservicesresponse.networkservice
         for (var i in this.supportedServices) {
           var networkServiceObj = this.supportedServices[i]
@@ -638,24 +865,26 @@ export default {
           this.supportedServices[i].provider = providers
           this.supportedServices[i].description = serviceDisplayName
         }
+      }).finally(() => {
+        this.supportedServiceLoading = false
+        this.updateSupportedServices()
       })
     },
     fetchServiceOfferingData () {
       const params = {}
       params.issystem = true
       params.systemvmtype = 'domainrouter'
-      this.supportedServiceLoading = true
-      api('listServiceOfferings', params).then(json => {
-        const listServiceOfferings = json.listserviceofferingsresponse.serviceoffering
-        this.serviceOfferings = this.serviceOfferings.concat(listServiceOfferings)
+      this.serviceOfferingLoading = true
+      getAPI('listServiceOfferings', params).then(json => {
+        this.serviceOfferings = json?.listserviceofferingsresponse?.serviceoffering || []
       }).finally(() => {
-        this.supportedServiceLoading = false
+        this.serviceOfferingLoading = false
       })
     },
     fetchRegisteredServicePackageData () {
       this.registeredServicePackageLoading = true
       this.registeredServicePackages = []
-      api('listRegisteredServicePackages', {}).then(json => {
+      getAPI('listRegisteredServicePackages', {}).then(json => {
         var servicePackages = json.listregisteredservicepackage.registeredServicepackage
         if (servicePackages === undefined || servicePackages == null || !servicePackages) {
           servicePackages = json.listregisteredservicepackage
@@ -671,32 +900,152 @@ export default {
         this.registeredServicePackageLoading = false
       })
     },
-    handleForVpcChange (forVpc) {
+    updateSupportedServices () {
+      this.supportedServiceLoading = true
+      var supportedServices = this.supportedServices
       var self = this
-      this.forVpc = forVpc
-      this.supportedServices.forEach(function (svc, index) {
-        if (svc !== 'Connectivity') {
-          var providers = svc.provider
-          providers.forEach(function (provider, providerIndex) {
-            if (self.forVpc) { // *** vpc ***
-              if (provider.name === 'InternalLbVm' || provider.name === 'VpcVirtualRouter' || provider.name === 'Netscaler' || provider.name === 'BigSwitchBcf' || provider.name === 'ConfigDrive') {
-                provider.enabled = true
-              } else {
-                provider.enabled = false
-              }
-            } else { // *** non-vpc ***
-              if (provider.name === 'InternalLbVm' || provider.name === 'VpcVirtualRouter') {
-                provider.enabled = false
-              } else {
-                provider.enabled = true
-              }
-            }
-            providers[providerIndex] = provider
+      if (this.provider !== 'NSX' && this.provider !== 'Netris') {
+        if (this.networkmode === 'ROUTED' && this.guestType === 'isolated') {
+          supportedServices = supportedServices.filter(service => {
+            return !['SourceNat', 'StaticNat', 'Lb', 'PortForwarding', 'Vpn'].includes(service.name)
           })
-          svc.provider = providers
-          self.supportedServices[index] = svc
         }
-      })
+        supportedServices.forEach(function (svc, index) {
+          if (svc.name !== 'Connectivity') {
+            var providers = svc.provider
+            providers.forEach(function (provider, providerIndex) {
+              if (self.forVpc) { // *** vpc ***
+                var enabledProviders = ['VpcVirtualRouter', 'Netscaler', 'BigSwitchBcf', 'ConfigDrive']
+                if (self.lbType === 'internalLb') {
+                  enabledProviders.push('InternalLbVm')
+                }
+                provider.enabled = enabledProviders.includes(provider.name)
+              } else { // *** non-vpc ***
+                provider.enabled = !['InternalLbVm', 'VpcVirtualRouter', 'Nsx', 'Netris'].includes(provider.name)
+              }
+              providers[providerIndex] = provider
+            })
+            svc.provider = providers
+            supportedServices[index] = svc
+          }
+        })
+        setTimeout(() => {
+          self.supportedSvcs = self.supportedServices
+          self.supportedServices = supportedServices
+          self.supportedServiceLoading = false
+        }, 50)
+      } else {
+        supportedServices = this.supportedSvcs
+        supportedServices = supportedServices.filter(svc => {
+          if (this.provider === 'NSX') {
+            return Object.keys(this.nsxSupportedServicesMap).includes(svc.name)
+          } else if (this.provider === 'Netris') {
+            return Object.keys(this.netrisSupportedServicesMap).includes(svc.name)
+          }
+        })
+        supportedServices = supportedServices.map(svc => {
+          if (!['Dhcp', 'Dns', 'UserData'].includes(svc.name)) {
+            if (this.provider === 'NSX') {
+              svc.provider = [this.NSX]
+            } else if (this.provider === 'Netris') {
+              svc.provider = [this.Netris]
+            }
+          } else {
+            if (this.forVpc) {
+              svc.provider = [this.VPCVR]
+            } else {
+              svc.provider = [this.VR]
+            }
+          }
+          return svc
+        })
+        self.supportedSvcs = self.supportedServices
+        self.supportedServices = supportedServices
+        self.supportedServiceLoading = false
+      }
+    },
+    handleForVpcChange (forVpc) {
+      this.forVpc = forVpc
+      if (this.provider === 'NSX') {
+        this.nsxSupportedServicesMap = {
+          Dhcp: this.forVpc ? this.VPCVR : this.VR,
+          Dns: this.forVpc ? this.VPCVR : this.VR,
+          UserData: this.forVpc ? this.VPCVR : this.VR,
+          ...(this.networkmode === 'NATTED' && {
+            SourceNat: this.NSX,
+            StaticNat: this.NSX,
+            PortForwarding: this.NSX,
+            Lb: this.NSX
+          }),
+          ...(forVpc && { NetworkACL: this.NSX }),
+          ...(!forVpc && { Firewall: this.NSX })
+        }
+      } else if (this.provider === 'Netris') {
+        this.netrisSupportedServicesMap = {
+          Dhcp: this.forVpc ? this.VPCVR : this.VR,
+          Dns: this.forVpc ? this.VPCVR : this.VR,
+          UserData: this.forVpc ? this.VPCVR : this.VR,
+          ...(this.networkmode === 'NATTED' && {
+            SourceNat: this.Netris,
+            StaticNat: this.Netris,
+            PortForwarding: this.Netris,
+            Lb: this.Netris
+          }),
+          ...(forVpc && { NetworkACL: this.Netris }),
+          ...(!forVpc && { Firewall: this.Netris })
+        }
+      }
+      this.updateSupportedServices()
+    },
+    handleProviderChange (provider) {
+      this.provider = provider
+      if (this.provider === 'NSX') {
+        this.nsxSupportedServicesMap = {
+          Dhcp: this.forVpc ? this.VPCVR : this.VR,
+          Dns: this.forVpc ? this.VPCVR : this.VR,
+          UserData: this.forVpc ? this.VPCVR : this.VR,
+          ...(this.networkmode === 'NATTED' && {
+            SourceNat: this.NSX,
+            StaticNat: this.NSX,
+            PortForwarding: this.NSX,
+            Lb: this.NSX
+          }),
+          ...(this.forVpc && { NetworkACL: this.NSX }),
+          ...(!this.forVpc && { Firewall: this.NSX })
+        }
+      } else if (this.provider === 'Netris') {
+        this.netrisSupportedServicesMap = {
+          Dhcp: this.forVpc ? this.VPCVR : this.VR,
+          Dns: this.forVpc ? this.VPCVR : this.VR,
+          UserData: this.forVpc ? this.VPCVR : this.VR,
+          ...(this.networkmode === 'NATTED' && {
+            SourceNat: this.Netris,
+            StaticNat: this.Netris,
+            PortForwarding: this.Netris,
+            Lb: this.Netris
+          }),
+          ...(this.forVpc && { NetworkACL: this.Netris }),
+          ...(!this.forVpc && { Firewall: this.Netris })
+        }
+      }
+      this.fetchSupportedServiceData()
+    },
+    handleForNetworkModeChange (networkMode) {
+      this.networkmode = networkMode
+      this.fetchSupportedServiceData()
+    },
+    handleNsxLbService (supportLb) {
+      if (!supportLb && 'Lb' in this.nsxSupportedServicesMap) {
+        delete this.nsxSupportedServicesMap.Lb
+      }
+      if (supportLb && !('Lb' in this.nsxSupportedServicesMap)) {
+        this.nsxSupportedServicesMap.Lb = this.NSX
+      }
+      this.fetchSupportedServiceData()
+    },
+    handleLbTypeChange (lbType) {
+      this.lbType = lbType
+      this.updateSupportedServices()
     },
     handleSupportedServiceChange (service, checked, provider) {
       if (service === 'SourceNat') {
@@ -740,44 +1089,39 @@ export default {
       providers.forEach(function (prvdr, idx) {
         if (prvdr === 'VirtualRouter') {
           self.isVirtualRouterForAtLeastOneService = true
-          if (self.serviceOfferings.length === 0) {
-            self.fetchServiceOfferingData()
-          }
         }
         if (prvdr === 'VpcVirtualRouter') {
           self.isVpcVirtualRouterForAtLeastOneService = true
+        }
+        if ((self.isVirtualRouterForAtLeastOneService || self.isVpcVirtualRouterForAtLeastOneService) &&
+          self.serviceOfferings.length === 0) {
+          self.fetchServiceOfferingData()
         }
       })
     },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
-        if (err) {
-          return
-        }
+      if (this.loading) return
+      this.formRef.value.validate().then(() => {
+        const formRaw = toRaw(this.form)
+        const values = this.handleRemoveFields(formRaw)
         var params = {}
 
-        var self = this
-        var selectedServices = null
         var keys = Object.keys(values)
-        var ignoredKeys = ['state', 'status', 'allocationstate', 'forvpc', 'specifyvlan', 'ispublic', 'domainid', 'zoneid', 'egressdefaultpolicy', 'promiscuousmode', 'macaddresschanges', 'forgedtransmits', 'isolation', 'supportspublicaccess']
+        const detailsKey = ['promiscuousmode', 'macaddresschanges', 'forgedtransmits', 'maclearning']
+        const ignoredKeys = [...detailsKey, 'state', 'status', 'allocationstate', 'forvpc', 'lbType', 'specifyvlan', 'ispublic', 'domainid', 'zoneid', 'egressdefaultpolicy', 'isolation', 'supportspublicaccess']
         keys.forEach(function (key, keyIndex) {
-          if (self.isSupportedServiceObject(values[key])) {
-            if (selectedServices == null) {
-              selectedServices = {}
-            }
-            selectedServices[key] = values[key]
-          } else {
-            if (!ignoredKeys.includes(key) &&
-              values[key] != null && values[key] !== undefined &&
-              !(key === 'availability' && values[key] === 'Optional')) {
-              params[key] = values[key]
-            }
+          if (!ignoredKeys.includes(key) &&
+            values[key] != null && values[key] !== undefined &&
+            !(key === 'availability' && values[key] === 'Optional')) {
+            params[key] = values[key]
           }
         })
 
         if (values.guestiptype === 'shared') { // specifyVlan checkbox is disabled, so inputData won't include specifyVlan
-          params.specifyvlan = true
+          if (values.specifyvlan === true) {
+            params.specifyvlan = true
+          }
           params.specifyipranges = true
           delete params.ispersistent
         } else if (values.guestiptype === 'isolated') { // specifyVlan checkbox is shown
@@ -805,17 +1149,34 @@ export default {
         if (values.forvpc === true) {
           params.forvpc = true
         }
+        if (!values.forVpc) {
+          params.specifyasnumber = values.specifyasnumber
+        }
+        params.routingmode = values.routingmode
+        const forNsx = values.provider === 'NSX'
+        if (forNsx === true) {
+          params.provider = 'NSX'
+          params.nsxsupportlb = values.nsxsupportlb
+          params.nsxsupportsinternallb = values.nsxsupportsinternallb
+        }
+        const forNetris = values.provider === 'Netris'
+        if (forNetris) {
+          params.provider = 'Netris'
+        }
+        if (values.guestiptype === 'isolated') {
+          params.networkmode = values.networkmode
+        }
         if (values.guestiptype === 'shared' || values.guestiptype === 'isolated') {
           if (values.conservemode !== true) {
             params.conservemode = false
           }
         }
-        if (selectedServices != null) {
-          var supportedServices = Object.keys(selectedServices)
+        if (this.selectedServiceProviderMap != null) {
+          var supportedServices = Object.keys(this.selectedServiceProviderMap)
           params.supportedservices = supportedServices.join(',')
           for (var k in supportedServices) {
             params['serviceProviderList[' + k + '].service'] = supportedServices[k]
-            params['serviceProviderList[' + k + '].provider'] = selectedServices[supportedServices[k]].provider
+            params['serviceProviderList[' + k + '].provider'] = this.selectedServiceProviderMap[supportedServices[k]]
           }
           var serviceCapabilityIndex = 0
           if (supportedServices.includes('Connectivity')) {
@@ -847,6 +1208,10 @@ export default {
             serviceCapabilityIndex++
             delete params.redundantroutercapability
             delete params.sourcenattype
+          } else if (values.redundantroutercapability === true) {
+            params['serviceCapabilityList[' + serviceCapabilityIndex + '].service'] = 'Gateway'
+            params['serviceCapabilityList[' + serviceCapabilityIndex + '].capabilitytype'] = 'RedundantRouter'
+            params['serviceCapabilityList[' + serviceCapabilityIndex + '].capabilityvalue'] = true
           }
           if (supportedServices.includes('SourceNat')) {
             if (values.elasticip === true) {
@@ -865,13 +1230,19 @@ export default {
             delete params.associatepublicip
           }
           if (supportedServices.includes('Lb')) {
+            if ('vmautoscalingcapability' in values) {
+              params['servicecapabilitylist[' + serviceCapabilityIndex + '].service'] = 'lb'
+              params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilitytype'] = 'VmAutoScaling'
+              params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilityvalue'] = values.vmautoscalingcapability
+              serviceCapabilityIndex++
+            }
             if (values.elasticlb === true) {
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].service'] = 'lb'
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilitytype'] = 'ElasticLb'
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilityvalue'] = true
               serviceCapabilityIndex++
             }
-            if (values.inlinemode === true && ((selectedServices.Lb.provider === 'F5BigIp') || (selectedServices.Lb.provider === 'Netscaler'))) {
+            if (values.inlinemode === true && ((this.selectedServiceProviderMap.Lb === 'F5BigIp') || (this.selectedServiceProviderMap.Lb === 'Netscaler'))) {
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].service'] = 'lb'
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilitytype'] = 'InlineMode'
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilityvalue'] = values.inlinemode
@@ -881,7 +1252,7 @@ export default {
             params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilitytype'] = 'SupportedLbIsolation'
             params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilityvalue'] = values.isolation
             serviceCapabilityIndex++
-            if (selectedServices.Lb.provider === 'InternalLbVm') {
+            if (this.selectedServiceProviderMap.Lb === 'InternalLbVm') {
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].service'] = 'lb'
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilitytype'] = 'lbSchemes'
               params['servicecapabilitylist[' + serviceCapabilityIndex + '].capabilityvalue'] = 'internal'
@@ -900,17 +1271,17 @@ export default {
           }
         }
 
+        if (values.guestiptype === 'l2' && values.userdatal2 === true) {
+          params.supportedservices = 'UserData'
+        }
+
         if ('egressdefaultpolicy' in values && values.egressdefaultpolicy !== 'allow') {
           params.egressdefaultpolicy = false
         }
-        if (values.promiscuousmode) {
-          params['details[0].promiscuousMode'] = values.promiscuousmode
-        }
-        if (values.macaddresschanges) {
-          params['details[0].macaddresschanges'] = values.macaddresschanges
-        }
-        if (values.forgedtransmits) {
-          params['details[0].forgedtransmits'] = values.forgedtransmits
+        for (const key of detailsKey) {
+          if (values[key]) {
+            params['details[0].' + key] = values[key]
+          }
         }
         if (values.ispublic !== true) {
           var domainIndexes = values.domainid
@@ -942,7 +1313,7 @@ export default {
           params.enable = values.enable
         }
         params.traffictype = 'GUEST' // traffic type dropdown has been removed since it has only one option ('Guest'). Hardcode traffic type value here.
-        api('createNetworkOffering', params).then(json => {
+        postAPI('createNetworkOffering', params).then(json => {
           this.$message.success('Network offering created: ' + values.name)
           this.$emit('refresh-data')
           this.closeAction()
@@ -955,6 +1326,12 @@ export default {
     },
     closeAction () {
       this.$emit('close-action')
+    },
+    async validateNumber (rule, value) {
+      if (value && (isNaN(value) || value <= 0)) {
+        return Promise.reject(this.$t('message.error.number'))
+      }
+      return Promise.resolve()
     }
   }
 }
@@ -965,19 +1342,11 @@ export default {
     width: 80vw;
 
     @media (min-width: 800px) {
-      width: 500px;
+      width: 600px;
     }
   }
   .supported-services-container {
     height: 250px;
     overflow: auto;
-  }
-
-  .action-button {
-    text-align: right;
-
-    button {
-      margin-right: 5px;
-    }
   }
 </style>

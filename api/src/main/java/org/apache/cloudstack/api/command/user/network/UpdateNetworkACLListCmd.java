@@ -18,13 +18,13 @@ package org.apache.cloudstack.api.command.user.network;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseAsyncCustomIdCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.response.NetworkACLResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
 
 import com.cloud.event.EventTypes;
 import com.cloud.exception.ResourceUnavailableException;
@@ -33,8 +33,6 @@ import com.cloud.user.Account;
 
 @APICommand(name = "updateNetworkACLList", description = "Updates network ACL list", responseObject = SuccessResponse.class, since = "4.4", requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateNetworkACLListCmd extends BaseAsyncCustomIdCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateNetworkACLListCmd.class.getName());
-    private static final String s_name = "updatenetworkacllistresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -68,11 +66,6 @@ public class UpdateNetworkACLListCmd extends BaseAsyncCustomIdCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
     @Override
     public String getEventType() {
         return EventTypes.EVENT_NETWORK_ACL_UPDATE;
@@ -110,5 +103,15 @@ public class UpdateNetworkACLListCmd extends BaseAsyncCustomIdCmd {
 
     public String getName() {
         return name;
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return id;
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.NetworkAcl;
     }
 }

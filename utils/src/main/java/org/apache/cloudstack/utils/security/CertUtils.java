@@ -45,7 +45,8 @@ import java.util.List;
 
 import javax.security.auth.x500.X500Principal;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.DERSequence;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -73,11 +74,11 @@ import org.bouncycastle.util.io.pem.PemWriter;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
 public class CertUtils {
 
-    private static final Logger LOG = Logger.getLogger(CertUtils.class);
+    protected static Logger LOGGER = LogManager.getLogger(CertUtils.class);
 
     public static KeyPair generateRandomKeyPair(final int keySize) throws NoSuchProviderException, NoSuchAlgorithmException {
         Security.addProvider(new BouncyCastleProvider());
@@ -92,7 +93,7 @@ public class CertUtils {
             Security.addProvider(new BouncyCastleProvider());
             keyFactory = KeyFactory.getInstance("RSA", "BC");
         } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
-            LOG.error("Unable to create KeyFactory:" + e.getMessage());
+            LOGGER.error("Unable to create KeyFactory:" + e.getMessage());
         }
         return keyFactory;
     }
@@ -219,7 +220,7 @@ public class CertUtils {
         final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
         if (publicIPAddresses != null) {
             for (final String publicIPAddress: new HashSet<>(publicIPAddresses)) {
-                if (Strings.isNullOrEmpty(publicIPAddress)) {
+                if (StringUtils.isEmpty(publicIPAddress)) {
                     continue;
                 }
                 subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
@@ -227,7 +228,7 @@ public class CertUtils {
         }
         if (dnsNames != null) {
             for (final String dnsName : new HashSet<>(dnsNames)) {
-                if (Strings.isNullOrEmpty(dnsName)) {
+                if (StringUtils.isEmpty(dnsName)) {
                     continue;
                 }
                 subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, dnsName));

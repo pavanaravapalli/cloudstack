@@ -30,18 +30,22 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import store from '@/store'
 import CapacityDashboard from './CapacityDashboard'
 import UsageDashboard from './UsageDashboard'
 import OnboardingDashboard from './OnboardingDashboard'
+import VerifyTwoFa from './VerifyTwoFa'
+import SetupTwoFaAtLogin from './SetupTwoFaAtLogin'
 
 export default {
   name: 'Dashboard',
   components: {
     CapacityDashboard,
     UsageDashboard,
-    OnboardingDashboard
+    OnboardingDashboard,
+    VerifyTwoFa,
+    SetupTwoFaAtLogin
   },
   provide: function () {
     return {
@@ -55,8 +59,10 @@ export default {
       showOnboarding: false
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
+  },
+  mounted () {
     this.showCapacityDashboard = Object.prototype.hasOwnProperty.call(store.getters.apis, 'listCapacity')
     this.project = false
     if (store.getters.project && store.getters.project.id) {
@@ -78,7 +84,7 @@ export default {
       if (!['Admin'].includes(this.$store.getters.userInfo.roletype)) {
         return
       }
-      api('listZones').then(json => {
+      getAPI('listZones').then(json => {
         this.showOnboarding = json.listzonesresponse.count ? json.listzonesresponse.count === 0 : true
       })
     }

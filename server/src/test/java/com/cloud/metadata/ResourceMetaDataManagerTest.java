@@ -17,27 +17,27 @@
 
 package com.cloud.metadata;
 
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
-
-import java.util.Map;
-
-import javax.naming.ConfigurationException;
-
+import com.cloud.exception.ResourceAllocationException;
+import com.cloud.server.ResourceManagerUtil;
+import com.cloud.server.ResourceTag;
+import com.cloud.server.TaggedResourceService;
+import com.cloud.storage.dao.VolumeDetailsDao;
+import com.cloud.vm.dao.NicDetailsDao;
 import org.apache.commons.collections.map.HashedMap;
+import org.junit.After;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
-import com.cloud.exception.ResourceAllocationException;
-import com.cloud.server.ResourceTag;
-import com.cloud.server.TaggedResourceService;
-import com.cloud.storage.dao.VolumeDetailsDao;
-import com.cloud.vm.dao.NicDetailsDao;
+import javax.naming.ConfigurationException;
+import java.util.Map;
+
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 
 public class ResourceMetaDataManagerTest {
 
@@ -49,10 +49,13 @@ public class ResourceMetaDataManagerTest {
     NicDetailsDao _nicDetailDao;
     @Mock
     TaggedResourceService _taggedResourceMgr;
+    @Mock
+    ResourceManagerUtil resourceManagerUtil;
+    private AutoCloseable closeable;
 
     @Before
     public void setup() {
-        MockitoAnnotations.initMocks(this);
+        closeable = MockitoAnnotations.openMocks(this);
 
         try {
             _resourceMetaDataMgr.configure(null, null);
@@ -65,12 +68,17 @@ public class ResourceMetaDataManagerTest {
 
     }
 
+    @After
+    public void tearDown() throws Exception {
+        closeable.close();
+    }
+
     // Test removing details
     //@Test
     public void testResourceDetails() throws ResourceAllocationException {
 
         //when(_resourceMetaDataMgr.getResourceId(anyString(), eq(ResourceTag.TaggedResourceType.Volume))).thenReturn(1L);
-        doReturn(1L).when(_taggedResourceMgr).getResourceId(anyString(), eq(ResourceTag.ResourceObjectType.Volume));
+        doReturn(1L).when(resourceManagerUtil).getResourceId(anyString(), eq(ResourceTag.ResourceObjectType.Volume));
         //           _volumeDetailDao.removeDetails(id, key);
 
         doNothing().when(_volumeDetailDao).removeDetail(anyLong(), anyString());
@@ -82,7 +90,7 @@ public class ResourceMetaDataManagerTest {
     // Test adding details
     public void testAddResourceDetails() throws ResourceAllocationException {
 
-        doReturn(1L).when(_taggedResourceMgr).getResourceId("1", ResourceTag.ResourceObjectType.Volume);
+        doReturn(1L).when(resourceManagerUtil).getResourceId("1", ResourceTag.ResourceObjectType.Volume);
         //           _volumeDetailDao.removeDetails(id, key);
 
         doNothing().when(_volumeDetailDao).removeDetail(anyLong(), anyString());

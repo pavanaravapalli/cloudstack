@@ -29,20 +29,17 @@ import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.KubernetesSupportedVersionResponse;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
-import org.apache.log4j.Logger;
 
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.kubernetes.version.KubernetesVersionService;
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
-@APICommand(name = ListKubernetesSupportedVersionsCmd.APINAME,
+@APICommand(name = "listKubernetesSupportedVersions",
         description = "Lists supported Kubernetes version",
         responseObject = KubernetesSupportedVersionResponse.class,
         responseView = ResponseObject.ResponseView.Restricted,
         authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class ListKubernetesSupportedVersionsCmd extends BaseListCmd {
-    public static final Logger LOGGER = Logger.getLogger(ListKubernetesSupportedVersionsCmd.class.getName());
-    public static final String APINAME = "listKubernetesSupportedVersions";
 
     @Inject
     private KubernetesVersionService kubernetesVersionService;
@@ -69,6 +66,11 @@ public class ListKubernetesSupportedVersionsCmd extends BaseListCmd {
             description = "the ID of the minimum Kubernetes supported version")
     private Long minimumKubernetesVersionId;
 
+    @Parameter(name = ApiConstants.ARCH, type = CommandType.STRING,
+            description = "the CPU arch of the binaries ISO. Valid options are: x86_64, aarch64",
+            since = "4.20")
+    private String arch;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -81,20 +83,19 @@ public class ListKubernetesSupportedVersionsCmd extends BaseListCmd {
     }
 
     public String getMinimumSemanticVersion() {
-        if(!Strings.isNullOrEmpty(minimumSemanticVersion) &&
+        if(StringUtils.isNotEmpty(minimumSemanticVersion) &&
                 !minimumSemanticVersion.matches("[0-9]+(\\.[0-9]+)*")) {
             throw new IllegalArgumentException("Invalid version format");
         }
         return minimumSemanticVersion;
     }
 
-    public Long getMinimumKubernetesVersionId() {
-        return minimumKubernetesVersionId;
+    public String getArch() {
+        return arch;
     }
 
-    @Override
-    public String getCommandName() {
-        return APINAME.toLowerCase() + "response";
+    public Long getMinimumKubernetesVersionId() {
+        return minimumKubernetesVersionId;
     }
 
     /////////////////////////////////////////////////////

@@ -17,7 +17,7 @@
 """ BVT tests for Virtual Machine additional configuration
 """
 # Import System modules
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import xml.etree.ElementTree as ET
 
 from lxml import etree
@@ -63,34 +63,26 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
 
         cls.services["virtual_machine"]["zoneid"] = cls.zone.id
 
+        cls._cleanup = []
         # Create an account, network, and IP addresses
         cls.account = Account.create(
             cls.apiclient,
             cls.services["account"],
             domainid=cls.domain.id
         )
+        cls._cleanup.append(cls.account)
         cls.service_offering = ServiceOffering.create(
             cls.apiclient,
             cls.services["service_offerings"]["small"]
         )
-
-        cls.cleanup = [
-            cls.account,
-            cls.service_offering
-        ]
+        cls._cleanup.append(cls.service_offering)
 
         cls.hosts_hugepages = cls.set_hosts_hugepages()
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.apiclient = super(TestAddConfigtoDeployVM, cls).getClsTestClient().getApiClient()
-            cls.reset_hosts_hugepages()
-            # Clean up, terminate the created templates
-            cleanup_resources(cls.apiclient, cls.cleanup)
-
-        except Exception as e:
-            raise Exception("Warning: Exception during cleanup : %s" % e)
+        cls.reset_hosts_hugepages()
+        super(TestAddConfigtoDeployVM, cls).tearDownClass()
 
     @classmethod
     def set_hosts_hugepages(cls):
@@ -292,7 +284,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                 xml_res = ssh_client.execute(virsh_cmd)
                 xml_as_str = ''.join(xml_res)
 
-                extraconfig_decoded_xml = '<config>' + urllib.unquote(extraconfig) + '</config>'
+                extraconfig_decoded_xml = '<config>' + urllib.parse.unquote(extraconfig) + '</config>'
 
                 # Root XML Elements
                 parser = etree.XMLParser(remove_blank_text=True)
@@ -302,7 +294,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                     find_element_in_domain_xml = domain_xml_root.find(child.tag)
 
                     # Fail if extra config is not found in domain xml
-                    self.assertNotEquals(
+                    self.assertNotEqual(
                         0,
                         len(find_element_in_domain_xml),
                         'Element tag from extra config not added to VM'
@@ -310,7 +302,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
 
                     # Compare found XML node with extra config node
                     is_a_match = self.elements_equal(child, find_element_in_domain_xml)
-                    self.assertEquals(
+                    self.assertEqual(
                         True,
                         is_a_match,
                         'The element from tags from extra config do not match with those found in domain xml'
@@ -371,7 +363,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                 xml_res = ssh_client.execute(virsh_cmd)
                 xml_as_str = ''.join(xml_res)
 
-                extraconfig_decoded_xml = '<config>' + urllib.unquote(extraconfig) + '</config>'
+                extraconfig_decoded_xml = '<config>' + urllib.parse.unquote(extraconfig) + '</config>'
 
                 # Root XML Elements
                 parser = etree.XMLParser(remove_blank_text=True)
@@ -381,7 +373,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                     find_element_in_domain_xml = domain_xml_root.find(child.tag)
 
                     # Fail if extra config is not found in domain xml
-                    self.assertNotEquals(
+                    self.assertNotEqual(
                         0,
                         len(find_element_in_domain_xml),
                         'Element tag from extra config not added to VM'
@@ -389,7 +381,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
 
                     # Compare found XML node with extra config node
                     is_a_match = self.elements_equal(child, find_element_in_domain_xml)
-                    self.assertEquals(
+                    self.assertEqual(
                         True,
                         is_a_match,
                         'The element from tags from extra config do not match with those found in domain xml'
@@ -462,7 +454,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                                        user=self.hostConfig['username'],
                                        passwd=self.hostConfig['password'])
 
-                extraconfig_decoded = urllib.unquote(extraconfig)
+                extraconfig_decoded = urllib.parse.unquote(extraconfig)
                 config_arr = extraconfig_decoded.splitlines()
 
                 for config in config_arr:
@@ -472,7 +464,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                     grep_config = "cat %s | grep -w '%s'" % (vmx_file_name, vmx_config)
                     result = ssh_client.execute(grep_config)
                     # Match exact configuration from vmx file, return empty result array if configuration is not found
-                    self.assertNotEquals(
+                    self.assertNotEqual(
                         0,
                         len(result),
                         'Extra  configuration not found in instance vmx file'
@@ -521,7 +513,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
             raise self.skipTest("Skipping test case for non-xenserver hypervisor")
         """
         Following commands are used to convert a VM from HVM to PV and set using vm-param-set
-        HVM-boot-policy=
+        HVM-boot-policy=""
         PV-bootloader=pygrub
         PV-args=hvc0
         """
@@ -532,7 +524,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
         add_config_response = self.add_global_config(name, value)
 
         if add_config_response.name:
-            extraconfig = 'HVM-boot-policy%3D%0APV-bootloader%3Dpygrub%0APV-args%3Dhvc0'
+            extraconfig = 'HVM-boot-policy%3D%22%22%0APV-bootloader%3Dpygrub%0APV-args%3Dhvc0'
             try:
                 response = self.deploy_vm(hypervisor, extraconfig)
                 host_id = response.hostid
@@ -546,7 +538,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                                        user=self.hostConfig['username'],
                                        passwd=self.hostConfig['password'])
 
-                extraconfig_decoded = urllib.unquote(extraconfig)
+                extraconfig_decoded = urllib.parse.unquote(extraconfig)
                 config_arr = extraconfig_decoded.splitlines()
 
                 # Get vm instance uuid
@@ -558,7 +550,7 @@ class TestAddConfigtoDeployVM(cloudstackTestCase):
                     result = ssh_client.execute(vm_config_check)
                     param_value = config_tuple[1].strip()
                     # Check if each configuration command has set the configuration as sent with extraconfig
-                    self.assertEquals(
+                    self.assertEqual(
                         param_value,
                         result[0],
                         'Extra  configuration not found in VM param list'

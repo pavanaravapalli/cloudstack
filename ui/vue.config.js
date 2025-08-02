@@ -19,7 +19,7 @@ const path = require('path')
 const webpack = require('webpack')
 const fs = require('fs')
 const packageJson = fs.readFileSync('./package.json')
-const version = JSON.parse(packageJson).version || 'master'
+const version = JSON.parse(packageJson).version || 'main'
 const createThemeColorReplacerPlugin = require('./theme.config')
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin')
 
@@ -98,19 +98,14 @@ const vueConfig = {
 
     const svgRule = config.module.rule('svg')
     svgRule.uses.clear()
+
     svgRule
-      .oneOf('inline')
-      .resourceQuery(/inline/)
-      .use('vue-svg-icon-loader')
-      .loader('vue-svg-icon-loader')
+      .use('vue-loader')
+      .loader('vue-loader')
       .end()
-      .end()
-      .oneOf('external')
-      .use('file-loader')
-      .loader('file-loader')
-      .options({
-        name: 'assets/[name].[hash:8].[ext]'
-      })
+      .use('vue-svg-loader')
+      .loader('vue-svg-loader')
+
     /* svgRule.oneOf('inline')
       .resourceQuery(/inline/)
       .use('vue-svg-loader')
@@ -132,6 +127,7 @@ const vueConfig = {
         modifyVars: {
           // https://ant.design/docs/spec/colors
           // https://vue.ant.design/docs/vue/customize-theme/
+          'root-entry-name': 'default'
         },
         javascriptEnabled: true
       }
@@ -146,7 +142,11 @@ const vueConfig = {
         secure: false,
         ws: false,
         changeOrigin: true,
-        proxyTimeout: 10 * 60 * 1000 // 10 minutes
+        proxyTimeout: 10 * 60 * 1000, // 10 minutes
+        cookieDomainRewrite: process.env.CS_COOKIE_HOST || 'localhost',
+        cookiePathRewrite: {
+          '/client': '/'
+        }
       }
     },
     https: process.env.HTTPS_KEY ? {

@@ -23,113 +23,44 @@
       :animated="false"
       @change="handleChangeTab">
       <a-tab-pane :tab="$t('label.details')" key="details">
-        <DetailsTab :resource="resource" :loading="loading" />
+        <DetailsTab :resource="dataResource" :loading="loading" />
+      </a-tab-pane>
+      <a-tab-pane :tab="$t('label.metrics')" key="stats">
+        <StatsTab :resource="resource"/>
       </a-tab-pane>
       <a-tab-pane :tab="$t('label.iso')" key="cdrom" v-if="vm.isoid">
-        <a-icon type="usb" />
+        <usb-outlined />
         <router-link :to="{ path: '/iso/' + vm.isoid }">{{ vm.isoname }}</router-link> <br/>
-        <a-icon type="barcode"/> {{ vm.isoid }}
+        <barcode-outlined /> {{ vm.isoid }}
       </a-tab-pane>
       <a-tab-pane :tab="$t('label.volumes')" key="volumes" v-if="'listVolumes' in $store.getters.apis">
-        <a-table
-          class="table"
-          size="small"
-          :columns="volumeColumns"
-          :dataSource="volumes"
-          :rowKey="item => item.id"
-          :pagination="false"
-        >
-          <template slot="name" slot-scope="text, item">
-            <a-icon type="hdd" />
-            <router-link :to="{ path: '/volume/' + item.id }">
-              {{ text }}
-            </router-link>
-            <a-tag v-if="item.provisioningtype">
-              {{ item.provisioningtype }}
-            </a-tag>
-          </template>
-          <template slot="state" slot-scope="text">
-            <status :text="text ? text : ''" />{{ text }}
-          </template>
-          <template slot="size" slot-scope="text, item">
-            {{ parseFloat(item.size / (1024.0 * 1024.0 * 1024.0)).toFixed(2) }} GB
-          </template>
-        </a-table>
+        <a-button
+          type="primary"
+          style="width: 100%; margin-bottom: 10px"
+          @click="showAddVolModal"
+          :loading="loading"
+          :disabled="!('createVolume' in $store.getters.apis) || this.vm.state === 'Error' || resource.hypervisor === 'External'">
+          <template #icon><plus-outlined /></template> {{ $t('label.action.create.volume.add') }}
+        </a-button>
+        <volumes-tab :resource="vm" :loading="loading" />
+      </a-tab-pane>
+      <a-tab-pane :tab="$t('label.gpu')" key="gpu" v-if="dataResource.gpucardname">
+        <GPUTab
+          apiName="listGpuDevices"
+          :resource="dataResource"
+          :params="{virtualmachineid: dataResource.id}"
+          resourceType="VirtualMachine"
+          :columns="['gpucardname', 'vgpuprofilename', 'state'].concat($store.getters.userInfo.roletype === 'Admin' ? ['id', 'hostname'] : [])"
+          :routerlinks="(record) => { return { displayname: '/gpudevice/' + record.id } }"/>
       </a-tab-pane>
       <a-tab-pane :tab="$t('label.nics')" key="nics" v-if="'listNics' in $store.getters.apis">
-        <a-button
-          type="dashed"
-          style="width: 100%; margin-bottom: 10px"
-          @click="showAddModal"
-          :loading="loadingNic"
-          :disabled="!('addNicToVirtualMachine' in $store.getters.apis)">
-          <a-icon type="plus"></a-icon> {{ $t('label.network.addvm') }}
-        </a-button>
-        <NicsTable :resource="vm" :loading="loading">
-          <span slot="actions" slot-scope="record">
-            <a-tooltip placement="bottom">
-              <template slot="title">
-                {{ $t('label.set.default.nic') }}
-              </template>
-              <a-popconfirm
-                :title="$t('label.set.default.nic')"
-                @confirm="setAsDefault(record.nic)"
-                :okText="$t('label.yes')"
-                :cancelText="$t('label.no')"
-                v-if="!record.nic.isdefault"
-              >
-                <a-button
-                  :disabled="!('updateDefaultNicForVirtualMachine' in $store.getters.apis)"
-                  icon="check-square"
-                  shape="circle" />
-              </a-popconfirm>
-            </a-tooltip>
-            <a-tooltip placement="bottom" v-if="record.nic.type !== 'L2'">
-              <template slot="title">
-                {{ $t('label.change.ip.addess') }}
-              </template>
-              <a-button
-                icon="swap"
-                shape="circle"
-                :disabled="!('updateVmNicIp' in $store.getters.apis)"
-                @click="onChangeIPAddress(record)" />
-            </a-tooltip>
-            <a-tooltip placement="bottom" v-if="record.nic.type !== 'L2'">
-              <template slot="title">
-                {{ $t('label.edit.secondary.ips') }}
-              </template>
-              <a-button
-                icon="environment"
-                shape="circle"
-                :disabled="(!('addIpToNic' in $store.getters.apis) && !('addIpToNic' in $store.getters.apis))"
-                @click="fetchSecondaryIPs(record.nic.id)" />
-            </a-tooltip>
-            <a-tooltip placement="bottom">
-              <template slot="title">
-                {{ $t('label.action.delete.nic') }}
-              </template>
-              <a-popconfirm
-                :title="$t('message.network.removenic')"
-                @confirm="removeNIC(record.nic)"
-                :okText="$t('label.yes')"
-                :cancelText="$t('label.no')"
-                v-if="!record.nic.isdefault"
-              >
-                <a-button
-                  :disabled="!('removeNicFromVirtualMachine' in $store.getters.apis)"
-                  type="danger"
-                  icon="delete"
-                  shape="circle" />
-              </a-popconfirm>
-            </a-tooltip>
-          </span>
-        </NicsTable>
+        <NicsTab :resource="vm"/>
       </a-tab-pane>
       <a-tab-pane :tab="$t('label.vm.snapshots')" key="vmsnapshots" v-if="'listVMSnapshot' in $store.getters.apis">
         <ListResourceTable
           apiName="listVMSnapshot"
-          :resource="resource"
-          :params="{virtualmachineid: this.resource.id}"
+          :resource="dataResource"
+          :params="{virtualmachineid: dataResource.id}"
           :columns="['displayname', 'state', 'type', 'created']"
           :routerlinks="(record) => { return { displayname: '/vmsnapshot/' + record.id } }"/>
       </a-tab-pane>
@@ -137,110 +68,67 @@
         <ListResourceTable
           apiName="listBackups"
           :resource="resource"
-          :params="{virtualmachineid: this.resource.id}"
-          :columns="['id', 'status', 'type', 'created']"
-          :routerlinks="(record) => { return { id: '/backup/' + record.id } }"
+          :params="{virtualmachineid: dataResource.id}"
+          :columns="['name', 'status', 'size', 'virtualsize', 'type', 'intervaltype', 'created']"
+          :routerlinks="(record) => { return { name: '/backup/' + record.id } }"
           :showSearch="false"/>
       </a-tab-pane>
-      <a-tab-pane :tab="$t('label.securitygroups')" key="securitygroups" v-if="this.resource.securitygroup && this.resource.securitygroup.length > 0">
+      <a-tab-pane :tab="$t('label.securitygroups')" key="securitygroups" v-if="dataResource.securitygroup && dataResource.securitygroup.length > 0 || $store.getters.showSecurityGroups">
+        <a-button
+          type="primary"
+          style="width: 100%; margin-bottom: 10px"
+          @click="showUpdateSGModal"
+          :loading="loading">
+          <template #icon><edit-outlined /></template> {{ $t('label.action.update.security.groups') }}
+        </a-button>
         <ListResourceTable
-          :items="this.resource.securitygroup"
+          :items="dataResource.securitygroup"
           :columns="['name', 'description']"
           :routerlinks="(record) => { return { name: '/securitygroups/' + record.id } }"
           :showSearch="false"/>
       </a-tab-pane>
+      <a-tab-pane :tab="$t('label.schedules')" key="schedules" v-if="'listVMSchedule' in $store.getters.apis">
+        <InstanceSchedules
+          :virtualmachine="vm"
+          :loading="loading"/>
+      </a-tab-pane>
       <a-tab-pane :tab="$t('label.settings')" key="settings">
-        <DetailSettings :resource="resource" :loading="loading" />
+        <DetailSettings :resource="dataResource" :loading="loading" />
+      </a-tab-pane>
+      <a-tab-pane :tab="$t('label.events')" key="events" v-if="'listEvents' in $store.getters.apis">
+        <events-tab :resource="dataResource" resourceType="VirtualMachine" :loading="loading" />
+      </a-tab-pane>
+      <a-tab-pane :tab="$t('label.annotations')" key="comments" v-if="'listAnnotations' in $store.getters.apis">
+        <AnnotationsTab
+          :resource="vm"
+          :items="annotations">
+        </AnnotationsTab>
       </a-tab-pane>
     </a-tabs>
 
     <a-modal
-      :visible="showAddNetworkModal"
-      :title="$t('label.network.addvm')"
+      :visible="showUpdateSecurityGroupsModal"
+      :title="$t('label.action.update.security.groups')"
       :maskClosable="false"
-      :okText="$t('label.ok')"
-      :cancelText="$t('label.cancel')"
-      @cancel="closeModals"
-      @ok="submitAddNetwork">
-      {{ $t('message.network.addvm.desc') }}
-      <div class="modal-form">
-        <p class="modal-form__label">{{ $t('label.network') }}:</p>
-        <a-select :defaultValue="addNetworkData.network" @change="e => addNetworkData.network = e">
-          <a-select-option
-            v-for="network in addNetworkData.allNetworks"
-            :key="network.id"
-            :value="network.id">
-            {{ network.name }}
-          </a-select-option>
-        </a-select>
-        <p class="modal-form__label">{{ $t('label.publicip') }}:</p>
-        <a-input v-model="addNetworkData.ip"></a-input>
-      </div>
+      :closable="true"
+      @ok="updateSecurityGroups"
+      @cancel="closeModals">
+      <security-group-selection
+        :zoneId="this.vm.zoneid"
+        :value="securitygroupids"
+        :loading="false"
+        :preFillContent="dataPreFill"
+        @select-security-group-item="($event) => updateSecurityGroupsSelection($event)"></security-group-selection>
     </a-modal>
 
     <a-modal
-      :visible="showUpdateIpModal"
-      :title="$t('label.change.ipaddress')"
+      :visible="showAddVolumeModal"
+      :title="$t('label.action.create.volume.add')"
       :maskClosable="false"
-      :okText="$t('label.ok')"
-      :cancelText="$t('label.cancel')"
-      @cancel="closeModals"
-      @ok="submitUpdateIP"
-    >
-      {{ $t('message.network.updateip') }}
-
-      <div class="modal-form">
-        <p class="modal-form__label">{{ $t('label.publicip') }}:</p>
-        <a-select
-          showSearch
-          v-if="editNicResource.type==='Shared'"
-          v-model="editIpAddressValue"
-          :loading="listIps.loading">
-          <a-select-option v-for="ip in listIps.opts" :key="ip.ipaddress">
-            {{ ip.ipaddress }}
-          </a-select-option>
-        </a-select>
-        <a-input
-          v-else
-          v-model="editIpAddressValue"></a-input>
-      </div>
-    </a-modal>
-
-    <a-modal
-      :visible="showSecondaryIpModal"
-      :title="$t('label.acquire.new.secondary.ip')"
-      :maskClosable="false"
+      :closable="true"
       :footer="null"
-      :closable="false"
-      class="wide-modal"
-    >
-      <p>
-        {{ $t('message.network.secondaryip') }}
-      </p>
-      <a-divider />
-      <a-input :placeholder="$t('label.new.secondaryip.description')" v-model="newSecondaryIp"></a-input>
-      <div style="margin-top: 10px; display: flex; justify-content:flex-end;">
-        <a-button @click="submitSecondaryIP" type="primary" style="margin-right: 10px;">{{ $t('label.add.secondary.ip') }}</a-button>
-        <a-button @click="closeModals">{{ $t('label.close') }}</a-button>
-      </div>
-
-      <a-divider />
-      <a-list itemLayout="vertical">
-        <a-list-item v-for="(ip, index) in secondaryIPs" :key="index">
-          <a-popconfirm
-            :title="`${$t('label.action.release.ip')}?`"
-            @confirm="removeSecondaryIP(ip.id)"
-            :okText="$t('label.yes')"
-            :cancelText="$t('label.no')"
-          >
-            <a-button
-              type="danger"
-              shape="circle"
-              icon="delete" />
-            {{ ip.ipaddress }}
-          </a-popconfirm>
-        </a-list-item>
-      </a-list>
+      @cancel="closeModals">
+      <CreateVolume :resource="resource" @close-action="closeModals" />
     </a-modal>
 
   </a-spin>
@@ -248,24 +136,42 @@
 
 <script>
 
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
 import { mixinDevice } from '@/utils/mixin.js'
 import ResourceLayout from '@/layouts/ResourceLayout'
-import Status from '@/components/widgets/Status'
 import DetailsTab from '@/components/view/DetailsTab'
+import StatsTab from '@/components/view/StatsTab'
+import EventsTab from '@/components/view/EventsTab'
 import DetailSettings from '@/components/view/DetailSettings'
-import NicsTable from '@/views/network/NicsTable'
+import CreateVolume from '@/views/storage/CreateVolume'
+import NicsTab from '@/views/network/NicsTab'
+import InstanceSchedules from '@/views/compute/InstanceSchedules.vue'
 import ListResourceTable from '@/components/view/ListResourceTable'
+import TooltipButton from '@/components/widgets/TooltipButton'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import AnnotationsTab from '@/components/view/AnnotationsTab'
+import VolumesTab from '@/components/view/VolumesTab.vue'
+import SecurityGroupSelection from '@views/compute/wizard/SecurityGroupSelection'
+import GPUTab from '@/components/view/GPUTab.vue'
 
 export default {
   name: 'InstanceTab',
   components: {
     ResourceLayout,
     DetailsTab,
+    StatsTab,
+    EventsTab,
     DetailSettings,
-    NicsTable,
-    Status,
-    ListResourceTable
+    CreateVolume,
+    NicsTab,
+    GPUTab,
+    InstanceSchedules,
+    ListResourceTable,
+    SecurityGroupSelection,
+    TooltipButton,
+    ResourceIcon,
+    AnnotationsTab,
+    VolumesTab
   },
   mixins: [mixinDevice],
   props: {
@@ -282,61 +188,38 @@ export default {
   data () {
     return {
       vm: {},
-      volumes: [],
       totalStorage: 0,
       currentTab: 'details',
-      showAddNetworkModal: false,
-      showUpdateIpModal: false,
-      showSecondaryIpModal: false,
-      addNetworkData: {
-        allNetworks: [],
-        network: '',
-        ip: ''
-      },
-      loadingNic: false,
-      editIpAddressNic: '',
-      editIpAddressValue: '',
-      secondaryIPs: [],
-      selectedNicId: '',
-      newSecondaryIp: '',
-      volumeColumns: [
-        {
-          title: this.$t('label.name'),
-          dataIndex: 'name',
-          scopedSlots: { customRender: 'name' }
-        },
-        {
-          title: this.$t('label.state'),
-          dataIndex: 'state',
-          scopedSlots: { customRender: 'state' }
-        },
-        {
-          title: this.$t('label.type'),
-          dataIndex: 'type'
-        },
-        {
-          title: this.$t('label.size'),
-          dataIndex: 'size',
-          scopedSlots: { customRender: 'size' }
-        }
-      ],
-      editNicResource: {},
-      listIps: {
-        loading: false,
-        opts: []
-      }
+      showUpdateSecurityGroupsModal: false,
+      showAddVolumeModal: false,
+      diskOfferings: [],
+      annotations: [],
+      dataResource: {},
+      dataPreFill: {},
+      securitygroupids: []
     }
   },
   created () {
-    this.vm = this.resource
+    const self = this
+    this.dataResource = this.resource
+    this.vm = this.dataResource
     this.fetchData()
+    window.addEventListener('popstate', function () {
+      self.setCurrentTab()
+    })
   },
   watch: {
-    resource: function (newItem, oldItem) {
-      this.vm = newItem
-      this.fetchData()
+    resource: {
+      deep: true,
+      handler (newData, oldData) {
+        if (newData !== oldData) {
+          this.dataResource = newData
+          this.vm = this.dataResource
+          this.fetchData()
+        }
+      }
     },
-    $route: function (newItem, oldItem) {
+    '$route.fullPath': function () {
       this.setCurrentTab()
     }
   },
@@ -351,7 +234,7 @@ export default {
       this.currentTab = e
       const query = Object.assign({}, this.$route.query)
       query.tab = e
-      history.replaceState(
+      history.pushState(
         {},
         null,
         '#' + this.$route.path + '?' + Object.keys(query).map(key => {
@@ -362,287 +245,53 @@ export default {
       )
     },
     fetchData () {
-      this.volumes = []
+      this.annotations = []
       if (!this.vm || !this.vm.id) {
         return
       }
-      api('listVolumes', { listall: true, virtualmachineid: this.vm.id }).then(json => {
-        this.volumes = json.listvolumesresponse.volume
-        if (this.volumes) {
-          this.volumes.sort((a, b) => { return a.deviceid - b.deviceid })
+      getAPI('listAnnotations', { entityid: this.dataResource.id, entitytype: 'VM', annotationfilter: 'all' }).then(json => {
+        if (json.listannotationsresponse && json.listannotationsresponse.annotation) {
+          this.annotations = json.listannotationsresponse.annotation
         }
-        this.$set(this.resource, 'volumes', this.volumes)
       })
     },
-    listNetworks () {
-      api('listNetworks', {
+    listDiskOfferings () {
+      getAPI('listDiskOfferings', {
         listAll: 'true',
         zoneid: this.vm.zoneid
       }).then(response => {
-        this.addNetworkData.allNetworks = response.listnetworksresponse.network.filter(network => !this.vm.nic.map(nic => nic.networkid).includes(network.id))
-        this.addNetworkData.network = this.addNetworkData.allNetworks[0].id
+        this.diskOfferings = response.listdiskofferingsresponse.diskoffering
       })
     },
-    fetchSecondaryIPs (nicId) {
-      this.showSecondaryIpModal = true
-      this.selectedNicId = nicId
-      api('listNics', {
-        nicId: nicId,
-        keyword: '',
-        virtualmachineid: this.vm.id
-      }).then(response => {
-        this.secondaryIPs = response.listnicsresponse.nic[0].secondaryip
-      })
+    showAddVolModal () {
+      this.showAddVolumeModal = true
+      this.listDiskOfferings()
     },
-    fetchPublicIps (networkid) {
-      this.listIps.loading = true
-      this.listIps.opts = []
-      api('listPublicIpAddresses', {
-        networkid: networkid,
-        allocatedonly: false,
-        forvirtualnetwork: false
-      }).then(json => {
-        const listPublicIps = json.listpublicipaddressesresponse.publicipaddress || []
-        listPublicIps.forEach(item => {
-          if (item.state === 'Free') {
-            this.listIps.opts.push({
-              ipaddress: item.ipaddress
-            })
-          }
-        })
-        this.listIps.opts.sort(function (a, b) {
-          const currentIp = a.ipaddress.replaceAll('.', '')
-          const nextIp = b.ipaddress.replaceAll('.', '')
-          if (parseInt(currentIp) < parseInt(nextIp)) { return -1 }
-          if (parseInt(currentIp) > parseInt(nextIp)) { return 1 }
-          return 0
-        })
-      }).finally(() => {
-        this.listIps.loading = false
-      })
-    },
-    showAddModal () {
-      this.showAddNetworkModal = true
-      this.listNetworks()
+    showUpdateSGModal () {
+      this.loadingSG = true
+      if (this.vm.securitygroup && this.vm.securitygroup?.length > 0) {
+        this.securitygroupids = []
+        for (const sg of this.vm.securitygroup) {
+          this.securitygroupids.push(sg.id)
+        }
+        this.dataPreFill = { securitygroupids: this.securitygroupids }
+      }
+      this.showUpdateSecurityGroupsModal = true
+      this.loadingSG = false
     },
     closeModals () {
-      this.showAddNetworkModal = false
-      this.showUpdateIpModal = false
-      this.showSecondaryIpModal = false
-      this.addNetworkData.network = ''
-      this.addNetworkData.ip = ''
-      this.editIpAddressValue = ''
-      this.newSecondaryIp = ''
+      this.showAddVolumeModal = false
+      this.showUpdateSecurityGroupsModal = false
     },
-    onChangeIPAddress (record) {
-      this.editNicResource = record.nic
-      this.editIpAddressNic = record.nic.id
-      this.showUpdateIpModal = true
-      if (record.nic.type === 'Shared') {
-        this.fetchPublicIps(record.nic.networkid)
-      }
+    updateSecurityGroupsSelection (securitygroupids) {
+      this.securitygroupids = securitygroupids || []
     },
-    submitAddNetwork () {
-      const params = {}
-      params.virtualmachineid = this.vm.id
-      params.networkid = this.addNetworkData.network
-      if (this.addNetworkData.ip) {
-        params.ipaddress = this.addNetworkData.ip
-      }
-      this.showAddNetworkModal = false
-      this.loadingNic = true
-      api('addNicToVirtualMachine', params).then(response => {
-        this.$pollJob({
-          jobId: response.addnictovirtualmachineresponse.jobid,
-          successMessage: this.$t('message.success.add.network'),
-          successMethod: () => {
-            this.loadingNic = false
-            this.closeModals()
-            this.parentFetchData()
-          },
-          errorMessage: this.$t('message.add.network.failed'),
-          errorMethod: () => {
-            this.loadingNic = false
-            this.closeModals()
-            this.parentFetchData()
-          },
-          loadingMessage: this.$t('message.add.network.processing'),
-          catchMessage: this.$t('error.fetching.async.job.result'),
-          catchMethod: () => {
-            this.loadingNic = false
-            this.closeModals()
-            this.parentFetchData()
-          }
-        })
-      }).catch(error => {
+    updateSecurityGroups () {
+      postAPI('updateVirtualMachine', { id: this.vm.id, securitygroupids: this.securitygroupids.join(',') }).catch(error => {
         this.$notifyError(error)
-        this.loadingNic = false
-      })
-    },
-    setAsDefault (item) {
-      this.loadingNic = true
-      api('updateDefaultNicForVirtualMachine', {
-        virtualmachineid: this.vm.id,
-        nicid: item.id
-      }).then(response => {
-        this.$pollJob({
-          jobId: response.updatedefaultnicforvirtualmachineresponse.jobid,
-          successMessage: `${this.$t('label.success.set')} ${item.networkname} ${this.$t('label.as.default')}. ${this.$t('message.set.default.nic.manual')}.`,
-          successMethod: () => {
-            this.loadingNic = false
-            this.parentFetchData()
-          },
-          errorMessage: `${this.$t('label.error.setting')} ${item.networkname} ${this.$t('label.as.default')}`,
-          errorMethod: () => {
-            this.loadingNic = false
-            this.parentFetchData()
-          },
-          loadingMessage: `${this.$t('label.setting')} ${item.networkname} ${this.$t('label.as.default')}...`,
-          catchMessage: this.$t('error.fetching.async.job.result'),
-          catchMethod: () => {
-            this.loadingNic = false
-            this.parentFetchData()
-          }
-        })
-      }).catch(error => {
-        this.$notifyError(error)
-        this.loadingNic = false
-      })
-    },
-    submitUpdateIP () {
-      this.loadingNic = true
-      this.showUpdateIpModal = false
-      api('updateVmNicIp', {
-        nicId: this.editIpAddressNic,
-        ipaddress: this.editIpAddressValue
-      }).then(response => {
-        this.$pollJob({
-          jobId: response.updatevmnicipresponse.jobid,
-          successMessage: this.$t('message.success.update.ipaddress'),
-          successMethod: () => {
-            this.loadingNic = false
-            this.closeModals()
-            this.parentFetchData()
-          },
-          errorMessage: this.$t('label.error'),
-          errorMethod: () => {
-            this.loadingNic = false
-            this.closeModals()
-            this.parentFetchData()
-          },
-          loadingMessage: this.$t('message.update.ipaddress.processing'),
-          catchMessage: this.$t('error.fetching.async.job.result'),
-          catchMethod: () => {
-            this.loadingNic = false
-            this.closeModals()
-            this.parentFetchData()
-          }
-        })
-      })
-        .catch(error => {
-          this.$notifyError(error)
-          this.loadingNic = false
-        })
-    },
-    removeNIC (item) {
-      this.loadingNic = true
-
-      api('removeNicFromVirtualMachine', {
-        nicid: item.id,
-        virtualmachineid: this.vm.id
-      }).then(response => {
-        this.$pollJob({
-          jobId: response.removenicfromvirtualmachineresponse.jobid,
-          successMessage: this.$t('message.success.remove.nic'),
-          successMethod: () => {
-            this.loadingNic = false
-            this.parentFetchData()
-          },
-          errorMessage: this.$t('message.error.remove.nic'),
-          errorMethod: () => {
-            this.loadingNic = false
-            this.parentFetchData()
-          },
-          loadingMessage: this.$t('message.remove.nic.processing'),
-          catchMessage: this.$t('error.fetching.async.job.result'),
-          catchMethod: () => {
-            this.loadingNic = false
-            this.parentFetchData()
-          }
-        })
-      })
-        .catch(error => {
-          this.$notifyError(error)
-          this.loadingNic = false
-        })
-    },
-    submitSecondaryIP () {
-      this.loadingNic = true
-
-      const params = {}
-      params.nicid = this.selectedNicId
-      if (this.newSecondaryIp) {
-        params.ipaddress = this.newSecondaryIp
-      }
-
-      api('addIpToNic', params).then(response => {
-        this.$pollJob({
-          jobId: response.addiptovmnicresponse.jobid,
-          successMessage: this.$t('message.success.add.secondary.ipaddress'),
-          successMethod: () => {
-            this.loadingNic = false
-            this.fetchSecondaryIPs(this.selectedNicId)
-            this.parentFetchData()
-          },
-          errorMessage: this.$t('message.error.add.secondary.ipaddress'),
-          errorMethod: () => {
-            this.loadingNic = false
-            this.fetchSecondaryIPs(this.selectedNicId)
-            this.parentFetchData()
-          },
-          loadingMessage: this.$t('message.add.secondary.ipaddress.processing'),
-          catchMessage: this.$t('error.fetching.async.job.result'),
-          catchMethod: () => {
-            this.loadingNic = false
-            this.fetchSecondaryIPs(this.selectedNicId)
-            this.parentFetchData()
-          }
-        })
-      }).catch(error => {
-        this.$notifyError(error)
-        this.loadingNic = false
-      })
-    },
-    removeSecondaryIP (id) {
-      this.loadingNic = true
-
-      api('removeIpFromNic', { id }).then(response => {
-        this.$pollJob({
-          jobId: response.removeipfromnicresponse.jobid,
-          successMessage: this.$t('message.success.remove.secondary.ipaddress'),
-          successMethod: () => {
-            this.loadingNic = false
-            this.fetchSecondaryIPs(this.selectedNicId)
-            this.parentFetchData()
-          },
-          errorMessage: this.$t('message.error.remove.secondary.ipaddress'),
-          errorMethod: () => {
-            this.loadingNic = false
-            this.fetchSecondaryIPs(this.selectedNicId)
-            this.parentFetchData()
-          },
-          loadingMessage: this.$t('message.remove.secondary.ipaddress.processing'),
-          catchMessage: this.$t('error.fetching.async.job.result'),
-          catchMethod: () => {
-            this.loadingNic = false
-            this.fetchSecondaryIPs(this.selectedNicId)
-            this.parentFetchData()
-          }
-        })
-      }).catch(error => {
-        this.$notifyError(error)
-        this.loadingNic = false
-        this.fetchSecondaryIPs(this.selectedNicId)
+      }).finally(() => {
+        this.closeModals()
+        this.parentFetchData()
       })
     }
   }
@@ -725,6 +374,7 @@ export default {
   .ant-tag {
     padding: 4px 10px;
     height: auto;
+    margin-left: 5px;
   }
 
   .title {
@@ -775,7 +425,7 @@ export default {
   min-width: 50vw;
 }
 
-/deep/ .ant-list-item {
+:deep(.ant-list-item) {
   padding-top: 12px;
   padding-bottom: 12px;
 }

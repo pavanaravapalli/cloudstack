@@ -16,13 +16,13 @@
 #under the License.
 
 import subprocess
-import urllib
 import hmac
 import hashlib
 import base64
 import traceback
 import logging
 import re
+import urllib.request, urllib.parse, urllib.error
 
 from flask import Flask
 
@@ -59,8 +59,8 @@ class ShellCmd(object):
             err = []
             err.append('failed to execute shell command: %s' % self.cmd)
             err.append('return code: %s' % self.process.returncode)
-            err.append('stdout: %s' % self.stdout)
-            err.append('stderr: %s' % self.stderr)
+            err.append('stdout: %s' % self.stdout.decode())
+            err.append('stderr: %s' % self.stderr.decode())
             raise Exception('\n'.join(err))
 
         self.return_code = self.process.returncode
@@ -131,10 +131,10 @@ class Server(object):
             "mac": mac
         }
 
-        request = zip(reqs.keys(), reqs.values())
+        request = list(zip(list(reqs.keys()), list(reqs.values())))
         request.sort(key=lambda x: str.lower(x[0]))
-        hashStr = "&".join(["=".join([str.lower(r[0]), str.lower(urllib.quote_plus(str(r[1]))).replace("+", "%20").replace('=', '%3d')]) for r in request])
-        sig = urllib.quote_plus(base64.encodestring(hmac.new(secretkey, hashStr, hashlib.sha1).digest()).strip())
+        hashStr = "&".join(["=".join([str.lower(r[0]), str.lower(urllib.parse.quote_plus(str(r[1]))).replace("+", "%20").replace('=', '%3d')]) for r in request])
+        sig = urllib.parse.quote_plus(base64.encodestring(hmac.new(secretkey, hashStr, hashlib.sha1).digest()).strip())
         return sig
 
     def notify_provisioning_done(self, mac):

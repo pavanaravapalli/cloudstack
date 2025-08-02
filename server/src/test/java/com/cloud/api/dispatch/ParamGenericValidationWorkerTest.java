@@ -16,26 +16,6 @@
 // under the License.
 package com.cloud.api.dispatch;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
-import org.apache.cloudstack.acl.RoleType;
-import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.BaseCmd;
-import org.apache.cloudstack.api.BaseResponse;
-import org.apache.cloudstack.api.Parameter;
-import org.apache.cloudstack.api.ServerApiException;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
-import org.junit.Test;
-
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.NetworkRuleConflictException;
@@ -45,12 +25,39 @@ import com.cloud.user.Account;
 import com.cloud.user.AccountVO;
 import com.cloud.user.User;
 import com.cloud.user.UserVO;
+import org.apache.cloudstack.acl.RoleType;
+import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiConstants;
+import org.apache.cloudstack.api.BaseCmd;
+import org.apache.cloudstack.api.BaseResponse;
+import org.apache.cloudstack.api.Parameter;
+import org.apache.cloudstack.api.ServerApiException;
+import org.apache.cloudstack.context.CallContext;
 
+import org.apache.logging.log4j.Logger;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertTrue;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.MockitoJUnitRunner;
+
+@RunWith(MockitoJUnitRunner.class)
 public class ParamGenericValidationWorkerTest {
 
     protected static final String FAKE_CMD_NAME = "fakecmdname";
 
     protected static final String FAKE_CMD_ROLE_NAME = "fakecmdrolename";
+
+    @Mock Logger loggerMock;
 
     protected String loggerOutput;
 
@@ -58,12 +65,7 @@ public class ParamGenericValidationWorkerTest {
         final ParamGenericValidationWorker genValidationWorker = new ParamGenericValidationWorker();
 
         // We create a mock logger to verify the result
-        ParamGenericValidationWorker.s_logger = new Logger("") {
-            @Override
-            public void warn(final Object msg) {
-                loggerOutput = msg.toString();
-            }
-        };
+        genValidationWorker.logger = loggerMock;
 
         // Execute
         genValidationWorker.handle(new DispatchTask(cmd, params));
@@ -105,7 +107,7 @@ public class ParamGenericValidationWorkerTest {
         params.put("_", "");
         params.put("addedParam", "");
 
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short) 0, "uuid");
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, "uuid");
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, account);
         // Execute
@@ -115,8 +117,7 @@ public class ParamGenericValidationWorkerTest {
             CallContext.unregister();
         }
 
-        // Assert
-        assertEquals("There should be no errors since there are no unknown parameters for this command class", null, loggerOutput);
+        Mockito.verify(loggerMock, Mockito.never()).warn(Mockito.anyString());
     }
 
     @Test
@@ -129,7 +130,7 @@ public class ParamGenericValidationWorkerTest {
         params.put("addedParam", "");
         params.put(unknownParamKey, "");
 
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short) 0, "uuid");
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, "uuid");
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, account);
 
@@ -140,32 +141,40 @@ public class ParamGenericValidationWorkerTest {
             CallContext.unregister();
         }
 
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+        Mockito.verify(loggerMock).warn(captor.capture());
+
         // Assert
-        assertTrue("There should be error msg, since there is one unknown parameter", loggerOutput.contains(unknownParamKey));
-        assertTrue("There should be error msg containing the correct command name", loggerOutput.contains(FAKE_CMD_NAME));
+        assertTrue("There should be error msg, since there is one unknown parameter", captor.getValue().contains(unknownParamKey));
+        assertTrue("There should be error msg containing the correct command name", captor.getValue().contains(FAKE_CMD_NAME));
     }
 
     @Test
     public void testHandleWithoutAuthorization() throws ResourceAllocationException {
-        final short type = Account.ACCOUNT_TYPE_NORMAL;
+        final Account.Type type = Account.Type.NORMAL;
 
         driveAuthTest(type);
 
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+        Mockito.verify(loggerMock).warn(captor.capture());
+
         // Assert
-        assertTrue("There should be error msg, since there is one unauthorized parameter", loggerOutput.contains("paramWithRole"));
-        assertTrue("There should be error msg containing the correct command name", loggerOutput.contains(FAKE_CMD_ROLE_NAME));
+        assertTrue("There should be error msg, since there is one unauthorized parameter", captor.getValue().contains("paramWithRole"));
+        assertTrue("There should be error msg containing the correct command name", captor.getValue().contains(FAKE_CMD_ROLE_NAME));
     }
 
     @Test
     public void testHandleWithAuthorization() throws ResourceAllocationException {
-        final short type = Account.ACCOUNT_TYPE_ADMIN;
+        final Account.Type type = Account.Type.ADMIN;
 
         driveAuthTest(type);
         // Assert
-        assertEquals("There should be no errors since parameters have authorization", null, loggerOutput);
+        Mockito.verify(loggerMock, Mockito.never()).warn(Mockito.anyString());
     }
 
-    protected void driveAuthTest(final short type) {
+    protected void driveAuthTest(final Account.Type type) {
 
         // Prepare
         final BaseCmd cmd = new FakeCmdWithRoleAdmin();

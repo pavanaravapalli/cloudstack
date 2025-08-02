@@ -18,10 +18,10 @@ package com.cloud.host.dao;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 
 import org.springframework.stereotype.Component;
 
@@ -32,11 +32,13 @@ import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.db.TransactionLegacy;
 import com.cloud.utils.exception.CloudRuntimeException;
+import com.cloud.vm.VmDetailConstants;
 
 @Component
 public class HostDetailsDaoImpl extends GenericDaoBase<DetailVO, Long> implements HostDetailsDao {
     protected final SearchBuilder<DetailVO> HostSearch;
     protected final SearchBuilder<DetailVO> DetailSearch;
+    protected final SearchBuilder<DetailVO> DetailNameSearch;
 
     public HostDetailsDaoImpl() {
         HostSearch = createSearchBuilder();
@@ -47,6 +49,10 @@ public class HostDetailsDaoImpl extends GenericDaoBase<DetailVO, Long> implement
         DetailSearch.and("hostId", DetailSearch.entity().getHostId(), SearchCriteria.Op.EQ);
         DetailSearch.and("name", DetailSearch.entity().getName(), SearchCriteria.Op.EQ);
         DetailSearch.done();
+
+        DetailNameSearch = createSearchBuilder();
+        DetailNameSearch.and("name", DetailNameSearch.entity().getName(), SearchCriteria.Op.EQ);
+        DetailNameSearch.done();
     }
 
     @Override
@@ -116,6 +122,43 @@ public class HostDetailsDaoImpl extends GenericDaoBase<DetailVO, Long> implement
             } catch (SQLException e) {
                 throw new CloudRuntimeException("Unable to persist the host_details key: " + detail.getKey() + " for host id: " + hostId, e);
             }
+        }
+        txn.commit();
+    }
+
+    @Override
+    public List<DetailVO> findByName(String name) {
+        SearchCriteria<DetailVO> sc = DetailNameSearch.create();
+        sc.setParameters("name", name);
+        return listBy(sc);
+    }
+
+    @Override
+    public void replaceExternalDetails(long hostId, Map<String, String> details) {
+        if (details.isEmpty()) {
+            return;
+        }
+        TransactionLegacy txn = TransactionLegacy.currentTxn();
+        txn.start();
+        List<DetailVO> detailVOs = new ArrayList<>();
+        for (Map.Entry<String, String> entry : details.entrySet()) {
+            String name = entry.getKey();
+            String value = entry.getValue();
+            if ("password".equals(entry.getKey())) {
+                value = DBEncryptionUtil.encrypt(value);
+            }
+            detailVOs.add(new DetailVO(hostId, name, value));
+        }
+        SearchBuilder<DetailVO> sb = createSearchBuilder();
+        sb.and("hostId", sb.entity().getHostId(), SearchCriteria.Op.EQ);
+        sb.and("name", sb.entity().getName(), SearchCriteria.Op.LIKE);
+        sb.done();
+        SearchCriteria<DetailVO> sc = sb.create();
+        sc.setParameters("hostId", hostId);
+        sc.setParameters("name", VmDetailConstants.EXTERNAL_DETAIL_PREFIX + "%");
+        remove(sc);
+        for (DetailVO detail : detailVOs) {
+            persist(detail);
         }
         txn.commit();
     }

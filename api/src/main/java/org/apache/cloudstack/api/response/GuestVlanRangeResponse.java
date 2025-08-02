@@ -22,10 +22,10 @@ import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseResponse;
 import org.apache.cloudstack.api.EntityReference;
 
-import com.cloud.network.GuestVlan;
+import com.cloud.network.GuestVlanRange;
 import com.cloud.serializer.Param;
 
-@EntityReference(value = GuestVlan.class)
+@EntityReference(value = GuestVlanRange.class)
 @SuppressWarnings("unused")
 public class GuestVlanRangeResponse extends BaseResponse implements ControlledEntityResponse {
     @SerializedName(ApiConstants.ID)
@@ -43,6 +43,10 @@ public class GuestVlanRangeResponse extends BaseResponse implements ControlledEn
     @SerializedName(ApiConstants.DOMAIN)
     @Param(description = "the domain name of the guest VLAN range")
     private String domainName;
+
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "path of the domain to which the guest VLAN range belongs", since = "4.19.2.0")
+    private String domainPath;
 
     @SerializedName(ApiConstants.GUEST_VLAN_RANGE)
     @Param(description = "the guest VLAN range")
@@ -83,6 +87,10 @@ public class GuestVlanRangeResponse extends BaseResponse implements ControlledEn
         this.domainName = domainName;
     }
 
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
+    }
     public void setGuestVlanRange(String guestVlanRange) {
         this.guestVlanRange = guestVlanRange;
     }

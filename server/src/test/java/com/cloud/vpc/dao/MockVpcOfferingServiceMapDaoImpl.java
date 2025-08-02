@@ -16,14 +16,14 @@
 // under the License.
 package com.cloud.vpc.dao;
 
-import java.util.List;
-
-
+import com.cloud.network.Network;
 import com.cloud.network.Network.Service;
 import com.cloud.network.vpc.VpcOfferingServiceMapVO;
 import com.cloud.network.vpc.dao.VpcOfferingServiceMapDao;
 import com.cloud.utils.db.DB;
 import com.cloud.utils.db.GenericDaoBase;
+
+import java.util.List;
 
 @DB()
 public class MockVpcOfferingServiceMapDaoImpl extends GenericDaoBase<VpcOfferingServiceMapVO, Long> implements VpcOfferingServiceMapDao {
@@ -41,7 +41,7 @@ public class MockVpcOfferingServiceMapDaoImpl extends GenericDaoBase<VpcOffering
      * @see com.cloud.network.vpc.Dao.VpcOfferingServiceMapDao#areServicesSupportedByNetworkOffering(long, com.cloud.network.Network.Service[])
      */
     @Override
-    public boolean areServicesSupportedByNetworkOffering(long networkOfferingId, Service[] services) {
+    public boolean areServicesSupportedByVpcOffering(long vpcOfferingId, Service[] services) {
         // TODO Auto-generated method stub
         return false;
     }
@@ -61,6 +61,16 @@ public class MockVpcOfferingServiceMapDaoImpl extends GenericDaoBase<VpcOffering
     @Override
     public VpcOfferingServiceMapVO findByServiceProviderAndOfferingId(String service, String provider, long vpcOfferingId) {
         return new VpcOfferingServiceMapVO();
+    }
+
+    @Override
+    public boolean isProviderForVpcOffering(Network.Provider provider, long vpcOffering) {
+        return false;
+    }
+
+    @Override
+    public List<VpcOfferingServiceMapVO> listProvidersForServiceForVpcOffering(long vpcOfferingId, Service service) {
+        return List.of();
     }
 
     @Override

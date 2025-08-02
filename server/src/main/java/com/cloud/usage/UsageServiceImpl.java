@@ -29,16 +29,18 @@ import javax.naming.ConfigurationException;
 import org.apache.cloudstack.api.command.admin.usage.GenerateUsageRecordsCmd;
 import org.apache.cloudstack.api.command.admin.usage.ListUsageRecordsCmd;
 import org.apache.cloudstack.api.command.admin.usage.RemoveRawUsageRecordsCmd;
-import org.apache.cloudstack.api.response.UsageTypeResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.usage.Usage;
 import org.apache.cloudstack.usage.UsageService;
 import org.apache.cloudstack.usage.UsageTypes;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Component;
 
 import com.cloud.configuration.Config;
+import com.cloud.domain.Domain;
 import com.cloud.domain.DomainVO;
 import com.cloud.domain.dao.DomainDao;
 import com.cloud.exception.InvalidParameterValueException;
@@ -55,6 +57,8 @@ import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
 import com.cloud.network.security.SecurityGroupVO;
 import com.cloud.network.security.dao.SecurityGroupDao;
+import com.cloud.offerings.NetworkOfferingVO;
+import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.projects.Project;
 import com.cloud.projects.ProjectManager;
 import com.cloud.storage.SnapshotVO;
@@ -69,6 +73,7 @@ import com.cloud.user.Account;
 import com.cloud.user.AccountService;
 import com.cloud.user.AccountVO;
 import com.cloud.user.dao.AccountDao;
+import com.cloud.utils.DateUtil;
 import com.cloud.utils.Pair;
 import com.cloud.utils.component.Manager;
 import com.cloud.utils.component.ManagerBase;
@@ -80,7 +85,6 @@ import com.cloud.vm.dao.VMInstanceDao;
 
 @Component
 public class UsageServiceImpl extends ManagerBase implements UsageService, Manager {
-    public static final Logger s_logger = Logger.getLogger(UsageServiceImpl.class);
 
     //ToDo: Move implementation to ManagaerImpl
 
@@ -96,7 +100,7 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
     private ConfigurationDao _configDao;
     @Inject
     private ProjectManager _projectMgr;
-    private TimeZone _usageTimezone;
+    private TimeZone _usageTimezone = TimeZone.getTimeZone("GMT");
     @Inject
     private AccountService _accountService;
     @Inject
@@ -119,6 +123,8 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
     private IPAddressDao _ipDao;
     @Inject
     private HostDao _hostDao;
+    @Inject
+    private NetworkOfferingDao _networkOfferingDao;
 
     public UsageServiceImpl() {
     }
@@ -126,10 +132,7 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
     @Override
     public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
         super.configure(name, params);
-        String timeZoneStr = _configDao.getValue(Config.UsageAggregationTimezone.toString());
-        if (timeZoneStr == null) {
-           timeZoneStr = "GMT";
-        }
+        String timeZoneStr = ObjectUtils.defaultIfNull(_configDao.getValue(Config.UsageAggregationTimezone.toString()), "GMT");
         _usageTimezone = TimeZone.getTimeZone(timeZoneStr);
         return true;
     }
@@ -165,91 +168,75 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
         Long accountId = cmd.getAccountId();
         Long domainId = cmd.getDomainId();
         String accountName = cmd.getAccountName();
-        Account userAccount = null;
         Account caller = CallContext.current().getCallingAccount();
         Long usageType = cmd.getUsageType();
         Long projectId = cmd.getProjectId();
         String usageId = cmd.getUsageId();
+        boolean projectRequested = false;
 
         if (projectId != null) {
             if (accountId != null) {
                 throw new InvalidParameterValueException("Projectid and accountId can't be specified together");
             }
-            Project project = _projectMgr.getProject(projectId);
-            if (project == null) {
-                throw new InvalidParameterValueException("Unable to find project by id " + projectId);
-            }
-            accountId = project.getProjectAccountId();
+            accountId = getAccountIdFromProject(projectId);
+            projectRequested = true;
+        } else if ((accountId == null) && (StringUtils.isNotBlank(accountName)) && (domainId != null)) {
+            accountId = getAccountIdFromDomainPlusName(domainId, accountName, caller);
         }
 
-        //if accountId is not specified, use accountName and domainId
-        if ((accountId == null) && (accountName != null) && (domainId != null)) {
-            if (_domainDao.isChildDomain(caller.getDomainId(), domainId)) {
-                Filter filter = new Filter(AccountVO.class, "id", Boolean.FALSE, null, null);
-                List<AccountVO> accounts = _accountDao.listAccounts(accountName, domainId, filter);
-                if (accounts.size() > 0) {
-                    userAccount = accounts.get(0);
-                }
-                if (userAccount != null) {
-                    accountId = userAccount.getId();
-                } else {
-                    throw new InvalidParameterValueException("Unable to find account " + accountName + " in domain " + domainId);
-                }
-            } else {
-                throw new PermissionDeniedException("Invalid Domain Id or Account");
-            }
-        }
+        boolean ignoreAccountId = false;
+        boolean isDomainAdmin = _accountService.isDomainAdmin(caller.getId());
+        boolean isNormalUser = _accountService.isNormalUser(caller.getId());
 
-        boolean isAdmin = false;
-        boolean isDomainAdmin = false;
-
-        //If accountId couldn't be found using accountName and domainId, get it from userContext
+        //If accountId couldn't be found using project or accountName and domainId, get it from userContext
         if (accountId == null) {
             accountId = caller.getId();
             //List records for all the accounts if the caller account is of type admin.
             //If account_id or account_name is explicitly mentioned, list records for the specified account only even if the caller is of type admin
-            if (_accountService.isRootAdmin(caller.getId())) {
-                isAdmin = true;
-            } else if (_accountService.isDomainAdmin(caller.getId())) {
-                isDomainAdmin = true;
-            }
-            s_logger.debug("Account details not available. Using userContext accountId: " + accountId);
+            ignoreAccountId = _accountService.isRootAdmin(caller.getId());
+            logger.debug("Account details not available. Using userContext account: {}", caller);
         }
+
+        // Check if a domain admin is allowed to access the requested domain id
+        domainId = getDomainScopeForQuery(cmd, accountId, domainId, caller, isDomainAdmin);
+
+        // By default users do not have access to this API.
+        // Adding checks here in case someone changes the default access.
+        checkUserAccess(cmd, accountId, caller, isNormalUser);
 
         Date startDate = cmd.getStartDate();
         Date endDate = cmd.getEndDate();
         if (startDate.after(endDate)) {
             throw new InvalidParameterValueException("Incorrect Date Range. Start date: " + startDate + " is after end date:" + endDate);
         }
-        TimeZone usageTZ = getUsageTimezone();
-        Date adjustedStartDate = computeAdjustedTime(startDate, usageTZ);
-        Date adjustedEndDate = computeAdjustedTime(endDate, usageTZ);
 
-        if (s_logger.isDebugEnabled()) {
-            s_logger.debug("getting usage records for account: " + accountId + ", domainId: " + domainId + ", between " + adjustedStartDate + " and " + adjustedEndDate +
-                ", using pageSize: " + cmd.getPageSizeVal() + " and startIndex: " + cmd.getStartIndex());
-        }
+        logger.debug("Getting usage records for account ID [{}], domain ID [{}] between [{}] and [{}] using page size [{}] and start index [{}].",
+                accountId, domainId, DateUtil.displayDateInTimezone(_usageTimezone, startDate), DateUtil.displayDateInTimezone(_usageTimezone, endDate),
+                cmd.getPageSizeVal(), cmd.getStartIndex());
 
         Filter usageFilter = new Filter(UsageVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
 
         SearchCriteria<UsageVO> sc = _usageDao.createSearchCriteria();
 
-        if (accountId != -1 && accountId != Account.ACCOUNT_ID_SYSTEM && !isAdmin && !isDomainAdmin) {
-            sc.addAnd("accountId", SearchCriteria.Op.EQ, accountId);
-        }
-
-        if (isDomainAdmin) {
-            SearchCriteria<DomainVO> sdc = _domainDao.createSearchCriteria();
-            sdc.addOr("path", SearchCriteria.Op.LIKE, _domainDao.findById(caller.getDomainId()).getPath() + "%");
-            List<DomainVO> domains = _domainDao.search(sdc, null);
-            List<Long> domainIds = new ArrayList<Long>();
-            for (DomainVO domain : domains)
-                domainIds.add(domain.getId());
-            sc.addAnd("domainId", SearchCriteria.Op.IN, domainIds.toArray());
+        if (accountId != -1 && accountId != Account.ACCOUNT_ID_SYSTEM && !ignoreAccountId) {
+            if (!cmd.isRecursive() || cmd.getAccountId() != null || projectRequested){
+                sc.addAnd("accountId", SearchCriteria.Op.EQ, accountId);
+            }
         }
 
         if (domainId != null) {
-            sc.addAnd("domainId", SearchCriteria.Op.EQ, domainId);
+            if (cmd.isRecursive()) {
+                SearchCriteria<DomainVO> sdc = _domainDao.createSearchCriteria();
+                sdc.addOr("path", SearchCriteria.Op.LIKE, _domainDao.findById(domainId).getPath() + "%");
+                List<DomainVO> domains = _domainDao.search(sdc, null);
+                List<Long> domainIds = new ArrayList<Long>();
+                for (DomainVO domain : domains) {
+                    domainIds.add(domain.getId());
+                }
+                sc.addAnd("domainId", SearchCriteria.Op.IN, domainIds.toArray());
+            } else {
+                sc.addAnd("domainId", SearchCriteria.Op.EQ, domainId);
+            }
         }
 
         if (usageType != null) {
@@ -262,6 +249,7 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
             }
 
             Long usageDbId = null;
+            boolean offeringExistsForNetworkOfferingType = false;
 
             switch (usageType.intValue()) {
                 case UsageTypes.NETWORK_BYTES_RECEIVED:
@@ -335,13 +323,19 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
                         usageDbId = ip.getId();
                     }
                     break;
+                case UsageTypes.NETWORK_OFFERING:
+                    NetworkOfferingVO networkOffering = _networkOfferingDao.findByUuidIncludingRemoved(usageId);
+                    if (networkOffering != null) {
+                        offeringExistsForNetworkOfferingType = true;
+                        sc.addAnd("offeringId", SearchCriteria.Op.EQ, networkOffering.getId());
+                    }
                 default:
                     break;
             }
 
             if (usageDbId != null) {
                 sc.addAnd("usageId", SearchCriteria.Op.EQ, usageDbId);
-            } else {
+            } else if (!offeringExistsForNetworkOfferingType) {
                 // return an empty list if usageId was not found
                 return new Pair<List<? extends Usage>, Integer>(new ArrayList<Usage>(), new Integer(0));
             }
@@ -350,9 +344,9 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
         // Filter out hidden usages
         sc.addAnd("isHidden", SearchCriteria.Op.EQ, false);
 
-        if ((adjustedStartDate != null) && (adjustedEndDate != null) && adjustedStartDate.before(adjustedEndDate)) {
-            sc.addAnd("startDate", SearchCriteria.Op.BETWEEN, adjustedStartDate, adjustedEndDate);
-            sc.addAnd("endDate", SearchCriteria.Op.BETWEEN, adjustedStartDate, adjustedEndDate);
+        if ((startDate != null) && (endDate != null) && startDate.before(endDate)) {
+            sc.addAnd("startDate", SearchCriteria.Op.BETWEEN, startDate, endDate);
+            sc.addAnd("endDate", SearchCriteria.Op.BETWEEN, startDate, endDate);
         } else {
             return new Pair<List<? extends Usage>, Integer>(new ArrayList<Usage>(), new Integer(0)); // return an empty list if we fail to validate the dates
         }
@@ -370,6 +364,96 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
         }
 
         return new Pair<List<? extends Usage>, Integer>(usageRecords.first(), usageRecords.second());
+    }
+
+    private Long getDomainScopeForQuery(ListUsageRecordsCmd cmd, Long accountId, Long domainId, Account caller, boolean isDomainAdmin) {
+        if (isDomainAdmin) {
+            if (domainId != null) {
+                Account callerAccount = _accountService.getAccount(caller.getId());
+                Domain domain = _domainDao.findById(domainId);
+                _accountService.checkAccess(callerAccount, domain);
+            } else {
+                domainId = caller.getDomainId();
+            }
+
+            if (cmd.getAccountId() != null) {
+                checkDomainAdminAccountAccess(accountId, domainId);
+            }
+        }
+        return domainId;
+    }
+
+    @NotNull
+    private Long getAccountIdFromDomainPlusName(Long domainId, String accountName, Account caller) {
+        Long accountId;
+        Account userAccount = null;
+        if (! _domainDao.isChildDomain(caller.getDomainId(), domainId)) {
+            throw new PermissionDeniedException("Invalid Domain Id or Account");
+        }
+        Filter filter = new Filter(AccountVO.class, "id", Boolean.FALSE, null, null);
+        List<AccountVO> accounts = _accountDao.listAccounts(accountName, domainId, filter);
+        if (accounts.size() > 0) {
+            userAccount = accounts.get(0);
+        }
+        if (userAccount == null) {
+            throw new InvalidParameterValueException("Unable to find account " + accountName + " in domain " + domainId);
+        }
+        return userAccount.getId();
+    }
+
+    @NotNull
+    private Long getAccountIdFromProject(Long projectId) {
+        Long accountId;
+        Project project = _projectMgr.getProject(projectId);
+        if (project == null) {
+            throw new InvalidParameterValueException("Unable to find project by id " + projectId);
+        }
+        final long projectAccountId = project.getProjectAccountId();
+        if (logger.isInfoEnabled()) {
+            logger.info(String.format("Using projectAccountId %d for project %s [%s] as account id", projectAccountId, project.getName(), project.getUuid()));
+        }
+        accountId = projectAccountId;
+        return accountId;
+    }
+
+    private void checkUserAccess(ListUsageRecordsCmd cmd, Long accountId, Account caller, boolean isNormalUser) {
+        if (isNormalUser) {
+            // A user can only access their own account records
+            if (caller.getId() != accountId) {
+                throw new PermissionDeniedException("Users are only allowed to list usage records for their own account.");
+            }
+            // Users cannot get recursive records
+            if (cmd.isRecursive()) {
+                throw new PermissionDeniedException("Users are not allowed to list usage records recursively.");
+            }
+            // Users cannot get domain records
+            if (cmd.getDomainId() != null) {
+                throw new PermissionDeniedException("Users are not allowed to list usage records for a domain");
+            }
+        }
+    }
+
+    private void checkDomainAdminAccountAccess(Long accountId, Long domainId) {
+        Account account = _accountService.getAccount(accountId);
+        boolean matchFound = false;
+
+        if (account.getDomainId() == domainId) {
+            matchFound = true;
+        } else {
+
+            // Check if the account is in a child domain of this domain admin.
+            List<DomainVO> childDomains = _domainDao.findAllChildren(_domainDao.findById(domainId).getPath(), domainId);
+
+            for (DomainVO domainVO : childDomains) {
+                if (account.getDomainId() == domainVO.getId()) {
+                    matchFound = true;
+                    break;
+                }
+            }
+        }
+        if (!matchFound) {
+            throw new PermissionDeniedException("Domain admins may only retrieve usage records for accounts in their own domain and child domains.");
+        }
     }
 
     @Override
@@ -398,7 +482,7 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
                     cal.set(Calendar.SECOND, 0);
                     cal.set(Calendar.MILLISECOND, 0);
                     long execTS = cal.getTimeInMillis();
-                    s_logger.debug("Trying to remove old raw cloud_usage records older than " + interval + " day(s), current time=" + curTS + " next job execution time=" + execTS);
+                    logger.debug("Trying to remove old raw cloud_usage records older than " + interval + " day(s), current time=" + curTS + " next job execution time=" + execTS);
                     // Let's avoid cleanup when job runs and around a 15 min interval
                     if (Math.abs(curTS - execTS) < 15 * 60 * 1000) {
                         return false;
@@ -411,34 +495,4 @@ public class UsageServiceImpl extends ManagerBase implements UsageService, Manag
         }
         return true;
     }
-
-    private Date computeAdjustedTime(Date initialDate, TimeZone targetTZ) {
-        Calendar cal = Calendar.getInstance();
-        cal.setTime(initialDate);
-        TimeZone localTZ = cal.getTimeZone();
-        int timezoneOffset = cal.get(Calendar.ZONE_OFFSET);
-        if (localTZ.inDaylightTime(initialDate)) {
-            timezoneOffset += (60 * 60 * 1000);
-        }
-        cal.add(Calendar.MILLISECOND, timezoneOffset);
-
-        Date newTime = cal.getTime();
-
-        Calendar calTS = Calendar.getInstance(targetTZ);
-        calTS.setTime(newTime);
-        timezoneOffset = calTS.get(Calendar.ZONE_OFFSET);
-        if (targetTZ.inDaylightTime(initialDate)) {
-            timezoneOffset += (60 * 60 * 1000);
-        }
-
-        calTS.add(Calendar.MILLISECOND, -1 * timezoneOffset);
-
-        return calTS.getTime();
-    }
-
-    @Override
-    public List<UsageTypeResponse> listUsageTypes() {
-        return UsageTypes.listUsageTypes();
-    }
-
 }

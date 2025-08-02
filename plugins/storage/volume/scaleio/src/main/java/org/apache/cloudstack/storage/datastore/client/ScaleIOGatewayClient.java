@@ -38,10 +38,16 @@ public interface ScaleIOGatewayClient {
     String GATEWAY_API_PASSWORD = "powerflex.gw.password";
     String STORAGE_POOL_NAME = "powerflex.storagepool.name";
     String STORAGE_POOL_SYSTEM_ID = "powerflex.storagepool.system.id";
+    /**
+     * Storage Pool Metadata Management (MDM) IP address(es).
+     */
+    String STORAGE_POOL_MDMS = "powerflex.storagepool.mdms";
+    String SDC_ID = "powerflex.sdc.id";
+    String SDC_GUID = "powerflex.sdc.guid";
 
     static ScaleIOGatewayClient getClient(final String url, final String username, final String password,
-                                          final boolean validateCertificate, final int timeout) throws NoSuchAlgorithmException, KeyManagementException, URISyntaxException {
-        return new ScaleIOGatewayClientImpl(url, username, password, validateCertificate, timeout);
+                                          final boolean validateCertificate, final int timeout, final int maxConnections) throws NoSuchAlgorithmException, KeyManagementException, URISyntaxException {
+        return new ScaleIOGatewayClientImpl(url, username, password, validateCertificate, timeout, maxConnections);
     }
 
     // Volume APIs
@@ -77,12 +83,18 @@ public interface ScaleIOGatewayClient {
     VolumeStatistics getVolumeStatistics(String volumeId);
     String getSystemId(String protectionDomainId);
     List<Volume> listVolumesInStoragePool(String poolId);
+    List<Volume> listVolumesMappedToSdc(String sdcId);
 
     // SDC APIs
     List<Sdc> listSdcs();
     Sdc getSdc(String sdcId);
+    String getSdcIdByGuid(String sdcGuid);
     Sdc getSdcByIp(String ipAddress);
     Sdc getConnectedSdcByIp(String ipAddress);
-    List<String> listConnectedSdcIps();
-    boolean isSdcConnected(String ipAddress);
+    int getConnectedSdcsCount();
+    boolean haveConnectedSdcs();
+    boolean isSdcConnected(String sdcId);
+    boolean isSdcConnectedByIP(String ipAddress);
+
+    List<String> getMdmAddresses();
 }

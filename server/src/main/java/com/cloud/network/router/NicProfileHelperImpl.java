@@ -21,8 +21,9 @@ import java.net.URI;
 
 import javax.inject.Inject;
 
-import com.cloud.utils.exception.CloudRuntimeException;
-import org.cloud.network.router.deployment.RouterDeploymentDefinition;
+import com.cloud.vm.NicVO;
+import com.cloud.vm.VirtualMachine;
+import org.apache.cloudstack.network.router.deployment.RouterDeploymentDefinition;
 
 import com.cloud.network.IpAddressManager;
 import com.cloud.network.Network;
@@ -35,6 +36,7 @@ import com.cloud.network.vpc.VpcGateway;
 import com.cloud.network.vpc.VpcManager;
 import com.cloud.network.vpc.dao.PrivateIpDao;
 import com.cloud.utils.db.DB;
+import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.utils.net.NetUtils;
 import com.cloud.vm.Nic;
 import com.cloud.vm.NicProfile;
@@ -118,7 +120,15 @@ public class NicProfileHelperImpl implements NicProfileHelper {
     public NicProfile createGuestNicProfileForVpcRouter(final RouterDeploymentDefinition vpcRouterDeploymentDefinition, final Network guestNetwork) {
         final NicProfile guestNic = new NicProfile();
 
-        if (vpcRouterDeploymentDefinition.isRedundant()) {
+        if (BroadcastDomainType.NSX == guestNetwork.getBroadcastDomainType() ||
+                BroadcastDomainType.Netris == guestNetwork.getBroadcastDomainType() ||
+                !_vpcMgr.isSrcNatIpRequiredForVpcVr(vpcRouterDeploymentDefinition.getVpc().getVpcOfferingId())) {
+            NicVO vrNic = _nicDao.findByNetworkIdAndTypeIncludingRemoved(guestNetwork.getId(), VirtualMachine.Type.DomainRouter);
+            if (vrNic != null) {
+                guestNic.setIPv4Address(vrNic.getIPv4Address());
+                guestNic.setIPv4Gateway(vrNic.getIPv4Gateway());
+            }
+        } else if (vpcRouterDeploymentDefinition.isRedundant()) {
             guestNic.setIPv4Address(this.acquireGuestIpAddressForVrouterRedundant(guestNetwork));
         } else {
             guestNic.setIPv4Address(guestNetwork.getGateway());

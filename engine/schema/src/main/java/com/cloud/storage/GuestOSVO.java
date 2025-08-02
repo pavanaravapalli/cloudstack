@@ -57,6 +57,9 @@ public class GuestOSVO implements GuestOS {
     @Column(name = "is_user_defined")
     private boolean isUserDefined;
 
+    @Column(name = "display", updatable = true, nullable = false)
+    protected boolean display = true;
+
     @Override
     public long getId() {
         return id;
@@ -113,11 +116,22 @@ public class GuestOSVO implements GuestOS {
     }
 
     @Override
-    public boolean isUserDefined() {
+    public boolean getIsUserDefined() {
         return isUserDefined;
     }
 
     public void setIsUserDefined(boolean isUserDefined) {
         this.isUserDefined = isUserDefined;
+    }
+
+    public boolean getForDisplay() {
+        return isDisplay();
+    }
+    public boolean isDisplay() {
+        return display;
+    }
+
+    public void setDisplay(boolean display) {
+        this.display = display;
     }
 }

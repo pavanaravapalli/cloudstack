@@ -17,19 +17,13 @@
 
 package org.apache.cloudstack.response;
 
-import java.util.Set;
-
 import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.response.NicResponse;
 import org.apache.cloudstack.api.response.UserVmResponse;
 
 import com.cloud.serializer.Param;
 import com.google.gson.annotations.SerializedName;
 
 public class VmMetricsResponse extends UserVmResponse {
-    @SerializedName(ApiConstants.IP_ADDRESS)
-    @Param(description = "the VM's primary IP address")
-    private String ipAddress;
 
     @SerializedName("cputotal")
     @Param(description = "the total cpu capacity in Ghz")
@@ -59,11 +53,6 @@ public class VmMetricsResponse extends UserVmResponse {
     @Param(description = "the total disk iops")
     private Long diskIopsTotal;
 
-    public void setIpAddress(final Set<NicResponse> nics) {
-        if (nics != null && nics.size() > 0) {
-            this.ipAddress = nics.iterator().next().getIpaddress();
-        }
-    }
 
     public void setCpuTotal(final Integer cpuNumber, final Integer cpuSpeed) {
         if (cpuNumber != null && cpuSpeed != null) {
@@ -73,31 +62,31 @@ public class VmMetricsResponse extends UserVmResponse {
 
     public void setMemTotal(final Integer memory) {
         if (memory != null) {
-            this.memTotal = String.format("%.2f GB", memory / 1024.0);
+            this.memTotal = String.format("%.2f GiB", memory / 1024.0);
         }
     }
 
     public void setNetworkRead(final Long networkReadKbs) {
         if (networkReadKbs != null) {
-            this.networkRead = String.format("%.2f MB", networkReadKbs / 1024.0);
+            this.networkRead = String.format("%.2f MiB", networkReadKbs / 1024.0);
         }
     }
 
     public void setNetworkWrite(final Long networkWriteKbs) {
         if (networkWriteKbs != null) {
-            this.networkWrite = String.format("%.2f MB", networkWriteKbs / 1024.0);
+            this.networkWrite = String.format("%.2f MiB", networkWriteKbs / 1024.0);
         }
     }
 
     public void setDiskRead(final Long diskReadKbs) {
         if (diskReadKbs != null) {
-            this.networkRead = String.format("%.2f MB", diskReadKbs / 1024.0);
+            this.diskRead = String.format("%.2f MiB", diskReadKbs / 1024.0);
         }
     }
 
     public void setDiskWrite(final Long diskWriteKbs) {
         if (diskWriteKbs != null) {
-            this.networkWrite = String.format("%.2f MB", diskWriteKbs / 1024.0);
+            this.diskWrite = String.format("%.2f MiB", diskWriteKbs / 1024.0);
         }
     }
 

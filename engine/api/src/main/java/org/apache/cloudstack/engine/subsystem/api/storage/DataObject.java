@@ -33,6 +33,8 @@ public interface DataObject {
 
     Long getSize();
 
+    long getPhysicalSize();
+
     DataObjectType getType();
 
     String getUuid();
@@ -48,4 +50,6 @@ public interface DataObject {
     void decRefCount();
 
     Long getRefCount();
+
+    String getName();
 }

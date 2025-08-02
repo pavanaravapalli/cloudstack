@@ -256,6 +256,11 @@ public class PublicIp implements PublicIpAddress {
     }
 
     @Override
+    public String getName() {
+        return _addr.getName();
+    }
+
+    @Override
     public State getRuleState() {
         return _addr.getRuleState();
     }
@@ -264,4 +269,15 @@ public class PublicIp implements PublicIpAddress {
     public void setRuleState(State ruleState) {
         _addr.setRuleState(ruleState);
     }
+
+    @Override
+    public boolean isForSystemVms() {
+        return false;
+    }
+
+    @Override
+    public boolean isForRouter() {
+        return _addr.isForRouter();
+    }
+
 }

@@ -19,11 +19,13 @@
   <resource-view
     :loading="loading"
     :resource="quotaResource"
-    :tabs="tabs"/>
+    :tabs="tabs"
+    :historyTab="activeTab"
+    @onTabChange="(tab) => { activeTab = tab }"/>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import moment from 'moment'
 
 import ResourceView from '@/components/view/ResourceView'
@@ -48,16 +50,20 @@ export default {
       loading: false,
       quotaResource: {},
       networkService: null,
-      pattern: 'YYYY-MM-DD'
+      pattern: 'YYYY-MM-DD',
+      activeTab: ''
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    resource () {
-      if (Object.keys(this.resource).length === 0) {
-        this.fetchData()
+    resource: {
+      deep: true,
+      handler () {
+        if (Object.keys(this.resource).length === 0) {
+          this.fetchData()
+        }
       }
     }
   },
@@ -70,7 +76,7 @@ export default {
       }
       this.loading = true
 
-      api('quotaBalance', params).then(json => {
+      getAPI('quotaBalance', params).then(json => {
         const quotaBalance = json.quotabalanceresponse.balance || {}
         if (Object.keys(quotaBalance).length > 0) {
           quotaBalance.currency = `${quotaBalance.currency} ${quotaBalance.startquota}`

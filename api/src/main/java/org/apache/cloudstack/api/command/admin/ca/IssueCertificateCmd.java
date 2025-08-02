@@ -36,12 +36,11 @@ import org.apache.cloudstack.ca.CAManager;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.framework.ca.Certificate;
 import org.apache.cloudstack.utils.security.CertUtils;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
 
 import com.cloud.event.EventTypes;
-import com.google.common.base.Strings;
 
-@APICommand(name = IssueCertificateCmd.APINAME,
+@APICommand(name = "issueCertificate",
         description = "Issues a client certificate using configured or provided CA plugin",
         responseObject = CertificateResponse.class,
         requestHasSensitiveInfo = true,
@@ -49,9 +48,7 @@ import com.google.common.base.Strings;
         since = "4.11.0",
         authorized = {RoleType.Admin})
 public class IssueCertificateCmd extends BaseAsyncCmd {
-    private static final Logger LOG = Logger.getLogger(IssueCertificateCmd.class);
 
-    public static final String APINAME = "issueCertificate";
 
     @Inject
     private CAManager caManager;
@@ -85,7 +82,7 @@ public class IssueCertificateCmd extends BaseAsyncCmd {
 
     private List<String> processList(final String string) {
         final List<String> list = new ArrayList<>();
-        if (!Strings.isNullOrEmpty(string)) {
+        if (StringUtils.isNotEmpty(string)) {
             for (final String address: string.split(",")) {
                 list.add(address.trim());
             }
@@ -115,7 +112,7 @@ public class IssueCertificateCmd extends BaseAsyncCmd {
 
     @Override
     public void execute() {
-        if (Strings.isNullOrEmpty(getCsr()) && getDomains().isEmpty()) {
+        if (StringUtils.isEmpty(getCsr()) && getDomains().isEmpty()) {
             throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "Please provide the domains or the CSR, none of them are provided");
         }
         final Certificate certificate = caManager.issueCertificate(getCsr(), getDomains(), getAddresses(), getValidityDuration(), getProvider());
@@ -133,16 +130,11 @@ public class IssueCertificateCmd extends BaseAsyncCmd {
                 certificateResponse.setCaCertificate(CertUtils.x509CertificatesToPem(certificate.getCaCertificates()));
             }
         } catch (final IOException e) {
-            LOG.error("Failed to generate and convert client certificate(s) to PEM due to error: ", e);
+            logger.error("Failed to generate and convert client certificate(s) to PEM due to error: ", e);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to process and return client certificate");
         }
         certificateResponse.setResponseName(getCommandName());
         setResponseObject(certificateResponse);
-    }
-
-    @Override
-    public String getCommandName() {
-        return APINAME.toLowerCase() + BaseCmd.RESPONSE_SUFFIX;
     }
 
     @Override

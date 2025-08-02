@@ -25,37 +25,37 @@ import org.apache.cloudstack.api.InternalIdentity;
 /**
  * offered.
  */
-public interface ServiceOffering extends DiskOffering, InfrastructureEntity, InternalIdentity, Identity {
-    public static final String consoleProxyDefaultOffUniqueName = "Cloud.com-ConsoleProxy";
-    public static final String ssvmDefaultOffUniqueName = "Cloud.com-SecondaryStorage";
-    public static final String routerDefaultOffUniqueName = "Cloud.Com-SoftwareRouter";
-    public static final String elbVmDefaultOffUniqueName = "Cloud.Com-ElasticLBVm";
-    public static final String internalLbVmDefaultOffUniqueName = "Cloud.Com-InternalLBVm";
+public interface ServiceOffering extends InfrastructureEntity, InternalIdentity, Identity {
+    static final String consoleProxyDefaultOffUniqueName = "Cloud.com-ConsoleProxy";
+    static final String ssvmDefaultOffUniqueName = "Cloud.com-SecondaryStorage";
+    static final String routerDefaultOffUniqueName = "Cloud.Com-SoftwareRouter";
+    static final String elbVmDefaultOffUniqueName = "Cloud.Com-ElasticLBVm";
+    static final String internalLbVmDefaultOffUniqueName = "Cloud.Com-InternalLBVm";
     // leaving cloud.com references as these are identifyers and no real world addresses (check against DB)
 
-    public enum StorageType {
+
+    static final String PURGE_DB_ENTITIES_KEY = "purge.db.entities";
+
+    enum State {
+        Inactive, Active,
+    }
+
+    enum StorageType {
         local, shared
     }
 
-    @Override
     String getDisplayText();
 
-    @Override
     Date getCreated();
-
-    @Override
-    String getTags();
 
     /**
      * @return user readable description
      */
-    @Override
     String getName();
 
     /**
      * @return is this a system service offering
      */
-    @Override
     boolean isSystemUse();
 
     /**
@@ -99,21 +99,51 @@ public interface ServiceOffering extends DiskOffering, InfrastructureEntity, Int
     Integer getMulticastRateMbps();
 
     /**
-     * @return whether or not the service offering requires local storage
-     */
-    @Override
-    boolean isUseLocalStorage();
-
-    /**
      * @return tag that should be present on the host needed, optional parameter
      */
     String getHostTag();
 
     boolean getDefaultUse();
 
-    String getSystemVmType();
+    String getVmType();
 
     String getDeploymentPlanner();
 
     boolean isDynamic();
+
+    void setState(ServiceOffering.State state);
+
+    ServiceOffering.State getState();
+
+    void setName(String name);
+
+    String getUniqueName();
+
+    void setUniqueName(String uniqueName);
+
+    void setDisplayText(String displayText);
+
+    boolean isCustomized();
+
+    void setCustomized(boolean customized);
+
+    Date getRemoved();
+
+    void setRemoved(Date removed);
+
+    void setSortKey(int key);
+
+    int getSortKey();
+
+    Long getDiskOfferingId();
+
+    boolean isDynamicScalingEnabled();
+
+    Boolean getDiskOfferingStrictness();
+
+    void setDiskOfferingStrictness(boolean diskOfferingStrictness);
+
+    Long getVgpuProfileId();
+
+    Integer getGpuCount();
 }

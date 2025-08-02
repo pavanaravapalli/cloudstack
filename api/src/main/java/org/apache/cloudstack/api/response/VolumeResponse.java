@@ -18,6 +18,7 @@ package org.apache.cloudstack.api.response;
 
 import java.util.Date;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.cloudstack.acl.RoleType;
@@ -92,9 +93,13 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "display name of the virtual machine")
     private String virtualMachineDisplayName;
 
-    @SerializedName("vmstate")
+    @SerializedName(ApiConstants.VIRTUAL_MACHINE_STATE)
     @Param(description = "state of the virtual machine")
     private String virtualMachineState;
+
+    @SerializedName(ApiConstants.VM_TYPE)
+    @Param(description = "type of the virtual machine")
+    private String vmType;
 
     @SerializedName(ApiConstants.PROVISIONINGTYPE)
     @Param(description = "provisioning type used to create volumes.")
@@ -140,6 +145,10 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "the domain associated with the disk volume")
     private String domainName;
 
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "path of the Domain the disk volume belongs to", since = "4.19.2.0")
+    private String domainPath;
+
     @SerializedName("storagetype")
     @Param(description = "shared or local storage")
     private String storageType;
@@ -153,27 +162,27 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
     private Long bytesWriteRate;
 
     @SerializedName("diskIopsReadRate")
-    @Param(description = "io requests read rate of the disk volume per the disk offering")
+    @Param(description = "IO requests read rate of the disk volume per the disk offering")
     private Long iopsReadRate;
 
     @SerializedName("diskIopsWriteRate")
-    @Param(description = "io requests write rate of the disk volume per the disk offering")
+    @Param(description = "IO requests write rate of the disk volume per the disk offering")
     private Long iopsWriteRate;
 
     @SerializedName(ApiConstants.DISK_KBS_READ)
-    @Param(description = "the read (bytes) of disk on the vm")
+    @Param(description = "the VM's disk read in KiB")
     private Long diskKbsRead;
 
     @SerializedName(ApiConstants.DISK_KBS_WRITE)
-    @Param(description = "the write (bytes) of disk on the vm")
+    @Param(description = "the VM's disk write in KiB")
     private Long diskKbsWrite;
 
     @SerializedName(ApiConstants.DISK_IO_READ)
-    @Param(description = "the read (io) of disk on the vm")
+    @Param(description = "the read (IO) of disk on the vm")
     private Long diskIORead;
 
     @SerializedName(ApiConstants.DISK_IO_WRITE)
-    @Param(description = "the write (io) of disk on the vm")
+    @Param(description = "the write (IO) of disk on the vm")
     private Long diskIOWrite;
 
     @SerializedName(ApiConstants.HYPERVISOR)
@@ -206,7 +215,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
 
     @SerializedName("destroyed")
     @Param(description = "the boolean state of whether the volume is destroyed or not")
-    private Boolean destroyed;
+    private boolean destroyed;
 
     @SerializedName(ApiConstants.SERVICE_OFFERING_ID)
     @Param(description = "ID of the service offering for root disk")
@@ -222,7 +231,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
 
     @SerializedName("isextractable")
     @Param(description = "true if the volume is extractable, false otherwise")
-    private Boolean extractable;
+    private boolean extractable;
 
     @SerializedName(ApiConstants.STATUS)
     @Param(description = "the status of the volume")
@@ -230,7 +239,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
 
     @SerializedName(ApiConstants.DISPLAY_VOLUME)
     @Param(description = "an optional field whether to the display the volume to the end user or not.", authorized = {RoleType.Admin})
-    private Boolean displayVolume;
+    private boolean displayVolume;
 
     @SerializedName(ApiConstants.PATH)
     @Param(description = "the path of the volume")
@@ -252,12 +261,16 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "true if storage snapshot is supported for the volume, false otherwise", since = "4.16")
     private boolean supportsStorageSnapshot;
 
+    @SerializedName(ApiConstants.DELETE_PROTECTION)
+    @Param(description = "true if volume has delete protection.", since = "4.20.0")
+    private boolean deleteProtection;
+
     @SerializedName(ApiConstants.PHYSICAL_SIZE)
-    @Param(description = "the bytes allocated")
+    @Param(description = "the bytes actually consumed on disk")
     private Long physicalsize;
 
     @SerializedName(ApiConstants.VIRTUAL_SIZE)
-    @Param(description = "the bytes actually consumed on disk")
+    @Param(description = "the bytes allocated")
     private Long virtualsize;
 
     @SerializedName(ApiConstants.UTILIZATION)
@@ -280,6 +293,22 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
     @Param(description = "pod name of the volume")
     private String podName;
 
+    @SerializedName(ApiConstants.EXTERNAL_UUID)
+    @Param(description = "volume uuid that is given by virtualisation provider (only for VMware)")
+    private String externalUuid;
+
+    @SerializedName(ApiConstants.VOLUME_CHECK_RESULT)
+    @Param(description = "details for the volume check result, they may vary for different hypervisors", since = "4.19.1")
+    private Map<String, String> volumeCheckResult;
+
+    @SerializedName(ApiConstants.VOLUME_REPAIR_RESULT)
+    @Param(description = "details for the volume repair result, they may vary for different hypervisors", since = "4.19.1")
+    private Map<String, String> volumeRepairResult;
+
+    @SerializedName(ApiConstants.ENCRYPT_FORMAT)
+    @Param(description = "the format of the disk encryption if applicable", since = "4.19.1")
+    private String encryptionFormat;
+
     public String getPath() {
         return path;
     }
@@ -297,11 +326,11 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
         return this.getId();
     }
 
-    public Boolean isDestroyed() {
+    public boolean isDestroyed() {
         return destroyed;
     }
 
-    public void setDestroyed(Boolean destroyed) {
+    public void setDestroyed(boolean destroyed) {
         this.destroyed = destroyed;
     }
 
@@ -327,6 +356,10 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
 
     public void setVolumeType(String volumeType) {
         this.volumeType = volumeType;
+    }
+
+    public void setVmType(String vmType) {
+        this.vmType = vmType;
     }
 
     public void setDeviceId(Long deviceId) {
@@ -382,6 +415,11 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
     @Override
     public void setDomainName(String domainName) {
         this.domainName = domainName;
+    }
+
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
     }
 
     public void setStorageType(String storageType) {
@@ -496,7 +534,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
         this.serviceOfferingDisplayText = serviceOfferingDisplayText;
     }
 
-    public void setExtractable(Boolean extractable) {
+    public void setExtractable(boolean extractable) {
         this.extractable = extractable;
     }
 
@@ -514,7 +552,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
         this.projectName = projectName;
     }
 
-    public void setDisplayVolume(Boolean displayVm) {
+    public void setDisplayVolume(boolean displayVm) {
         this.displayVolume = displayVm;
     }
 
@@ -548,6 +586,14 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
 
     public boolean getSupportsStorageSnapshot() {
         return this.supportsStorageSnapshot;
+    }
+
+    public boolean isDeleteProtection() {
+        return deleteProtection;
+    }
+
+    public void setDeleteProtection(boolean deleteProtection) {
+        this.deleteProtection = deleteProtection;
     }
 
     public String getIsoId() {
@@ -662,6 +708,10 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
         return state;
     }
 
+    public String getVmType() {
+        return vmType;
+    }
+
     public String getAccountName() {
         return accountName;
     }
@@ -726,7 +776,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
         return serviceOfferingDisplayText;
     }
 
-    public Boolean getExtractable() {
+    public boolean isExtractable() {
         return extractable;
     }
 
@@ -734,7 +784,7 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
         return status;
     }
 
-    public Boolean getDisplayVolume() {
+    public boolean isDisplayVolume() {
         return displayVolume;
     }
 
@@ -792,5 +842,33 @@ public class VolumeResponse extends BaseResponseWithTagInformation implements Co
 
     public void setPodName(String podName) {
         this.podName = podName;
+    }
+
+    public String getExternalUuid() {
+        return externalUuid;
+    }
+
+    public void setExternalUuid(String externalUuid) {
+        this.externalUuid = externalUuid;
+    }
+
+    public Map<String, String> getVolumeCheckResult() {
+        return volumeCheckResult;
+    }
+
+    public void setVolumeCheckResult(Map<String, String> volumeCheckResult) {
+        this.volumeCheckResult = volumeCheckResult;
+    }
+
+    public Map<String, String> getVolumeRepairResult() {
+        return volumeRepairResult;
+    }
+
+    public void setVolumeRepairResult(Map<String, String> volumeRepairResult) {
+        this.volumeRepairResult = volumeRepairResult;
+    }
+
+    public void setEncryptionFormat(String encryptionFormat) {
+        this.encryptionFormat = encryptionFormat;
     }
 }

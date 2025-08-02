@@ -17,6 +17,7 @@
 package org.apache.cloudstack.framework.config.impl;
 
 import java.util.Date;
+import java.util.List;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -27,6 +28,7 @@ import javax.persistence.TemporalType;
 
 import org.apache.cloudstack.config.Configuration;
 import org.apache.cloudstack.framework.config.ConfigKey;
+import org.apache.commons.lang3.StringUtils;
 
 import com.cloud.utils.crypt.DBEncryptionUtil;
 
@@ -59,29 +61,60 @@ public class ConfigurationVO implements Configuration {
     private boolean dynamic;
 
     @Column(name = "scope")
-    private String scope;
+    private Integer scope;
 
     @Column(name = "updated")
     @Temporal(value = TemporalType.TIMESTAMP)
     private Date updated;
 
+    @Column(name = "group_id")
+    private Long groupId = 1L;
+
+    @Column(name = "subgroup_id")
+    private Long subGroupId = 1L;
+
+    @Column(name = "parent")
+    private String parent;
+
+    @Column(name = "display_text", length = 255)
+    private String displayText;
+
+    @Column(name = "kind")
+    private String kind;
+
+    @Column(name = "options")
+    private String options;
+
     protected ConfigurationVO() {
     }
 
     public ConfigurationVO(String category, String instance, String component, String name, String value, String description) {
+        this(category, instance, component, name, value, description, null, null);
+    }
+
+    public ConfigurationVO(String category, String instance, String component, String name, String value, String description, String displayText, String parentConfigName) {
+        this(category, instance, component, name, value, description, displayText, parentConfigName, null, null);
+    }
+
+    public ConfigurationVO(String category, String instance, String component, String name, String value, String description, String displayText, String parentConfigName, Long groupId, Long subGroupId) {
         this.category = category;
         this.instance = instance;
         this.component = component;
         this.name = name;
         this.description = description;
+        this.parent = parentConfigName;
+        this.scope = 0;
         setValue(value);
+        setDisplayText(displayText);
+        setGroupId(groupId);
+        setSubGroupId(subGroupId);
     }
 
     public ConfigurationVO(String component, ConfigKey<?> key) {
-        this(key.category(), "DEFAULT", component, key.key(), key.defaultValue(), key.description());
+        this(key.category(), "DEFAULT", component, key.key(), key.defaultValue(), key.description(), key.displayText(), key.parent());
         defaultValue = key.defaultValue();
         dynamic = key.isDynamic();
-        scope = key.scope() != null ? key.scope().toString() : null;
+        scope = key.getScopeBitmask();
     }
 
     @Override
@@ -139,7 +172,7 @@ public class ConfigurationVO implements Configuration {
 
     @Override
     public boolean isEncrypted() {
-        return "Hidden".equals(getCategory()) || "Secure".equals(getCategory());
+        return StringUtils.equalsAny(getCategory(), "Hidden", "Secure");
     }
 
     @Override
@@ -152,8 +185,13 @@ public class ConfigurationVO implements Configuration {
     }
 
     @Override
-    public String getScope() {
+    public int getScope() {
         return scope;
+    }
+
+    @Override
+    public List<ConfigKey.Scope> getScopes() {
+        return ConfigKey.Scope.decode(scope);
     }
 
     @Override
@@ -174,7 +212,7 @@ public class ConfigurationVO implements Configuration {
         this.defaultValue = defaultValue;
     }
 
-    public void setScope(String scope) {
+    public void setScope(int scope) {
         this.scope = scope;
     }
 
@@ -186,4 +224,83 @@ public class ConfigurationVO implements Configuration {
     public void setUpdated(Date updated) {
         this.updated = updated;
     }
+
+    @Override
+    public Long getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(Long groupId) {
+        if (groupId != null) {
+            this.groupId = groupId;
+        } else {
+            this.groupId = 1L;
+        }
+    }
+
+    @Override
+    public Long getSubGroupId() {
+        return subGroupId;
+    }
+
+    public void setSubGroupId(Long subGroupId) {
+        if (subGroupId != null) {
+            this.subGroupId = subGroupId;
+        } else {
+            this.subGroupId = 1L;
+        }
+    }
+
+    @Override
+    public String getParent() {
+        return parent;
+    }
+
+    public void setParent(String parent) {
+        this.parent = parent;
+    }
+
+    @Override
+    public String getDisplayText() {
+        if (StringUtils.isNotBlank(displayText)) {
+            return displayText;
+        }
+
+        String displayText = "";
+        String name = getName();
+        if (StringUtils.isNotBlank(name)) {
+            name = name.replace(".", " ");
+            displayText = name.substring(0, 1).toUpperCase() + name.substring(1);
+        }
+        return displayText;
+    }
+
+    public void setDisplayText(String displayText) {
+        if (StringUtils.isBlank(displayText)) {
+            String name = getName();
+            if (StringUtils.isNotBlank(name)) {
+                name = name.replace(".", " ");
+                displayText = name.substring(0, 1).toUpperCase() + name.substring(1);
+            }
+        }
+
+        this.displayText = displayText;
+    }
+
+    public String getKind() {
+        return kind;
+    }
+
+    public void setKind(String kind) {
+        this.kind = kind;
+    }
+
+    public String getOptions() {
+        return options;
+    }
+
+    public void setOptions(String options) {
+        this.options = options;
+    }
+
 }

@@ -17,64 +17,29 @@
 
 <template>
   <div>
-    <a-input-search
-      style="width: 25vw;float: right;margin-bottom: 10px; z-index: 8;"
-      :placeholder="$t('label.search')"
-      v-model="filter"
-      @search="handleSearch" />
-
-    <a-list size="large" class="list" :loading="loading || tabLoading">
-      <a-list-item :key="index" v-for="(item, index) in items" class="item">
-        <a-list-item-meta>
-          <span slot="title" style="word-break: break-all">{{ item.name }}</span>
-          <span slot="description" style="word-break: break-all">{{ item.description }}</span>
-        </a-list-item-meta>
-
-        <div class="item__content">
-          <a-input
-            :autoFocus="editableValueKey === index"
-            v-if="editableValueKey === index"
-            class="editable-value value"
-            :defaultValue="item.value"
-            v-model="editableValue"
-            @keydown.esc="editableValueKey = null"
-            @pressEnter="updateData(item)">
-          </a-input>
-          <span v-else class="value">
-            {{ item.value }}
-          </span>
-        </div>
-
-        <div slot="actions" class="action">
-          <a-button
-            shape="circle"
-            :disabled="!('updateConfiguration' in $store.getters.apis)"
-            v-if="editableValueKey !== index"
-            icon="edit"
-            @click="setEditableSetting(item, index)" />
-          <a-button
-            shape="circle"
-            size="default"
-            @click="editableValueKey = null"
-            v-if="editableValueKey === index" >
-            <a-icon type="close-circle" theme="twoTone" twoToneColor="#f5222d" />
-          </a-button>
-          <a-button
-            shape="circle"
-            @click="updateData(item)"
-            v-if="editableValueKey === index" >
-            <a-icon type="check-circle" theme="twoTone" twoToneColor="#52c41a" />
-          </a-button>
-        </div>
-      </a-list-item>
-    </a-list>
+    <a-col :span="24">
+      <a-input-search
+        style="width: 25vw;float: right;margin-bottom: 10px; z-index: 8;"
+        :placeholder="$t('label.search')"
+        v-model:value="filter"
+        @search="handleSearch" />
+      <ConfigurationTable
+        :columns="columns"
+        :config="items" />
+    </a-col>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
+import TooltipButton from '@/components/widgets/TooltipButton'
+import ConfigurationTable from '@/views/setting/ConfigurationTable.vue'
 
 export default {
+  components: {
+    ConfigurationTable,
+    TooltipButton
+  },
   name: 'SettingsTab',
   props: {
     resource: {
@@ -93,10 +58,33 @@ export default {
       editableValueKey: null,
       editableValue: '',
       tabLoading: false,
-      filter: ''
+      filter: '',
+      warningMessages: {
+        'vr.private.interface.max.mtu': {
+          scope: 'zone',
+          warning: this.$t('message.warn.zone.mtu.update')
+        },
+        'vr.public.interface.max.mtu': {
+          scope: 'zone',
+          warning: this.$t('message.warn.zone.mtu.update')
+        }
+      },
+      columns: [
+        {
+          title: 'name',
+          dataIndex: 'name',
+          key: 'name'
+        },
+        {
+          title: 'value',
+          dataIndex: 'value',
+          key: 'value',
+          width: '29%'
+        }
+      ]
     }
   },
-  beforeMount () {
+  created () {
     switch (this.$route.meta.name) {
       case 'account':
         this.scopeKey = 'accountid'
@@ -119,28 +107,25 @@ export default {
       default:
         this.scopeKey = ''
     }
-  },
-  mounted () {
     this.fetchData()
   },
   watch: {
-    resource: function (newItem, oldItem) {
-      if (!newItem.id) return
-      this.resource = newItem
-      this.fetchData()
+    resource: {
+      deep: true,
+      handler (newItem) {
+        if (!newItem.id) return
+        this.fetchData()
+      }
     }
   },
   methods: {
     fetchData (callback) {
       this.tabLoading = true
-      const params = {
-        [this.scopeKey]: this.resource.id,
-        listAll: true
-      }
+      const params = { [this.scopeKey]: this.resource.id }
       if (this.filter) {
         params.keyword = this.filter
       }
-      api('listConfigurations', params).then(response => {
+      getAPI('listConfigurations', params).then(response => {
         this.items = response.listconfigurationsresponse.configuration
       }).catch(error => {
         console.error(error)
@@ -150,33 +135,6 @@ export default {
         if (!callback) return
         callback()
       })
-    },
-    updateData (item) {
-      this.tabLoading = true
-      api('updateConfiguration', {
-        [this.scopeKey]: this.resource.id,
-        name: item.name,
-        value: this.editableValue
-      }).then(() => {
-        const message = `${this.$t('label.setting')} ${item.name} ${this.$t('label.update.to')} ${this.editableValue}`
-        this.$message.success(message)
-      }).catch(error => {
-        console.error(error)
-        this.$message.error(this.$t('message.error.save.setting'))
-        this.$notification.error({
-          message: this.$t('label.error'),
-          description: this.$t('message.error.try.save.setting')
-        })
-      }).finally(() => {
-        this.tabLoading = false
-        this.fetchData(() => {
-          this.editableValueKey = null
-        })
-      })
-    },
-    setEditableSetting (item, index) {
-      this.editableValueKey = index
-      this.editableValue = item.value
     },
     handleSearch (value) {
       this.filter = value
@@ -210,7 +168,7 @@ export default {
 
     &__content {
       width: 100%;
-      display: flex;
+      display: block;
       word-break: break-all;
 
       @media (min-width: 760px) {

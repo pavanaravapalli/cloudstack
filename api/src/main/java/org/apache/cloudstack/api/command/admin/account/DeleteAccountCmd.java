@@ -21,7 +21,7 @@ import javax.inject.Inject;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -31,7 +31,6 @@ import org.apache.cloudstack.api.response.AccountResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.region.RegionService;
-import org.apache.log4j.Logger;
 
 import com.cloud.event.EventTypes;
 import com.cloud.user.Account;
@@ -39,8 +38,6 @@ import com.cloud.user.Account;
 @APICommand(name = "deleteAccount", description = "Deletes a account, and all users associated with this account", responseObject = SuccessResponse.class, entityType = {Account.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class DeleteAccountCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(DeleteAccountCmd.class.getName());
-    private static final String s_name = "deleteaccountresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -63,15 +60,6 @@ public class DeleteAccountCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    public static String getStaticName() {
-        return s_name;
-    }
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -101,21 +89,20 @@ public class DeleteAccountCmd extends BaseAsyncCmd {
         CallContext.current().setEventDetails("Account ID: " + (account != null ? account.getUuid() : getId())); // Account not found is already handled by service
 
         boolean result = _regionService.deleteUserAccount(this);
-        if (result) {
-            SuccessResponse response = new SuccessResponse(getCommandName());
-            setResponseObject(response);
-        } else {
+        if (!result) {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to delete user account and all corresponding users");
         }
+        SuccessResponse response = new SuccessResponse(getCommandName());
+        setResponseObject(response);
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Account;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Account;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return id;
     }
 }

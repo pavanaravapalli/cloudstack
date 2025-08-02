@@ -34,7 +34,7 @@ import com.google.gson.annotations.SerializedName;
 
 @EntityReference(value = VirtualMachineTemplate.class)
 @SuppressWarnings("unused")
-public class TemplateResponse extends BaseResponseWithTagInformation implements ControlledViewEntityResponse {
+public class TemplateResponse extends BaseResponseWithTagInformation implements ControlledViewEntityResponse, SetResourceIconResponse {
     @SerializedName(ApiConstants.ID)
     @Param(description = "the template ID")
     private String id;
@@ -93,6 +93,8 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @Param(description = "the name of the OS type for this template.")
     private String osTypeName;
 
+    private transient Long osTypeCategoryId;
+
     @SerializedName(ApiConstants.ACCOUNT_ID)
     @Param(description = "the account id to which the template belongs")
     private String accountId;
@@ -123,7 +125,7 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @Param(description = "the physical size of the template")
     private Long physicalSize;
 
-    @SerializedName(ApiConstants.TEMPLATETYPE)
+    @SerializedName(ApiConstants.TEMPLATE_TYPE)
     @Param(description = "the type of the template")
     private String templateType;
 
@@ -134,6 +136,10 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @SerializedName(ApiConstants.DOMAIN)
     @Param(description = "the name of the domain to which the template belongs")
     private String domainName;
+
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "path of the Domain the template belongs to", since = "4.19.2.0")
+    private String domainPath;
 
     @SerializedName(ApiConstants.DOMAIN_ID)
     @Param(description = "the ID of the domain to which the template belongs")
@@ -179,6 +185,10 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @Param(description = "Lists the download progress of a template across all secondary storages")
     private List<Map<String, String>> downloadDetails;
 
+    @SerializedName(ApiConstants.ARCH)
+    @Param(description = "CPU Arch of the template", since = "4.20")
+    private String arch;
+
     @SerializedName(ApiConstants.BITS)
     @Param(description = "the processor bit size", since = "4.10")
     private int bits;
@@ -199,6 +209,11 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @Param(description = "VMware only: true if template is deployed without orchestrating disks and networks but \"as-is\" defined in the template.",
             since = "4.15")
     private Boolean deployAsIs;
+
+    @SerializedName(ApiConstants.FOR_CKS)
+    @Param(description = "If true it indicates that the template can be used for CKS cluster deployments",
+            since = "4.21.0")
+    private Boolean forCks;
 
     @SerializedName(ApiConstants.DEPLOY_AS_IS_DETAILS)
     @Param(description = "VMware only: additional key/value details tied with deploy-as-is template",
@@ -222,6 +237,28 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @SerializedName(ApiConstants.URL)
     @Param(description = "the URL which the template/iso is registered from")
     private String url;
+
+    @SerializedName(ApiConstants.RESOURCE_ICON)
+    @Param(description = "Base64 string representation of the resource icon", since = "4.16.0.0")
+    ResourceIconResponse icon;
+
+    @SerializedName(ApiConstants.USER_DATA_ID) @Param(description="the id of userdata linked to this template", since = "4.18.0")
+    private String userDataId;
+
+    @SerializedName(ApiConstants.USER_DATA_NAME) @Param(description="the name of userdata linked to this template", since = "4.18.0")
+    private String userDataName;
+
+    @SerializedName(ApiConstants.USER_DATA_POLICY) @Param(description="the userdata override policy with the userdata provided while deploying VM", since = "4.18.0")
+    private String userDataPolicy;
+
+    @SerializedName(ApiConstants.USER_DATA_PARAMS) @Param(description="list of parameters which contains the list of keys or string parameters that are needed to be passed for any variables declared in userdata", since = "4.18.0")
+    private String userDataParams;
+
+    @SerializedName(ApiConstants.EXTENSION_ID) @Param(description="The ID of extension linked to this template", since = "4.21.0")
+    private String extensionId;
+
+    @SerializedName(ApiConstants.EXTENSION_NAME) @Param(description="The name of extension linked to this template", since = "4.21.0")
+    private String extensionName;
 
     public TemplateResponse() {
         tags = new LinkedHashSet<>();
@@ -259,6 +296,14 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
 
     public void setOsTypeName(String osTypeName) {
         this.osTypeName = osTypeName;
+    }
+
+    public Long getOsTypeCategoryId() {
+        return osTypeCategoryId;
+    }
+
+    public void setOsTypeCategoryId(Long osTypeCategoryId) {
+        this.osTypeCategoryId = osTypeCategoryId;
     }
 
     public void setId(String id) {
@@ -336,6 +381,11 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
     @Override
     public void setDomainName(String domainName) {
         this.domainName = domainName;
+    }
+
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
     }
 
     @Override
@@ -424,6 +474,10 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
         this.deployAsIs = deployAsIs;
     }
 
+    public void setForCks(Boolean forCks) {
+        this.forCks = forCks;
+    }
+
     public void setParentTemplateId(String parentTemplateId) {
         this.parentTemplateId = parentTemplateId;
     }
@@ -457,5 +511,62 @@ public class TemplateResponse extends BaseResponseWithTagInformation implements 
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    @Override
+    public void setResourceIconResponse(ResourceIconResponse icon) {
+        this.icon = icon;
+    }
+
+    public String getUserDataId() {
+        return userDataId;
+    }
+
+    public void setUserDataId(String userDataId) {
+        this.userDataId = userDataId;
+    }
+
+    public String getUserDataName() {
+        return userDataName;
+    }
+
+    public void setUserDataName(String userDataName) {
+        this.userDataName = userDataName;
+    }
+
+    public String getUserDataPolicy() {
+        return userDataPolicy;
+    }
+
+    public void setUserDataPolicy(String userDataPolicy) {
+        this.userDataPolicy = userDataPolicy;
+    }
+
+    public String getUserDataParams() {
+        return userDataParams;
+    }
+
+    public void setUserDataParams(String userDataParams) {
+        this.userDataParams = userDataParams;
+    }
+
+    public void setArch(String arch) {
+        this.arch = arch;
+    }
+
+    public String getExtensionId() {
+        return extensionId;
+    }
+
+    public void setExtensionId(String extensionId) {
+        this.extensionId = extensionId;
+    }
+
+    public String getExtensionName() {
+        return extensionName;
+    }
+
+    public void setExtensionName(String extensionName) {
+        this.extensionName = extensionName;
     }
 }

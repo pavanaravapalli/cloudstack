@@ -28,6 +28,7 @@ import javax.persistence.Table;
 import org.apache.cloudstack.api.Identity;
 import org.apache.cloudstack.api.InternalIdentity;
 
+import com.cloud.dc.DataCenter;
 import com.cloud.dc.DataCenter.NetworkType;
 import com.cloud.org.Grouping.AllocationState;
 import com.cloud.utils.db.GenericDao;
@@ -119,6 +120,13 @@ public class DataCenterJoinVO extends BaseViewVO implements InternalIdentity, Id
 
     @Column(name = "sort_key")
     private int sortKey;
+
+    @Column(name = "type")
+    @Enumerated(value = EnumType.STRING)
+    private DataCenter.Type type;
+
+    @Column(name = "storage_access_groups")
+    private String storageAccessGroups;
 
     public DataCenterJoinVO() {
     }
@@ -227,5 +235,13 @@ public class DataCenterJoinVO extends BaseViewVO implements InternalIdentity, Id
 
     public int getSortKey() {
         return sortKey;
+    }
+
+    public DataCenter.Type getType() {
+        return type;
+    }
+
+    public String getStorageAccessGroups() {
+        return storageAccessGroups;
     }
 }

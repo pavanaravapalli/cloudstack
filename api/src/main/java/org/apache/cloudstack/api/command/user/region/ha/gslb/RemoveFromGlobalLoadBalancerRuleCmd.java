@@ -21,7 +21,6 @@ import java.util.List;
 
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -33,13 +32,13 @@ import org.apache.cloudstack.api.response.FirewallRuleResponse;
 import org.apache.cloudstack.api.response.GlobalLoadBalancerResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.commons.lang3.StringUtils;
 
 import com.cloud.event.EventTypes;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.region.ha.GlobalLoadBalancerRule;
 import com.cloud.region.ha.GlobalLoadBalancingRulesService;
 import com.cloud.user.Account;
-import com.cloud.utils.StringUtils;
 
 @APICommand(name = "removeFromGlobalLoadBalancerRule",
             description = "Removes a load balancer rule association with global load balancer rule",
@@ -47,7 +46,6 @@ import com.cloud.utils.StringUtils;
             requestHasSensitiveInfo = false,
             responseHasSensitiveInfo = false)
 public class RemoveFromGlobalLoadBalancerRuleCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(RemoveFromGlobalLoadBalancerRuleCmd.class.getName());
 
     private static final String s_name = "removefromloadbalancerruleresponse";
 
@@ -67,7 +65,7 @@ public class RemoveFromGlobalLoadBalancerRuleCmd extends BaseAsyncCmd {
                collectionType = CommandType.UUID,
                entityType = FirewallRuleResponse.class,
                required = true,
-               description = "the list load balancer rules that will be assigned to gloabal load balancer rule")
+               description = "the list load balancer rules that will be assigned to global load balancer rule")
     private List<Long> loadBalancerRulesIds;
 
     /////////////////////////////////////////////////////

@@ -16,12 +16,11 @@
 // under the License.
 package org.apache.cloudstack.api.command.admin.systemvm;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -37,9 +36,7 @@ import com.cloud.vm.VirtualMachine;
 @APICommand(name = "rebootSystemVm", description = "Reboots a system VM.", responseObject = SystemVmResponse.class, entityType = {VirtualMachine.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class RebootSystemVmCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(RebootSystemVmCmd.class.getName());
 
-    private static final String s_name = "rebootsystemvmresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -68,11 +65,6 @@ public class RebootSystemVmCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         Account account = CallContext.current().getCallingAccount();
         if (account != null) {
@@ -98,12 +90,12 @@ public class RebootSystemVmCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.SystemVm;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.SystemVm;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 

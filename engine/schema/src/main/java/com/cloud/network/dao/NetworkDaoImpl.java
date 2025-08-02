@@ -18,9 +18,12 @@ package com.cloud.network.dao;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
@@ -79,6 +82,7 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
     SearchBuilder<NetworkVO> SourceNATSearch;
     GenericSearchBuilder<NetworkVO, Long> VpcNetworksCount;
     SearchBuilder<NetworkVO> OfferingAccountNetworkSearch;
+    SearchBuilder<NetworkVO> PersistentNetworkSearch;
 
     GenericSearchBuilder<NetworkVO, Long> GarbageCollectedSearch;
     SearchBuilder<NetworkVO> PrivateNetworkSearch;
@@ -107,6 +111,9 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
     Random _rand = new Random(System.currentTimeMillis());
     long _prefix = 0x2;
 
+    private static final Set<String> VLAN_OR_VXLAN = new HashSet<>(Arrays.asList(BroadcastDomainType.Vlan.toString().toLowerCase(),
+                                                                BroadcastDomainType.Vxlan.toString().toLowerCase()));
+
     public NetworkDaoImpl() {
     }
 
@@ -122,7 +129,7 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
         AllFieldsSearch.and("account", AllFieldsSearch.entity().getAccountId(), Op.EQ);
         AllFieldsSearch.and("related", AllFieldsSearch.entity().getRelated(), Op.EQ);
         AllFieldsSearch.and("guestType", AllFieldsSearch.entity().getGuestType(), Op.EQ);
-        AllFieldsSearch.and("physicalNetwork", AllFieldsSearch.entity().getPhysicalNetworkId(), Op.EQ);
+        AllFieldsSearch.and("physicalNetworkId", AllFieldsSearch.entity().getPhysicalNetworkId(), Op.EQ);
         AllFieldsSearch.and("broadcastUri", AllFieldsSearch.entity().getBroadcastUri(), Op.EQ);
         AllFieldsSearch.and("vpcId", AllFieldsSearch.entity().getVpcId(), Op.EQ);
         AllFieldsSearch.and("aclId", AllFieldsSearch.entity().getNetworkACLId(), Op.EQ);
@@ -180,6 +187,16 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
         ntwkOffJoin.and("isSystem", ntwkOffJoin.entity().isSystemOnly(), Op.EQ);
         CountBy.join("offerings", ntwkOffJoin, CountBy.entity().getNetworkOfferingId(), ntwkOffJoin.entity().getId(), JoinBuilder.JoinType.INNER);
         CountBy.done();
+
+        PersistentNetworkSearch = createSearchBuilder();
+        PersistentNetworkSearch.and("id", PersistentNetworkSearch.entity().getId(), Op.NEQ);
+        PersistentNetworkSearch.and("guestType", PersistentNetworkSearch.entity().getGuestType(), Op.IN);
+        PersistentNetworkSearch.and("broadcastUri", PersistentNetworkSearch.entity().getBroadcastUri(), Op.EQ);
+        PersistentNetworkSearch.and("removed", PersistentNetworkSearch.entity().getRemoved(), Op.NULL);
+        final SearchBuilder<NetworkOfferingVO> persistentNtwkOffJoin = _ntwkOffDao.createSearchBuilder();
+        persistentNtwkOffJoin.and("persistent", persistentNtwkOffJoin.entity().isPersistent(), Op.EQ);
+        PersistentNetworkSearch.join("persistent", persistentNtwkOffJoin, PersistentNetworkSearch.entity().getNetworkOfferingId(), persistentNtwkOffJoin.entity().getId(), JoinType.INNER);
+        PersistentNetworkSearch.done();
 
         PhysicalNetworkSearch = createSearchBuilder();
         PhysicalNetworkSearch.and("physicalNetworkId", PhysicalNetworkSearch.entity().getPhysicalNetworkId(), Op.EQ);
@@ -391,14 +408,32 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
     }
 
     @Override
+    public int getOtherPersistentNetworksCount(long id, String broadcastURI, boolean isPersistent) {
+        Object[] guestTypes = {"Isolated", "L2"};
+        final SearchCriteria<NetworkVO> sc = PersistentNetworkSearch.create();
+        sc.setParameters("id", id);
+        sc.setParameters("broadcastUri", broadcastURI);
+        sc.setParameters("guestType", guestTypes);
+        sc.setJoinParameters("persistent", "persistent", isPersistent);
+        return getCount(sc);
+    }
+
+    @Override
+    public List<NetworkVO> getAllPersistentNetworksFromZone(long dataCenterId) {
+        Object[] guestTypes = {"Isolated", "L2"};
+        final SearchCriteria<NetworkVO> sc = PersistentNetworkSearch.create();
+        sc.setParameters("guestType", guestTypes);
+        sc.setParameters("dc", dataCenterId);
+        sc.setJoinParameters("persistent", "persistent", true);
+        return search(sc, null);
+    }
+
+    @Override
     public String getNextAvailableMacAddress(final long networkConfigId, Integer zoneMacIdentifier) {
         final SequenceFetcher fetch = SequenceFetcher.getInstance();
         long seq = fetch.getNextSequence(Long.class, _tgMacAddress, networkConfigId);
         if(zoneMacIdentifier != null && zoneMacIdentifier.intValue() != 0 ){
             seq = seq | _prefix << 40 | (long)zoneMacIdentifier << 32 | networkConfigId << 16 & 0x00000000ffff0000l;
-        }
-        else {
-            seq = seq | _prefix << 40 | _rand.nextInt(Short.MAX_VALUE) << 16 & 0x00000000ffff0000l;
         }
         return NetUtils.long2Mac(seq);
     }
@@ -533,7 +568,7 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
     public List<NetworkVO> listByPhysicalNetworkTrafficType(final long physicalNetworkId, final TrafficType trafficType) {
         final SearchCriteria<NetworkVO> sc = AllFieldsSearch.create();
         sc.setParameters("trafficType", trafficType);
-        sc.setParameters("physicalNetworkId", physicalNetworkId);
+        sc.setParameters("physicalNetwork", physicalNetworkId);
         return listBy(sc);
     }
 
@@ -780,8 +815,9 @@ public class NetworkDaoImpl extends GenericDaoBase<NetworkVO, Long>implements Ne
     @Override
     public List<NetworkVO> listByPhysicalNetworkPvlan(long physicalNetworkId, String broadcastUri) {
         final URI searchUri = BroadcastDomainType.fromString(broadcastUri);
-        if (!searchUri.getScheme().equalsIgnoreCase("vlan")) {
-            throw new CloudRuntimeException("VLAN requested but URI is not in the expected format: " + searchUri.toString());
+        if (!VLAN_OR_VXLAN.contains(searchUri.getScheme().toLowerCase())) {
+            throw new CloudRuntimeException(
+                    String.format("Requested URI '%s' is not in the expected format. Expected URI Scheme as 'vlan://VID' or 'vxlan://VID'.", searchUri.toString()));
         }
         final String searchRange = BroadcastDomainType.getValue(searchUri);
         final List<Integer> searchVlans = UriUtils.expandVlanUri(searchRange);

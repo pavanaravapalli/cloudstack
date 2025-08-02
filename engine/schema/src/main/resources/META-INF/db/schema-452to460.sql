@@ -391,7 +391,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`external_bigswitch_bcf_devices` (
   `physical_network_id` bigint unsigned NOT NULL COMMENT 'id of the physical network in to which bigswitch bcf device is added',
   `provider_name` varchar(255) NOT NULL COMMENT 'Service Provider name corresponding to this bigswitch bcf device',
   `device_name` varchar(255) NOT NULL COMMENT 'name of the bigswitch bcf device',
-  `host_id` bigint unsigned NOT NULL COMMENT 'host id coresponding to the external bigswitch bcf device',
+  `host_id` bigint unsigned NOT NULL COMMENT 'host id corresponding to the external bigswitch bcf device',
   `hostname` varchar(255) NOT NULL COMMENT 'host name or IP address for the bigswitch bcf device',
   `username` varchar(255) NOT NULL COMMENT 'username for the bigswitch bcf device',
   `password` varchar(255) NOT NULL COMMENT 'password for the bigswitch bcf device',
@@ -419,5 +419,3 @@ INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervis
 INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervisor_version, guest_os_name, guest_os_id, created, is_user_defined) VALUES (UUID(),'KVM', 'default', 'CentOS 7', 246, utc_timestamp(), 0);
 
 UPDATE  `cloud`.`hypervisor_capabilities` SET  `max_data_volumes_limit` =  '32' WHERE  `hypervisor_capabilities`.`hypervisor_type` =  'KVM';
-
-

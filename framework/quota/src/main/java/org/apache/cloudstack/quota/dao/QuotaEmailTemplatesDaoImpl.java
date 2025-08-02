@@ -19,7 +19,6 @@ package org.apache.cloudstack.quota.dao;
 import java.util.List;
 
 import org.apache.cloudstack.quota.vo.QuotaEmailTemplatesVO;
-import org.apache.log4j.Logger;
 import org.springframework.stereotype.Component;
 
 import com.cloud.utils.db.GenericDaoBase;
@@ -29,11 +28,10 @@ import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionLegacy;
 import com.cloud.utils.db.TransactionStatus;
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
 @Component
 public class QuotaEmailTemplatesDaoImpl extends GenericDaoBase<QuotaEmailTemplatesVO, Long> implements QuotaEmailTemplatesDao {
-    private static final Logger s_logger = Logger.getLogger(QuotaEmailTemplatesDaoImpl.class);
 
     protected SearchBuilder<QuotaEmailTemplatesVO> QuotaEmailTemplateSearch;
 
@@ -51,7 +49,7 @@ public class QuotaEmailTemplatesDaoImpl extends GenericDaoBase<QuotaEmailTemplat
             @Override
             public List<QuotaEmailTemplatesVO> doInTransaction(final TransactionStatus status) {
                 SearchCriteria<QuotaEmailTemplatesVO> sc = QuotaEmailTemplateSearch.create();
-                if (!Strings.isNullOrEmpty(templateName)) {
+                if (StringUtils.isNotEmpty(templateName)) {
                     sc.setParameters("template_name", templateName);
                 }
                 return listBy(sc);
@@ -67,5 +65,10 @@ public class QuotaEmailTemplatesDaoImpl extends GenericDaoBase<QuotaEmailTemplat
                 return update(template.getId(), template);
             }
         });
+    }
+
+    @Override
+    public QuotaEmailTemplatesVO findById(long id) {
+        return Transaction.execute(TransactionLegacy.USAGE_DB, (TransactionCallback<QuotaEmailTemplatesVO>) status -> QuotaEmailTemplatesDaoImpl.super.findById(id));
     }
 }

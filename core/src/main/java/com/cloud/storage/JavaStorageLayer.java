@@ -21,15 +21,25 @@ package com.cloud.storage;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.naming.ConfigurationException;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class JavaStorageLayer implements StorageLayer {
-
+    protected Logger logger = LogManager.getLogger(getClass());
+    private static final String STD_TMP_DIR_PATH = "/tmp";
     String _name;
     boolean _makeWorldWriteable = true;
 
@@ -178,18 +188,29 @@ public class JavaStorageLayer implements StorageLayer {
     }
 
     @Override
-    public File createUniqDir() {
+    public File createUniqDir() throws IOException {
         String dirName = System.getProperty("java.io.tmpdir");
+        String subDirNamePrefix = "";
+        FileAttribute<Set<PosixFilePermission>> perms = PosixFilePermissions
+                .asFileAttribute(PosixFilePermissions.fromString("rwxrwx---"));
         if (dirName != null) {
-            File dir = new File(dirName);
+            Path p = Files.createTempDirectory(Path.of(dirName), subDirNamePrefix, perms);
+            File dir = p.toFile();
             if (dir.exists()) {
+                if (isWorldReadable(dir)) {
+                    if (STD_TMP_DIR_PATH.equals(dir.getAbsolutePath())) {
+                        logger.warn(String.format("The temp dir is %s", STD_TMP_DIR_PATH));
+                    } else {
+                        logger.warn("The temp dir " + dir.getAbsolutePath() + " is World Readable");
+                    }
+                }
                 String uniqDirName = dir.getAbsolutePath() + File.separator + UUID.randomUUID().toString();
                 if (mkdir(uniqDirName)) {
                     return new File(uniqDirName);
                 }
             }
         }
-        return null;
+        throw new IOException("the tmp dir " + dirName + " does not exist");
     }
 
     @Override
@@ -215,6 +236,13 @@ public class JavaStorageLayer implements StorageLayer {
 
             return success;
         }
+    }
+
+    public boolean isWorldReadable(File file) throws IOException {
+        Set<PosixFilePermission> permissions;
+        permissions = Files.getPosixFilePermissions(
+            Paths.get(file.getAbsolutePath()));
+        return permissions.contains(PosixFilePermission.OTHERS_READ);
     }
 
     private List<String> listDirPaths(String path) {

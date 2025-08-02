@@ -16,7 +16,6 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.template;
 
-import com.cloud.hypervisor.Hypervisor;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -24,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseCmd;
@@ -33,21 +32,24 @@ import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.UserCmd;
 import org.apache.cloudstack.api.response.DomainResponse;
+import org.apache.cloudstack.api.response.ExtensionResponse;
 import org.apache.cloudstack.api.response.GuestOSResponse;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.ProjectResponse;
 import org.apache.cloudstack.api.response.TemplateResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
 
+import com.cloud.cpu.CPU;
 import com.cloud.exception.ResourceAllocationException;
+import com.cloud.hypervisor.Hypervisor;
+import com.cloud.hypervisor.HypervisorGuru;
 import com.cloud.template.VirtualMachineTemplate;
 
 @APICommand(name = "registerTemplate", description = "Registers an existing template into the CloudStack cloud. ", responseObject = TemplateResponse.class, responseView = ResponseView.Restricted,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(RegisterTemplateCmd.class.getName());
 
     private static final String s_name = "registertemplateresponse";
 
@@ -60,8 +62,7 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
 
     @Parameter(name = ApiConstants.DISPLAY_TEXT,
                type = CommandType.STRING,
-               required = true,
-               description = "the display text of the template. This is usually used for display purposes.",
+               description = "The display text of the template, defaults to 'name'.",
                length = 4096)
     private String displayText;
 
@@ -72,7 +73,7 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
     private String format;
 
     @Parameter(name = ApiConstants.HYPERVISOR, type = CommandType.STRING, required = true, description = "the target hypervisor for the template")
-    private String hypervisor;
+    protected String hypervisor;
 
     @Parameter(name = ApiConstants.IS_FEATURED, type = CommandType.BOOLEAN, description = "true if this template is a featured template, false otherwise")
     private Boolean featured;
@@ -142,6 +143,7 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
                description = "true if template contains XS/VMWare tools inorder to support dynamic scaling of VM cpu/memory")
     protected Boolean isDynamicallyScalable;
 
+    @Deprecated
     @Parameter(name = ApiConstants.ROUTING, type = CommandType.BOOLEAN, description = "true if the template type is routing i.e., if template is used to deploy router")
     protected Boolean isRoutingType;
 
@@ -162,6 +164,34 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
                 description = "true if template should bypass Secondary Storage and be downloaded to Primary Storage on deployment")
     private Boolean directDownload;
 
+    @Parameter(name=ApiConstants.DEPLOY_AS_IS,
+            type = CommandType.BOOLEAN,
+            description = "(VMware only) true if VM deployments should preserve all the configurations defined for this template", since = "4.15.1")
+    protected Boolean deployAsIs;
+
+    @Parameter(name=ApiConstants.FOR_CKS,
+            type = CommandType.BOOLEAN,
+            description = "if true, the templates would be available for deploying CKS clusters", since = "4.21.0")
+    protected Boolean forCks;
+
+    @Parameter(name = ApiConstants.TEMPLATE_TYPE, type = CommandType.STRING,
+            description = "the type of the template. Valid options are: USER/VNF (for all users) and SYSTEM/ROUTING/BUILTIN (for admins only).",
+            since = "4.19.0")
+    private String templateType;
+
+    @Parameter(name = ApiConstants.ARCH, type = CommandType.STRING,
+            description = "the CPU arch of the template. Valid options are: x86_64, aarch64",
+            since = "4.20")
+    private String arch;
+
+    @Parameter(name = ApiConstants.EXTENSION_ID, type = CommandType.UUID, entityType = ExtensionResponse.class,
+            description = "ID of the extension",
+            since = "4.21.0")
+    private Long extensionId;
+
+    @Parameter(name = ApiConstants.EXTERNAL_DETAILS, type = CommandType.MAP, description = "Details in key/value pairs using format externaldetails[i].keyname=keyvalue. Example: externaldetails[0].endpoint.url=urlvalue", since = "4.21.0")
+    protected Map externalDetails;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -171,7 +201,7 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
     }
 
     public String getDisplayText() {
-        return displayText;
+        return StringUtils.isEmpty(displayText) ? templateName : displayText;
     }
 
     public String getFormat() {
@@ -274,8 +304,29 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
         return directDownload == null ? false : directDownload;
     }
 
-    public Boolean isDeployAsIs() {
-        return hypervisor != null && hypervisor.equalsIgnoreCase(Hypervisor.HypervisorType.VMware.toString());
+    public boolean isDeployAsIs() {
+        return Hypervisor.HypervisorType.VMware.toString().equalsIgnoreCase(hypervisor) &&
+                Boolean.TRUE.equals(deployAsIs);
+    }
+
+    public boolean isForCks() {
+        return Boolean.TRUE.equals(forCks);
+    }
+
+    public String getTemplateType() {
+        return templateType;
+    }
+
+    public CPU.CPUArch getArch() {
+        return CPU.CPUArch.fromType(arch);
+    }
+
+    public Long getExtensionId() {
+        return extensionId;
+    }
+
+    public Map<String, String> getExternalDetails() {
+        return convertExternalDetailsToMap(externalDetails);
     }
 
     /////////////////////////////////////////////////////
@@ -287,8 +338,8 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
         return s_name;
     }
 
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Template;
+    public ApiCommandResourceType getInstanceType() {
+        return ApiCommandResourceType.Template;
     }
 
     @Override
@@ -308,7 +359,7 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
 
             VirtualMachineTemplate template = _templateService.registerTemplate(this);
             if (template != null) {
-                ListResponse<TemplateResponse> response = new ListResponse<TemplateResponse>();
+                ListResponse<TemplateResponse> response = new ListResponse<>();
                 List<TemplateResponse> templateResponses = _responseGenerator.createTemplateResponses(getResponseView(),
                         template, getZoneIds(), false);
                 response.setResponses(templateResponses);
@@ -318,7 +369,7 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to register template");
             }
         } catch (URISyntaxException ex1) {
-            s_logger.info(ex1);
+            logger.info(ex1);
             throw new ServerApiException(ApiErrorCode.PARAM_ERROR, ex1.getMessage());
         }
     }
@@ -336,12 +387,16 @@ public class RegisterTemplateCmd extends BaseCmd implements UserCmd {
             throw new ServerApiException(ApiErrorCode.PARAM_ERROR,
                     "Parameter zoneids cannot combine all zones (-1) option with other zones");
 
-        if (isDirectDownload() && !getHypervisor().equalsIgnoreCase(Hypervisor.HypervisorType.KVM.toString())) {
-            throw new ServerApiException(ApiErrorCode.PARAM_ERROR,
-                    "Parameter directdownload is only allowed for KVM templates");
+        String customHypervisor = HypervisorGuru.HypervisorCustomDisplayName.value();
+        if (isDirectDownload() &&
+                !(Hypervisor.HypervisorType.getType(getHypervisor())
+                        .isFunctionalitySupported(Hypervisor.HypervisorType.Functionality.DirectDownloadTemplate)
+                || getHypervisor().equalsIgnoreCase(customHypervisor))) {
+            throw new ServerApiException(ApiErrorCode.PARAM_ERROR, String.format("Parameter directdownload " +
+                    "is only allowed for KVM or %s templates", customHypervisor));
         }
 
-        if (!getHypervisor().equalsIgnoreCase(Hypervisor.HypervisorType.VMware.toString()) && osTypeId == null) {
+        if (!isDeployAsIs() && osTypeId == null) {
             throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "Please provide a guest OS type");
         }
     }

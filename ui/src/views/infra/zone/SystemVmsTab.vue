@@ -69,7 +69,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import Status from '@/components/widgets/Status'
 
 export default {
@@ -93,21 +93,24 @@ export default {
       fetchLoading: false
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    resource (newItem, oldItem) {
-      if (!newItem || !newItem.id) {
-        return
+    resource: {
+      deep: true,
+      handler (newItem) {
+        if (!newItem || !newItem.id) {
+          return
+        }
+        this.fetchData()
       }
-      this.fetchData()
     }
   },
   methods: {
     fetchData () {
       this.fetchLoading = true
-      api('listSystemVms', { zoneid: this.resource.id }).then(json => {
+      getAPI('listSystemVms', { zoneid: this.resource.id }).then(json => {
         this.vms = json.listsystemvmsresponse.systemvm || []
       }).catch(error => {
         this.$notifyError(error)

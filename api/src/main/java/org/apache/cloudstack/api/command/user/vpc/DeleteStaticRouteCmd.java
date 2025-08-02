@@ -16,12 +16,11 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vpc;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -40,8 +39,6 @@ import com.cloud.network.vpc.StaticRoute;
 @APICommand(name = "deleteStaticRoute", description = "Deletes a static route", responseObject = SuccessResponse.class, entityType = {StaticRoute.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class DeleteStaticRouteCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(DeleteStaticRouteCmd.class.getName());
-    private static final String s_name = "deletestaticrouteresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -65,11 +62,6 @@ public class DeleteStaticRouteCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
     @Override
     public String getEventType() {
         return EventTypes.EVENT_STATIC_ROUTE_DELETE;
@@ -121,7 +113,7 @@ public class DeleteStaticRouteCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.StaticRoute;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.StaticRoute;
     }
 }

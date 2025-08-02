@@ -36,12 +36,11 @@ import org.apache.cloudstack.context.CallContext;
 import com.cloud.utils.DateUtil;
 import com.cloud.utils.exception.CloudRuntimeException;
 
-@APICommand(name = CreateBackupScheduleCmd.APINAME,
+@APICommand(name = "createBackupSchedule",
         description = "Creates a user-defined VM backup schedule",
         responseObject = BackupResponse.class, since = "4.14.0",
         authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class CreateBackupScheduleCmd extends BaseCmd {
-    public static final String APINAME = "createBackupSchedule";
 
     @Inject
     private BackupManager backupManager;
@@ -76,6 +75,19 @@ public class CreateBackupScheduleCmd extends BaseCmd {
             description = "Specifies a timezone for this command. For more information on the timezone parameter, see TimeZone Format.")
     private String timezone;
 
+    @Parameter(name = ApiConstants.MAX_BACKUPS, type = CommandType.INTEGER,
+            since = "4.21.0", description = ApiConstants.PARAMETER_DESCRIPTION_MAX_BACKUPS)
+    private Integer maxBackups;
+
+    @Parameter(name = ApiConstants.QUIESCE_VM,
+            type = CommandType.BOOLEAN,
+            required = false,
+            description = "Quiesce the instance before checkpointing the disks for backup. Applicable only to NAS backup provider. " +
+                    "The filesystem is frozen before the backup starts and thawed immediately after. " +
+                    "Requires the instance to have the QEMU Guest Agent installed and running.",
+            since = "4.21.0")
+    private Boolean quiesceVM;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -96,6 +108,14 @@ public class CreateBackupScheduleCmd extends BaseCmd {
         return timezone;
     }
 
+    public Integer getMaxBackups() {
+        return maxBackups;
+    }
+
+    public Boolean getQuiesceVM() {
+        return quiesceVM;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
@@ -114,11 +134,6 @@ public class CreateBackupScheduleCmd extends BaseCmd {
         } catch (Exception e) {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, e.getMessage());
         }
-    }
-
-    @Override
-    public String getCommandName() {
-        return APINAME.toLowerCase() + BaseCmd.RESPONSE_SUFFIX;
     }
 
     @Override

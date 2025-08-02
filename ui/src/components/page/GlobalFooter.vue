@@ -22,9 +22,18 @@
     </div>
     <div class="line" v-if="$store.getters.userInfo.roletype === 'Admin'">
       CloudStack {{ $store.getters.features.cloudstackversion }}
+      <span v-if="showVersionUpdate()">
+        <a-divider type="vertical" />
+        <a
+          :href="'https://github.com/apache/cloudstack/releases/tag/' + $store.getters.latestVersion.version"
+          target="_blank">
+            <info-circle-outlined />
+            {{ $t('label.new.version.available') + ': ' + $store.getters.latestVersion.version }}
+        </a>
+      </span>
       <a-divider type="vertical" />
-      <a href="https://github.com/apache/cloudstack/issues/new" target="_blank">
-        <a-icon type="github"/>
+      <a href="https://github.com/apache/cloudstack/discussions" target="_blank">
+        <github-outlined />
         {{ $t('label.report.bug') }}
       </a>
     </div>
@@ -32,10 +41,23 @@
 </template>
 
 <script>
+import semver from 'semver'
+import { getParsedVersion } from '@/utils/util'
+
 export default {
   name: 'LayoutFooter',
   data () {
     return {
+    }
+  },
+  methods: {
+    showVersionUpdate () {
+      if (this.$store.getters?.features?.cloudstackversion && this.$store.getters?.latestVersion?.version) {
+        const currentVersion = getParsedVersion(this.$store.getters?.features?.cloudstackversion)
+        const latestVersion = getParsedVersion(this.$store.getters?.latestVersion?.version)
+        return semver.valid(currentVersion) && semver.valid(latestVersion) && semver.gt(latestVersion, currentVersion)
+      }
+      return false
     }
   }
 }
@@ -49,18 +71,8 @@ export default {
 
     .line {
       margin-bottom: 8px;
-
-      a {
-        color: rgba(0, 0, 0, .45);
-
-        &:hover {
-          color: rgba(0, 0, 0, .65);
-        }
-
-      }
     }
     .copyright {
-      color: rgba(0, 0, 0, .45);
       font-size: 14px;
     }
   }

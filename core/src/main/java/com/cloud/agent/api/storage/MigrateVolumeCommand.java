@@ -30,6 +30,7 @@ import com.cloud.storage.Volume;
 public class MigrateVolumeCommand extends Command {
     long volumeId;
     String volumePath;
+    String chainInfo;
     StorageFilerTO pool;
     StorageFilerTO sourcePool;
     String attachedVmName;
@@ -49,15 +50,24 @@ public class MigrateVolumeCommand extends Command {
     }
 
     public MigrateVolumeCommand(long volumeId, String volumePath, StoragePool pool, String attachedVmName, Volume.Type volumeType, int timeout) {
-        this(volumeId,volumePath,pool,timeout);
+        this(volumeId, volumePath, pool, timeout);
         this.attachedVmName = attachedVmName;
         this.volumeType = volumeType;
         this.setWait(timeout);
     }
 
-    public MigrateVolumeCommand(long volumeId, String volumePath, StoragePool sourcePool, StoragePool targetPool) {
-        this(volumeId,volumePath,targetPool, null, Volume.Type.UNKNOWN, -1);
+    public MigrateVolumeCommand(long volumeId, String volumePath, StoragePool pool, String attachedVmName, Volume.Type volumeType, int timeout, String chainInfo) {
+        this(volumeId, volumePath, pool, timeout);
+        this.attachedVmName = attachedVmName;
+        this.volumeType = volumeType;
+        this.chainInfo = chainInfo;
+        this.setWait(timeout);
+    }
+
+    public MigrateVolumeCommand(long volumeId, String volumePath, String attachedVmName, StoragePool sourcePool, StoragePool targetPool, String hostGuidInTargetCluster, String chainInfo) {
+        this(volumeId,volumePath,targetPool, attachedVmName, Volume.Type.UNKNOWN, -1, chainInfo);
         this.sourcePool = new StorageFilerTO(sourcePool);
+        this.hostGuidInTargetCluster = hostGuidInTargetCluster;
     }
 
     public MigrateVolumeCommand(DataTO srcData, DataTO destData, Map<String, String> srcDetails, Map<String, String> destDetails, int timeout) {
@@ -67,11 +77,6 @@ public class MigrateVolumeCommand extends Command {
         this.destDetails = destDetails;
 
         setWait(timeout);
-    }
-
-    public MigrateVolumeCommand(long volumeId, String volumePath, StoragePool sourcePool, StoragePool targetPool, String targetClusterHost) {
-        this(volumeId, volumePath, sourcePool, targetPool);
-        this.hostGuidInTargetCluster = targetClusterHost;
     }
 
     @Override
@@ -107,6 +112,10 @@ public class MigrateVolumeCommand extends Command {
         return volumeType;
     }
 
+    public String getHostGuidInTargetCluster() {
+        return hostGuidInTargetCluster;
+    }
+
     public DataTO getSrcData() {
         return srcData;
     }
@@ -131,11 +140,14 @@ public class MigrateVolumeCommand extends Command {
         return destDetails;
     }
 
-    public String getHostGuidInTargetCluster() {
-        return hostGuidInTargetCluster;
-    }
-
     public int getWaitInMillSeconds() {
         return getWait() * 1000;
+    }
+
+    public String getChainInfo() { return chainInfo; }
+
+    @Override
+    public boolean isReconcile() {
+        return true;
     }
 }

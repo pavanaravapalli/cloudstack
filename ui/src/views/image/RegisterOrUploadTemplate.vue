@@ -16,41 +16,42 @@
 // under the License.
 
 <template>
-  <div class="form-layout">
+  <div
+    :class="'form-layout'"
+    @keyup.ctrl.enter="handleSubmit">
     <span v-if="uploadPercentage > 0">
-      <a-icon type="loading" />
+      <loading-outlined />
       {{ $t('message.upload.file.processing') }}
       <a-progress :percent="uploadPercentage" />
     </span>
     <a-spin :spinning="loading" v-else>
       <a-form
-        :form="form"
-        @submit="handleSubmit"
+        :ref="formRef"
+        :model="form"
+        :rules="rules"
+        @finish="handleSubmit"
         layout="vertical">
         <div v-if="currentForm === 'Create'">
-          <a-row :gutter="12">
-            <a-form-item :label="$t('label.url')">
-              <a-input
-                autoFocus
-                v-decorator="['url', {
-                  rules: [{ required: true, message: `${this.$t('message.error.required.input')}` }]
-                }]"
-                :placeholder="apiParams.url.description" />
-            </a-form-item>
-          </a-row>
+          <a-form-item name="url" ref="url">
+            <template #label>
+              <tooltip-label :title="$t('label.url')" :tooltip="apiParams.url.description"/>
+            </template>
+            <a-input
+              v-focus="currentForm === 'Create'"
+              v-model:value="form.url"
+              :placeholder="apiParams.url.description" />
+          </a-form-item>
         </div>
-        <div v-if="currentForm === 'Upload'">
-          <a-form-item :label="$t('label.templatefileupload')">
+        <div v-else-if="currentForm === 'Upload'">
+          <a-form-item :label="$t('label.templatefileupload')" name="file" ref="file">
             <a-upload-dragger
               :multiple="false"
               :fileList="fileList"
-              :remove="handleRemove"
+              @remove="handleRemove"
               :beforeUpload="beforeUpload"
-              v-decorator="['file', {
-                rules: [{ required: true, message: `${this.$t('message.error.required.input')}` }]
-              }]">
+              v-model:value="form.file">
               <p class="ant-upload-drag-icon">
-                <a-icon type="cloud-upload" />
+                <cloud-upload-outlined />
               </p>
               <p class="ant-upload-text" v-if="fileList.length === 0">
                 {{ $t('label.volume.volumefileupload.description') }}
@@ -58,217 +59,384 @@
             </a-upload-dragger>
           </a-form-item>
         </div>
-        <a-row :gutter="12">
-          <a-form-item :label="$t('label.name')">
-            <a-input
-              v-decorator="['name', {
-                rules: [{ required: true, message: `${this.$t('message.error.required.input')}` }]
-              }]"
-              :placeholder="apiParams.name.description" />
-          </a-form-item>
-        </a-row>
-        <a-row :gutter="12">
-          <a-form-item :label="$t('label.displaytext')">
-            <a-input
-              v-decorator="['displaytext', {
-                rules: [{ required: true, message: `${this.$t('message.error.required.input')}` }]
-              }]"
-              :placeholder="apiParams.displaytext.description" />
-          </a-form-item>
-        </a-row>
+        <a-form-item ref="name" name="name">
+          <template #label>
+            <tooltip-label :title="$t('label.name')" :tooltip="apiParams.name.description"/>
+          </template>
+          <a-input
+            v-model:value="form.name"
+            :placeholder="apiParams.name.description"
+            v-focus="currentForm === 'Upload'"/>
+        </a-form-item>
+        <a-form-item ref="displaytext" name="displaytext">
+          <template #label>
+            <tooltip-label :title="$t('label.displaytext')" :tooltip="apiParams.displaytext.description"/>
+          </template>
+          <a-input
+            v-model:value="form.displaytext"
+            :placeholder="apiParams.displaytext.description" />
+        </a-form-item>
         <div v-if="currentForm === 'Create'">
-          <a-row :gutter="12">
-            <a-col :md="24" :lg="24">
-              <a-form-item
-                :label="$t('label.zone')"
-                :validate-status="zoneError"
-                :help="zoneErrorMessage">
-                <a-select
-                  v-decorator="['zoneids', {
-                    rules: [
-                      {
-                        required: true,
-                        message: `${this.$t('message.error.select')}`,
-                        type: 'array'
-                      }
-                    ]
-                  }]"
-                  :loading="zones.loading"
-                  mode="multiple"
-                  optionFilterProp="children"
-                  :filterOption="(input, option) => {
-                    return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }"
-                  :placeholder="apiParams.zoneids.description"
-                  @change="handlerSelectZone">
-                  <a-select-option v-for="opt in zones.opts" :key="opt.id">
-                    {{ opt.name || opt.description }}
-                  </a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-          </a-row>
+          <a-form-item
+            name="zoneids"
+            ref="zoneids">
+            <template #label>
+              <tooltip-label :title="$t('label.zone')" :tooltip="apiParams.zoneids.description"/>
+            </template>
+            <a-select
+              v-model:value="form.zoneids"
+              :loading="zones.loading"
+              mode="multiple"
+              optionFilterProp="label"
+              :filterOption="(input, option) => {
+                return  option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }"
+              :placeholder="apiParams.zoneids.description"
+              @change="handlerSelectZone">
+              <a-select-option v-for="opt in zones.opts" :key="opt.id" :label="opt.name || opt.description">
+                <span>
+                  <resource-icon v-if="opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                  <global-outlined v-else style="margin-right: 5px" />
+                  {{ opt.name || opt.description }}
+                </span>
+              </a-select-option>
+            </a-select>
+          </a-form-item>
         </div>
         <div v-else>
-          <a-row :gutter="12">
-            <a-col :md="24" :lg="24">
-              <a-form-item
-                :label="$t('label.zoneid')"
-                :validate-status="zoneError"
-                :help="zoneErrorMessage">
-                <a-select
-                  v-decorator="['zoneid', {
-                    initialValue: this.zoneSelected,
-                    rules: [
-                      {
-                        required: true,
-                        message: `${this.$t('message.error.select')}`
-                      }
-                    ]
-                  }]"
-                  showSearch
-                  optionFilterProp="children"
-                  :filterOption="(input, option) => {
-                    return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }"
-                  @change="handlerSelectZone"
-                  :placeholder="apiParams.zoneid.description"
-                  :loading="zones.loading">
-                  <a-select-option :value="zone.id" v-for="zone in zones.opts" :key="zone.id">
-                    {{ zone.name || zone.description }}
-                  </a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-          </a-row>
+          <a-form-item
+            ref="zoneid"
+            name="zoneid">
+            <template #label>
+              <tooltip-label :title="$t('label.zoneid')" :tooltip="apiParams.zoneid.description"/>
+            </template>
+            <a-select
+              v-model:value="form.zoneid"
+              showSearch
+              optionFilterProp="label"
+              :filterOption="(input, option) => {
+                return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }"
+              @change="handlerSelectZone"
+              :placeholder="apiParams.zoneid.description"
+              :loading="zones.loading">
+              <a-select-option :value="zone.id" v-for="zone in filteredZones" :key="zone.id" :label="zone.name || zone.description">
+                <span>
+                  <resource-icon v-if="zone.icon" :image="zone.icon.base64image" size="1x" style="margin-right: 5px"/>
+                  <global-outlined v-else style="margin-right: 5px" />
+                  {{ zone.name || zone.description }}
+                </span>
+              </a-select-option>
+            </a-select>
+          </a-form-item>
         </div>
+        <a-form-item name="domainid" ref="domainid" v-if="'listDomains' in $store.getters.apis">
+          <template #label>
+            <tooltip-label :title="$t('label.domainid')" :tooltip="apiParams.domainid.description"/>
+          </template>
+          <a-select
+            v-model:value="form.domainid"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            :loading="domainLoading"
+            :placeholder="apiParams.domainid.description"
+            @change="val => { handleDomainChange(val) }">
+            <a-select-option v-for="(opt, optIndex) in this.domains" :key="optIndex" :label="opt.path || opt.name || opt.description" :value="opt.id">
+              <span>
+                <resource-icon v-if="opt && opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                <block-outlined v-else style="margin-right: 5px" />
+                {{ opt.path || opt.name || opt.description }}
+              </span>
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item name="account" ref="account" v-if="domainid">
+          <template #label>
+            <tooltip-label :title="$t('label.account')" :tooltip="apiParams.account.description"/>
+          </template>
+          <a-select
+            v-model:value="form.account"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            :placeholder="apiParams.account.description"
+            @change="val => { handleAccountChange(val) }">
+            <a-select-option v-for="(acc, index) in accounts" :value="acc.name" :key="index">
+              {{ acc.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
         <a-row :gutter="12">
           <a-col :md="24" :lg="12">
-            <a-form-item :label="$t('label.hypervisor')">
+            <a-form-item ref="hypervisor" name="hypervisor">
+              <template #label>
+                <tooltip-label :title="$t('label.hypervisor')" :tooltip="apiParams.hypervisor.description"/>
+              </template>
               <a-select
-                v-decorator="['hypervisor', {
-                  rules: [
-                    {
-                      required: true,
-                      message: `${this.$t('message.error.select')}`
-                    }
-                  ]
-                }]"
+                v-model:value="form.hypervisor"
                 :loading="hyperVisor.loading"
                 :placeholder="apiParams.hypervisor.description"
-                @change="handlerSelectHyperVisor">
-                <a-select-option v-for="(opt, optIndex) in hyperVisor.opts" :key="optIndex">
+                @change="handlerSelectHyperVisor"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }" >
+                <a-select-option v-for="(opt, optIndex) in hyperVisor.opts" :key="optIndex" :label="opt.name || opt.description">
                   {{ opt.name || opt.description }}
                 </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
           <a-col :md="24" :lg="12">
-            <a-form-item :label="$t('label.format')">
+            <a-form-item ref="format" name="format" v-if="!hyperExternalShow">
+              <template #label>
+                <tooltip-label :title="$t('label.format')" :tooltip="apiParams.format.description"/>
+              </template>
               <a-select
-                v-decorator="['format', {
-                  rules: [
-                    {
-                      required: true,
-                      message: `${this.$t('message.error.select')}`
-                    }
-                  ]
-                }]"
-                :placeholder="apiParams.format.description">
-                <a-select-option v-for="opt in format.opts" :key="opt.id">
+                v-model:value="form.format"
+                :placeholder="apiParams.format.description"
+                @change="val => { selectedFormat = val }"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }" >
+                <a-select-option v-for="opt in format.opts" :key="opt.id" :label="opt.name || opt.description">
                   {{ opt.name || opt.description }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item ref="extensionid" name="extensionid" v-if="hyperExternalShow">
+              <template #label>
+                <tooltip-label :title="$t('label.extensionid')" :tooltip="apiParams.extensionid.description"/>
+              </template>
+              <a-select
+                v-model:value="form.extensionid"
+                :placeholder="apiParams.extensionid.description"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }" >
+                <a-select-option v-for="extension in extensionsList" :key="extension.id" :label="extension.name || extension.description">
+                  {{ extension.name || extension.description }}
                 </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
         </a-row>
-        <a-row :gutter="12" v-if="allowed && hyperKVMShow && currentForm !== 'Upload'">
+        <a-form-item name="externaldetails" ref="externaldetails" v-if="hyperExternalShow">
+          <template #label>
+            <tooltip-label :title="$t('label.externaldetails')" :tooltip="apiParams.externaldetails.description"/>
+          </template>
+          <a-switch v-model:checked="externalDetailsEnabled" @change="onExternalDetailsEnabledChange"/>
+          <a-card v-if="externalDetailsEnabled" style="margin-top: 10px">
+            <div style="margin-bottom: 10px">{{ $t('message.add.orchestrator.resource.details') }}</div>
+            <details-input
+              v-model:value="form.externaldetails" />
+          </a-card>
+        </a-form-item>
+        <a-row :gutter="12" v-if="(hyperKVMShow || hyperCustomShow) && currentForm === 'Create'">
           <a-col :md="24" :lg="12">
-            <a-form-item :label="$t('label.directdownload')">
-              <a-switch v-decorator="['directdownload']" @change="handleChangeDirect" />
+            <a-form-item ref="directdownload" name="directdownload">
+              <template #label>
+                <tooltip-label :title="$t('label.directdownload')" :tooltip="apiParams.directdownload.description"/>
+              </template>
+              <a-switch v-model:checked="form.directdownload" @change="handleChangeDirect" />
             </a-form-item>
           </a-col>
-          <a-col :md="24" :lg="12" v-if="allowDirectDownload">
-            <a-form-item :label="$t('label.checksum')">
+          <a-col :md="24" :lg="12">
+            <a-form-item ref="checksum" name="checksum">
+              <template #label>
+                <tooltip-label :title="$t('label.checksum')" :tooltip="apiParams.checksum.description"/>
+              </template>
               <a-input
-                v-decorator="['checksum', {
-                  rules: [{ required: false, message: `${this.$t('message.error.required.input')}` }]
-                }]"
+                v-model:value="form.checksum"
                 :placeholder="apiParams.checksum.description" />
             </a-form-item>
           </a-col>
         </a-row>
         <a-row :gutter="12" v-if="allowed && hyperXenServerShow">
-          <a-form-item v-if="hyperXenServerShow" :label="$t('label.xenservertoolsversion61plus')">
-            <a-switch
-              v-decorator="['xenserverToolsVersion61plus',{
-                initialValue: xenServerProvider
-              }]"
-              :default-checked="xenServerProvider" />
+          <a-form-item ref="xenserverToolsVersion61plus" name="xenserverToolsVersion61plus" v-if="hyperXenServerShow" :label="$t('label.xenservertoolsversion61plus')">
+            <a-switch v-model:checked="form.xenserverToolsVersion61plus" />
           </a-form-item>
         </a-row>
+
+        <a-form-item ref="deployasis" name="deployasis" v-if="selectedFormat === 'OVA'">
+          <template #label>
+            <tooltip-label :title="$t('label.deployasis')" :tooltip="apiParams.deployasis.description"/>
+          </template>
+          <a-switch
+            v-model:checked="form.deployasis"
+            :checked="deployasis"
+            @change="val => deployasis = val"/>
+        </a-form-item>
+
         <a-row :gutter="12" v-if="hyperKVMShow || hyperVMWShow">
-          <a-col :md="24" :lg="24" v-if="hyperKVMShow">
-            <a-form-item :label="$t('label.rootdiskcontrollertype')">
+          <a-col :md="24" :lg="hyperKVMShow ? 24 : 12" v-if="hyperKVMShow || (hyperVMWShow && !deployasis)">
+            <a-form-item ref="rootDiskControllerType" name="rootDiskControllerType" :label="$t('label.rootdiskcontrollertype')">
               <a-select
-                v-decorator="['rootDiskControllerType', {
-                  initialValue: rootDisk.opts.length > 0 ? 'osdefault' : '',
-                  rules: [
-                    {
-                      required: true,
-                      message: `${this.$t('message.error.select')}`
-                    }
-                  ]
-                }]"
+                v-model:value="form.rootDiskControllerType"
                 :loading="rootDisk.loading"
-                :placeholder="$t('label.rootdiskcontrollertype')">
-                <a-select-option v-for="opt in rootDisk.opts" :key="opt.id">
+                :placeholder="$t('label.rootdiskcontrollertype')"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }" >
+                <a-select-option v-for="opt in rootDisk.opts" :key="opt.id" :label="opt.name || opt.description">
                   {{ opt.name || opt.description }}
                 </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
-          <a-col :md="24" :lg="24">
-            <a-form-item v-if="hyperVMWShow" :label="$t('label.keyboardtype')">
+          <a-col :md="24" :lg="12" v-if="hyperVMWShow && !deployasis">
+            <a-form-item ref="nicAdapterType" name="nicAdapterType" :label="$t('label.nicadaptertype')">
               <a-select
-                v-decorator="['keyboardType', {
-                  rules: [
-                    {
-                      required: false,
-                      message: `${this.$t('message.error.select')}`
-                    }
-                  ]
-                }]"
-                :placeholder="$t('label.keyboard')">
-                <a-select-option v-for="opt in keyboardType.opts" :key="opt.id">
+                v-model:value="form.nicAdapterType"
+                showSearch
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }"
+                :placeholder="$t('label.nicadaptertype')">
+                <a-select-option v-for="opt in nicAdapterType.opts" :key="opt.id" :label="opt.name || opt.description">
                   {{ opt.name || opt.description }}
                 </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
         </a-row>
-        <a-row :gutter="12" v-if="!hyperVMWShow">
-          <a-col :md="24" :lg="24">
-            <a-form-item :label="$t('label.ostypeid')">
+        <a-form-item
+          :label="$t('label.keyboardtype')"
+          v-if="hyperVMWShow && !deployasis"
+          name="keyboardType"
+          ref="keyboardType">
+          <a-select
+            v-model:value="form.keyboardType"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            :placeholder="$t('label.keyboard')">
+            <a-select-option v-for="opt in keyboardType.opts" :key="opt.id" :label="opt.name || opt.description">
+              {{ opt.name || opt.description }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item
+          name="ostypeid"
+          ref="ostypeid"
+          v-if="!hyperVMWShow || (hyperVMWShow && !deployasis)">
+          <template #label>
+            <tooltip-label :title="$t('label.ostypeid')" :tooltip="apiParams.ostypeid.description"/>
+          </template>
+          <a-select
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            v-model:value="form.ostypeid"
+            :loading="osTypes.loading"
+            :placeholder="apiParams.ostypeid.description">
+            <a-select-option v-for="opt in osTypes.opts" :key="opt.id" :label="opt.name || opt.description">
+              {{ opt.name || opt.description }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item
+          name="templatetype"
+          ref="templatetype">
+          <template #label>
+            <tooltip-label :title="$t('label.templatetype')" :tooltip="apiParams.templatetype.description"/>
+          </template>
+          <a-select
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.children[0].children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            v-model:value="form.templatetype"
+            :placeholder="apiParams.templatetype.description">
+            <a-select-option v-for="opt in templateTypes.opts" :key="opt.id">
+              {{ opt.name || opt.description }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item
+          name="arch"
+          ref="arch">
+          <template #label>
+            <tooltip-label :title="$t('label.arch')" :tooltip="apiParams.arch.description"/>
+          </template>
+          <a-select
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.children[0].children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            v-model:value="form.arch"
+            :placeholder="apiParams.arch.description">
+            <a-select-option v-for="opt in architectureTypes.opts" :key="opt.id">
+              {{ opt.name || opt.description }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item ref="templatetag" name="templatetag" v-if="isAdminRole">
+          <template #label>
+            <tooltip-label :title="$t('label.templatetag')" :tooltip="apiParams.templatetag.description"/>
+          </template>
+          <a-input
+            v-model:value="form.templatetag"
+            :placeholder="apiParams.templatetag.description"
+            v-focus="currentForm !== 'Create'"/>
+        </a-form-item>
+        <a-row :gutter="12">
+          <a-col :md="24" :lg="12">
+            <a-form-item
+              name="userdataid"
+              ref="userdataid">
+              <template #label>
+                <tooltip-label :title="$t('label.user.data')" :tooltip="linkUserDataParams.userdataid.description"/>
+              </template>
               <a-select
                 showSearch
-                optionFilterProp="children"
+                optionFilterProp="label"
                 :filterOption="(input, option) => {
-                  return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
                 }"
-                v-decorator="['ostypeid', {
-                  initialValue: defaultOsId,
-                  rules: [
-                    {
-                      required: true,
-                      message: `${this.$t('message.error.select')}`
-                    }
-                  ]
-                }]"
-                :loading="osTypes.loading"
-                :placeholder="apiParams.ostypeid.description">
-                <a-select-option v-for="opt in osTypes.opts" :key="opt.id">
+                v-model:value="userdataid"
+                :placeholder="linkUserDataParams.userdataid.description"
+                :loading="userdata.loading">
+                <a-select-option v-for="opt in userdata.opts" :key="opt.id" :label="opt.name || opt.description">
                   {{ opt.name || opt.description }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :md="24" :lg="12">
+            <a-form-item ref="userdatapolicy" name="userdatapolicy">
+              <template #label>
+                <tooltip-label :title="$t('label.user.data.policy')" :tooltip="linkUserDataParams.userdatapolicy.description"/>
+              </template>
+              <a-select
+                showSearch
+                v-model:value="userdatapolicy"
+                :placeholder="linkUserDataParams.userdatapolicy.description"
+                optionFilterProp="label"
+                :filterOption="(input, option) => {
+                  return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }" >
+                <a-select-option v-for="opt in userdatapolicylist.opts" :key="opt.id" :label="opt.id || opt.description">
+                  {{ opt.id || opt.description }}
                 </a-select-option>
               </a-select>
             </a-form-item>
@@ -276,9 +444,9 @@
         </a-row>
         <a-row :gutter="12">
           <a-col :md="24" :lg="24">
-            <a-form-item>
+            <a-form-item ref="groupenabled" name="groupenabled">
               <a-checkbox-group
-                v-decorator="['groupenabled', { initialValue: ['requireshvm'] }]"
+                v-model:value="form.groupenabled"
                 style="width: 100%;"
               >
                 <a-row>
@@ -292,8 +460,6 @@
                       {{ $t('label.passwordenabled') }}
                     </a-checkbox>
                   </a-col>
-                </a-row>
-                <a-row>
                   <a-col :span="12">
                     <a-checkbox value="isdynamicallyscalable">
                       {{ $t('label.isdynamicallyscalable') }}
@@ -304,25 +470,19 @@
                       {{ $t('label.requireshvm') }}
                     </a-checkbox>
                   </a-col>
-                </a-row>
-                <a-row>
-                  <a-col :span="12">
+                  <a-col :span="12" v-if="isAdminRole">
                     <a-checkbox value="isfeatured">
                       {{ $t('label.isfeatured') }}
                     </a-checkbox>
                   </a-col>
-                  <a-col :span="12">
-                    <a-checkbox
-                      value="ispublic"
-                      v-if="$store.getters.userInfo.roletype === 'Admin' || $store.getters.features.userpublictemplateenabled" >
+                  <a-col :span="12" v-if="isAdminRole || $store.getters.features.userpublictemplateenabled">
+                    <a-checkbox value="ispublic">
                       {{ $t('label.ispublic') }}
                     </a-checkbox>
                   </a-col>
-                </a-row>
-                <a-row>
-                  <a-col :span="12" v-if="$store.getters.userInfo.roletype === 'Admin'">
-                    <a-checkbox value="isrouting">
-                      {{ $t('label.isrouting') }}
+                  <a-col :span="12">
+                    <a-checkbox value="forCks" v-if="currentForm === 'Create'">
+                      {{ $t('label.forcks') }}
                     </a-checkbox>
                   </a-col>
                 </a-row>
@@ -330,10 +490,9 @@
             </a-form-item>
           </a-col>
         </a-row>
-
         <div :span="24" class="action-button">
-          <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-          <a-button :loading="loading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+          <a-button @click="closeAction">{{ $t('label.cancel') }}</a-button>
+          <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
         </div>
       </a-form>
     </a-spin>
@@ -341,12 +500,18 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
 import store from '@/store'
 import { axios } from '../../utils/request'
+import { mixinForm } from '@/utils/mixin'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import TooltipLabel from '@/components/widgets/TooltipLabel'
+import DetailsInput from '@/components/widgets/DetailsInput'
 
 export default {
   name: 'RegisterOrUploadTemplate',
+  mixins: [mixinForm],
   props: {
     resource: {
       type: Object,
@@ -357,6 +522,11 @@ export default {
       required: true
     }
   },
+  components: {
+    ResourceIcon,
+    TooltipLabel,
+    DetailsInput
+  },
   data () {
     return {
       uploadPercentage: 0,
@@ -364,7 +534,6 @@ export default {
       fileList: [],
       zones: {},
       defaultZone: '',
-      zoneSelected: '',
       hyperVisor: {},
       rootDisk: {},
       nicAdapterType: {},
@@ -372,57 +541,98 @@ export default {
       format: {},
       osTypes: {},
       defaultOsType: '',
+      templateTypes: {},
+      userdata: {},
+      userdataid: null,
+      userdatapolicy: null,
+      userdatapolicylist: {},
       defaultOsId: null,
-      xenServerProvider: false,
       hyperKVMShow: false,
+      hyperExternalShow: false,
+      hyperCustomShow: false,
       hyperXenServerShow: false,
       hyperVMWShow: false,
+      selectedFormat: '',
+      deployasis: false,
       zoneError: '',
-      zoneErrorMessage: '',
       loading: false,
       rootAdmin: 'Admin',
       allowed: false,
       allowDirectDownload: false,
       uploadParams: null,
-      currentForm: this.action.currentAction.icon === 'plus' ? 'Create' : 'Upload'
+      currentForm: ['plus-outlined', 'PlusOutlined'].includes(this.action.currentAction.icon) ? 'Create' : 'Upload',
+      domains: [],
+      accounts: [],
+      domainLoading: false,
+      domainid: null,
+      account: null,
+      customHypervisorName: 'Custom',
+      architectureTypes: {},
+      externalDetailsEnabled: false
     }
   },
   beforeCreate () {
-    this.form = this.$form.createForm(this)
-    this.apiConfig = this.$store.getters.apis.registerTemplate || {}
-    this.apiParams = {}
-    this.apiConfig.params.forEach(param => {
-      this.apiParams[param.name] = param
-    })
+    this.apiParams = this.$getApiParams('registerTemplate')
+    this.linkUserDataParams = this.$getApiParams('linkUserDataToTemplate')
   },
   created () {
-    this.$set(this.zones, 'loading', false)
-    this.$set(this.zones, 'opts', [])
-    this.$set(this.hyperVisor, 'loading', false)
-    this.$set(this.hyperVisor, 'opts', [])
-    this.$set(this.rootDisk, 'loading', false)
-    this.$set(this.rootDisk, 'opts', [])
-    this.$set(this.nicAdapterType, 'loading', false)
-    this.$set(this.nicAdapterType, 'opts', [])
-    this.$set(this.keyboardType, 'loading', false)
-    this.$set(this.keyboardType, 'opts', [])
-    this.$set(this.format, 'loading', false)
-    this.$set(this.format, 'opts', [])
-    this.$set(this.osTypes, 'loading', false)
-    this.$set(this.osTypes, 'opts', [])
-  },
-  mounted () {
+    this.initForm()
     this.fetchData()
   },
   computed: {
+    isAdminRole () {
+      return this.$store.getters.userInfo.roletype === 'Admin'
+    },
+    filteredZones () {
+      let zoneList = this.zones.opts
+      if (zoneList && zoneList.length > 0 && this.currentForm === 'Upload') {
+        zoneList = zoneList.filter(zone => zone.type !== 'Edge')
+      }
+      return zoneList
+    }
   },
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({
+        deployasis: false,
+        groupenabled: ['requireshvm']
+      })
+      this.rules = reactive({
+        url: [{ required: true, message: this.$t('message.error.required.input') }],
+        file: [{ required: true, message: this.$t('message.error.required.input') }],
+        name: [{ required: true, message: this.$t('message.error.required.input') }],
+        zoneids: [
+          { type: 'array', required: true, message: this.$t('message.error.select') },
+          {
+            validator: this.validZone
+          }
+        ],
+        zoneid: [{ required: true, message: this.$t('message.error.select') }],
+        hypervisor: [{ type: 'number', required: true, message: this.$t('message.error.select') }],
+        format: [{ required: true, message: this.$t('message.error.select') }],
+        ostypeid: [{ required: true, message: this.$t('message.error.select') }],
+        groupenabled: [{ type: 'array' }],
+        extensionid: [{ required: true, message: this.$t('message.error.select') }]
+      })
+    },
     fetchData () {
+      this.fetchCustomHypervisorName()
       this.fetchZone()
       this.fetchOsTypes()
-      if (Object.prototype.hasOwnProperty.call(store.getters.apis, 'listConfigurations')) {
-        this.fetchXenServerProvider()
+      this.templateTypes.opts = this.$fetchTemplateTypes()
+      this.architectureTypes.opts = this.$fetchCpuArchitectureTypes()
+      this.fetchUserData()
+      this.fetchUserdataPolicy()
+      if ('listDomains' in this.$store.getters.apis) {
+        this.fetchDomains()
       }
+      if (Object.prototype.hasOwnProperty.call(store.getters.apis, 'listConfigurations')) {
+        if (this.allowed && this.hyperXenServerShow) {
+          this.fetchXenServerProvider()
+        }
+      }
+      this.fetchExtensionsList()
     },
     handleFormChange (e) {
       this.currentForm = e.target.value
@@ -432,9 +642,11 @@ export default {
       const newFileList = this.fileList.slice()
       newFileList.splice(index, 1)
       this.fileList = newFileList
+      this.form.file = undefined
     },
     beforeUpload (file) {
       this.fileList = [file]
+      this.form.file = file
       return false
     },
     handleUpload () {
@@ -448,10 +660,10 @@ export default {
         formData,
         {
           headers: {
-            'Content-Type': 'multipart/form-data',
-            'X-signature': this.uploadParams.signature,
-            'X-expires': this.uploadParams.expires,
-            'X-metadata': this.uploadParams.metadata
+            'content-type': 'multipart/form-data',
+            'x-signature': this.uploadParams.signature,
+            'x-expires': this.uploadParams.expires,
+            'x-metadata': this.uploadParams.metadata
           },
           onUploadProgress: (progressEvent) => {
             this.uploadPercentage = Number(parseFloat(100 * progressEvent.loaded / progressEvent.total).toFixed(1))
@@ -472,11 +684,38 @@ export default {
         })
       })
     },
+    fetchCustomHypervisorName () {
+      const params = {
+        name: 'hypervisor.custom.display.name'
+      }
+      this.loading = true
+      getAPI('listConfigurations', params).then(json => {
+        if (json.listconfigurationsresponse.configuration !== null) {
+          const config = json.listconfigurationsresponse.configuration[0]
+          if (config && config.name === params.name) {
+            this.customHypervisorName = config.value
+            store.dispatch('SetCustomHypervisorName', this.customHypervisorName)
+          }
+        }
+      }).finally(() => {
+        this.loading = false
+      })
+    },
+    fetchExtensionsList () {
+      this.loading = true
+      getAPI('listExtensions', {
+      }).then(response => {
+        this.extensionsList = response.listextensionsresponse.extension || []
+      }).catch(error => {
+        this.$notifyError(error)
+      }).finally(() => {
+        this.loading = false
+      })
+    },
     fetchZone () {
       const params = {}
       let listZones = []
-      params.listAll = true
-
+      params.showicon = true
       this.allowed = false
 
       if (store.getters.userInfo.roletype === this.rootAdmin && this.currentForm === 'Create') {
@@ -490,61 +729,76 @@ export default {
       this.zones.loading = true
       this.zones.opts = []
 
-      api('listZones', params).then(json => {
+      getAPI('listZones', params).then(json => {
         const listZonesResponse = json.listzonesresponse.zone
         listZones = listZones.concat(listZonesResponse)
-
-        this.$set(this.zones, 'opts', listZones)
+        this.zones.opts = listZones
       }).finally(() => {
-        this.zoneSelected = (this.zones.opts && this.zones.opts[1]) ? this.zones.opts[1].id : ''
+        this.form.zoneid = (this.filteredZones && this.filteredZones[1]) ? this.filteredZones[1].id : ''
+        if (!this.form.zoneid) {
+          this.form.zoneid = (this.filteredZones && this.filteredZones[0] && this.filteredZones[0].id !== this.$t('label.all.zone')) ? this.filteredZones[0].id : ''
+        }
         this.zones.loading = false
-        this.fetchHyperVisor({ zoneid: this.zoneSelected })
+        if (this.form.zoneid) {
+          this.fetchHyperVisor({ zoneid: this.form.zoneid })
+        }
       })
     },
     fetchHyperVisor (params) {
       this.hyperVisor.loading = true
-      let listhyperVisors = this.hyperVisor.opts
+      let listhyperVisors = this.hyperVisor.opts || []
 
-      api('listHypervisors', params).then(json => {
-        const listResponse = json.listhypervisorsresponse.hypervisor
+      getAPI('listHypervisors', params).then(json => {
+        const listResponse = json.listhypervisorsresponse.hypervisor || []
         if (listResponse) {
           listhyperVisors = listhyperVisors.concat(listResponse)
         }
-        if (this.currentForm !== 'Upload') {
+        if (this.currentForm === 'Create') {
           listhyperVisors.push({
-            name: 'Any'
+            name: 'Simulator'
           })
         }
-        this.$set(this.hyperVisor, 'opts', listhyperVisors)
+        this.hyperVisor.opts = listhyperVisors
       }).finally(() => {
         this.hyperVisor.loading = false
       })
     },
     fetchOsTypes () {
-      const params = {}
-      params.listAll = true
-
       this.osTypes.opts = []
       this.osTypes.loading = true
 
-      api('listOsTypes', params).then(json => {
+      getAPI('listOsTypes').then(json => {
         const listOsTypes = json.listostypesresponse.ostype
-        this.$set(this.osTypes, 'opts', listOsTypes)
+        this.osTypes.opts = listOsTypes
         this.defaultOsType = this.osTypes.opts[1].description
-        this.defaultOsId = this.osTypes.opts[1].id
+        this.defaultOsId = this.osTypes.opts[1].name
       }).finally(() => {
         this.osTypes.loading = false
+      })
+    },
+    fetchUserData () {
+      const params = {}
+      params.listAll = true
+
+      this.userdata.opts = []
+      this.userdata.loading = true
+
+      getAPI('listUserData', params).then(json => {
+        const listUserdata = json.listuserdataresponse.userdata
+        this.userdata.opts = listUserdata
+      }).finally(() => {
+        this.userdata.loading = false
       })
     },
     fetchXenServerProvider () {
       const params = {}
       params.name = 'xenserver.pvdriver.version'
 
-      this.xenServerProvider = true
+      this.form.xenserverToolsVersion61plus = true
 
-      api('listConfigurations', params).then(json => {
+      getAPI('listConfigurations', params).then(json => {
         if (json.listconfigurationsresponse.configuration !== null && json.listconfigurationsresponse.configuration[0].value !== 'xenserver61') {
-          this.xenServerProvider = false
+          this.form.xenserverToolsVersion61plus = false
         }
       })
     },
@@ -608,32 +862,32 @@ export default {
         })
       }
 
-      this.$set(this.rootDisk, 'opts', controller)
+      this.rootDisk.opts = controller
     },
-    fetchNicAdapterType () {
-      const nicAdapterType = []
-      nicAdapterType.push({
+    fetchNicAdapterTypes () {
+      const nicAdapterTypes = []
+      nicAdapterTypes.push({
         id: '',
         description: ''
       })
-      nicAdapterType.push({
+      nicAdapterTypes.push({
         id: 'E1000',
         description: 'E1000'
       })
-      nicAdapterType.push({
+      nicAdapterTypes.push({
         id: 'PCNet32',
         description: 'PCNet32'
       })
-      nicAdapterType.push({
+      nicAdapterTypes.push({
         id: 'Vmxnet2',
         description: 'Vmxnet2'
       })
-      nicAdapterType.push({
+      nicAdapterTypes.push({
         id: 'Vmxnet3',
         description: 'Vmxnet3'
       })
 
-      this.$set(this.nicAdapterType, 'opts', nicAdapterType)
+      this.nicAdapterType.opts = nicAdapterTypes
     },
     fetchKeyboardType () {
       const keyboardType = []
@@ -650,7 +904,7 @@ export default {
         })
       })
 
-      this.$set(this.keyboardType, 'opts', keyboardType)
+      this.keyboardType.opts = keyboardType
     },
     fetchFormat (hyperVisor) {
       const format = []
@@ -711,6 +965,10 @@ export default {
             description: 'BareMetal'
           })
           break
+        case 'External':
+          this.hyperExternalShow = true
+          this.selectedFormat = 'External'
+          break
         case 'Ovm':
           format.push({
             id: 'RAW',
@@ -723,28 +981,51 @@ export default {
             description: 'TAR'
           })
           break
+        case this.customHypervisorName:
+          this.hyperCustomShow = true
+          format.push({
+            id: 'RAW',
+            description: 'RAW'
+          })
+          break
         default:
           break
       }
-      this.$set(this.format, 'opts', format)
+      this.format.opts = format
     },
+    fetchUserdataPolicy () {
+      const userdataPolicy = []
+      userdataPolicy.push({
+        id: 'allowoverride',
+        description: 'allowoverride'
+      })
+      userdataPolicy.push({
+        id: 'append',
+        description: 'append'
+      })
+      userdataPolicy.push({
+        id: 'denyoverride',
+        description: 'denyoverride'
+      })
+      this.userdatapolicylist.opts = userdataPolicy
+    },
+
     handlerSelectZone (value) {
       if (!Array.isArray(value)) {
         value = [value]
       }
-      this.validZone(value)
       this.hyperVisor.opts = []
 
-      if (this.zoneError !== '') {
+      const allZoneExists = value.filter(zone => zone === this.$t('label.all.zone'))
+      if (allZoneExists.length > 0 && value.length > 1) {
         return
       }
-
-      this.resetSelect()
+      const arrSelectReset = ['hypervisor', 'format', 'rootDiskControllerType', 'nicAdapterType', 'keyboardType']
+      this.resetSelect(arrSelectReset)
 
       const params = {}
 
       if (value.includes(this.$t('label.all.zone'))) {
-        params.listAll = true
         this.fetchHyperVisor(params)
         return
       }
@@ -760,27 +1041,52 @@ export default {
     },
     handlerSelectHyperVisor (value) {
       const hyperVisor = this.hyperVisor.opts[value].name
+      const arrSelectReset = ['format', 'rootDiskControllerType', 'nicAdapterType', 'keyboardType']
 
       this.hyperXenServerShow = false
       this.hyperVMWShow = false
       this.hyperKVMShow = false
+      this.hyperExternalShow = false
+      this.hyperCustomShow = false
+      this.deployasis = false
       this.allowDirectDownload = false
+      this.selectedFormat = null
+      this.form.deployasis = false
+      this.form.directdownload = false
+      this.form.xenserverToolsVersion61plus = false
 
-      this.resetSelect()
+      this.resetSelect(arrSelectReset)
       this.fetchFormat(hyperVisor)
       this.fetchRootDisk(hyperVisor)
-      this.fetchNicAdapterType()
+      this.fetchNicAdapterTypes()
       this.fetchKeyboardType()
+      this.templateTypes.opts = this.$fetchTemplateTypes(hyperVisor)
+      if (this.form.templatetype && !this.templateTypes.opts.find(opt => opt.id === this.form.templatetype)) {
+        this.form.templatetype = undefined
+      }
+
+      this.form.rootDiskControllerType = this.rootDisk.opts.length > 0 ? 'osdefault' : ''
+    },
+    onExternalDetailsEnabledChange (val) {
+      if (val || !this.form.externaldetails) {
+        return
+      }
+      this.form.externaldetails = undefined
     },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
-        if (err || this.zoneError !== '') {
-          return
+      if (this.loading) return
+      this.formRef.value.validate().then(() => {
+        if (this.currentForm === 'Create') {
+          delete this.form.zoneid
+        } else {
+          delete this.form.zoneids
         }
+        const formRaw = toRaw(this.form)
+        const formvalues = this.handleRemoveFields(formRaw)
         let params = {}
-        for (const key in values) {
-          const input = values[key]
+        for (const key in formvalues) {
+          const input = formvalues[key]
 
           if (input === undefined) {
             continue
@@ -795,10 +1101,6 @@ export default {
               continue
             }
             params[key] = input.join()
-          } else if (key === 'zoneid') {
-            params[key] = input
-          } else if (key === 'ostypeid') {
-            params[key] = input
           } else if (key === 'hypervisor') {
             params[key] = this.hyperVisor.opts[input].name
           } else if (key === 'groupenabled') {
@@ -806,11 +1108,17 @@ export default {
               const name = input[index]
               params[name] = true
             }
+          } else if (key === 'externaldetails') {
+            Object.entries(input).forEach(([k, v]) => {
+              params['externaldetails[0].' + k] = v
+            })
           } else {
             const formattedDetailData = {}
             switch (key) {
               case 'rootDiskControllerType':
-                formattedDetailData['details[0].rootDiskController'] = input
+                if (input) {
+                  formattedDetailData['details[0].rootDiskController'] = input
+                }
                 break
               case 'nicAdapterType':
                 formattedDetailData['details[0].nicAdapter'] = input
@@ -830,9 +1138,18 @@ export default {
             }
           }
         }
+        if (!('requireshvm' in params)) { // handled as default true by API
+          params.requireshvm = false
+        }
+        if (this.selectedFormat === 'External') {
+          params.format = 'External'
+        }
         if (this.currentForm === 'Create') {
           this.loading = true
-          api('registerTemplate', params).then(json => {
+          postAPI('registerTemplate', params).then(json => {
+            if (this.userdataid !== null) {
+              this.linkUserdataToTemplate(this.userdataid, json.registertemplateresponse.template[0].id, this.userdatapolicy)
+            }
             this.$notification.success({
               message: this.$t('label.register.template'),
               description: `${this.$t('message.success.register.template')} ${params.name}`
@@ -844,7 +1161,7 @@ export default {
           }).finally(() => {
             this.loading = false
           })
-        } else {
+        } else if (this.currentForm === 'Upload') {
           this.loading = true
           if (this.fileList.length > 1) {
             this.$notification.error({
@@ -853,42 +1170,97 @@ export default {
               duration: 0
             })
           }
-          api('getUploadParamsForTemplate', params).then(json => {
+          getAPI('getUploadParamsForTemplate', params).then(json => {
             this.uploadParams = (json.postuploadtemplateresponse && json.postuploadtemplateresponse.getuploadparams) ? json.postuploadtemplateresponse.getuploadparams : ''
             this.handleUpload()
+            if (this.userdataid !== null) {
+              this.linkUserdataToTemplate(this.userdataid, json.postuploadtemplateresponse.template[0].id)
+            }
           }).catch(error => {
             this.$notifyError(error)
           }).finally(() => {
             this.loading = false
           })
         }
+      }).catch(error => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     handleChangeDirect (checked) {
       this.allowDirectDownload = checked
     },
-    validZone (zones) {
-      const allZoneExists = zones.filter(zone => zone === this.$t('label.all.zone'))
-
-      this.zoneError = ''
-      this.zoneErrorMessage = ''
-
-      if (allZoneExists.length > 0 && zones.length > 1) {
-        this.zoneError = 'error'
-        this.zoneErrorMessage = this.$t('message.error.zone.combined')
+    async validZone (rule, value) {
+      if (!value || value.length === 0) {
+        return Promise.resolve()
       }
+      const allZoneExists = value.filter(zone => zone === this.$t('label.all.zone'))
+
+      if (allZoneExists.length > 0 && value.length > 1) {
+        return Promise.reject(this.$t('message.error.zone.combined'))
+      }
+
+      return Promise.resolve()
     },
     closeAction () {
       this.$emit('close-action')
     },
-    resetSelect () {
-      this.form.setFieldsValue({
-        hypervisor: undefined,
-        format: undefined,
-        rootDiskControllerType: undefined,
-        nicAdapterType: undefined,
-        keyboardType: undefined
+    linkUserdataToTemplate (userdataid, templateid, userdatapolicy) {
+      this.loading = true
+      const params = {}
+      params.userdataid = userdataid
+      params.templateid = templateid
+      if (userdatapolicy) {
+        params.userdatapolicy = userdatapolicy
+      }
+      postAPI('linkUserDataToTemplate', params).then(json => {
+        this.closeAction()
+      }).catch(error => {
+        this.$notifyError(error)
+      }).finally(() => {
+        this.loading = false
       })
+    },
+    resetSelect (arrSelectReset) {
+      arrSelectReset.forEach(name => {
+        this.form[name] = undefined
+      })
+    },
+    fetchDomains () {
+      const params = {}
+      params.listAll = true
+      params.showicon = true
+      params.details = 'min'
+      this.domainLoading = true
+      getAPI('listDomains', params).then(json => {
+        this.domains = json.listdomainsresponse.domain
+      }).finally(() => {
+        this.domainLoading = false
+        this.handleDomainChange(null)
+      })
+    },
+    handleDomainChange (domain) {
+      this.domainid = domain
+      this.form.account = null
+      this.account = null
+      if ('listAccounts' in this.$store.getters.apis) {
+        this.fetchAccounts()
+      }
+    },
+    fetchAccounts () {
+      getAPI('listAccounts', {
+        domainid: this.domainid
+      }).then(response => {
+        this.accounts = response.listaccountsresponse.account || []
+      }).catch(error => {
+        this.$notifyError(error)
+      })
+    },
+    handleAccountChange (acc) {
+      if (acc) {
+        this.account = acc.name
+      } else {
+        this.account = acc
+      }
     }
   }
 }
@@ -900,14 +1272,6 @@ export default {
 
     @media (min-width: 700px) {
       width: 550px;
-    }
-  }
-
-  .action-button {
-    text-align: right;
-
-    button {
-      margin-right: 5px;
     }
   }
 </style>

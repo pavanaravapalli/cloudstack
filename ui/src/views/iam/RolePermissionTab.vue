@@ -16,16 +16,26 @@
 // under the License.
 
 <template>
-  <a-icon v-if="loadingTable" type="loading" class="main-loading-spinner"></a-icon>
+  <loading-outlined v-if="loadingTable" class="main-loading-spinner" />
   <div v-else>
-    <div style="width: 100%; display: flex; margin-bottom: 10px">
-      <a-button type="dashed" @click="exportRolePermissions" style="width: 100%" icon="download">
-        Export Rules
+    <div style="width: 100%; display: flex; margin-bottom: 20px">
+      <a-button type="dashed" @click="exportRolePermissions" style="width: 100%">
+        <template #icon><download-outlined /></template>
+        {{ $t('label.export.rules') }}
       </a-button>
     </div>
+    <a-input-search
+      v-model:value="searchRule"
+      :placeholder="$t('label.rolepermissiontab.searchbar')"
+      background-color="gray"
+      style="width: 100%; margin-bottom: 10px; display: inline-block"
+      enter-button
+      @search="searchRulePermission"
+    />
     <div v-if="updateTable" class="loading-overlay">
-      <a-icon type="loading" />
+      <loading-outlined />
     </div>
+
     <div
       class="rules-list ant-list ant-list-bordered"
       :class="{'rules-list--overflow-hidden' : updateTable}" >
@@ -34,10 +44,10 @@
         <div class="rules-table__col rules-table__col--grab"></div>
         <div class="rules-table__col rules-table__col--rule rules-table__col--new">
           <a-auto-complete
-            :autoFocus="true"
+            v-focus="true"
             :filterOption="filterOption"
-            :dataSource="apis"
-            :value="newRule"
+            :options="apis"
+            v-model:value="newRule"
             @change="val => newRule = val"
             :placeholder="$t('label.rule')"
             :class="{'rule-dropdown-error' : newRuleSelectError}" />
@@ -45,56 +55,48 @@
         <div class="rules-table__col rules-table__col--permission">
           <permission-editable
             :defaultValue="newRulePermission"
-            @change="onPermissionChange(null, $event)" />
+            @onChange="onPermissionChange(null, $event)" />
         </div>
         <div class="rules-table__col rules-table__col--description">
-          <a-input v-model="newRuleDescription" :placeholder="$t('label.description')"></a-input>
+          <a-input v-model:value="newRuleDescription" :placeholder="$t('label.description')"></a-input>
         </div>
         <div class="rules-table__col rules-table__col--actions">
-          <a-tooltip
-            placement="bottom">
-            <template slot="title">
-              {{ $t('label.save.new.rule') }}
-            </template>
-            <a-button
-              :disabled="!('createRolePermission' in $store.getters.apis)"
-              icon="plus"
-              type="primary"
-              shape="circle"
-              @click="onRuleSave"
-            >
-            </a-button>
-          </a-tooltip>
+          <tooltip-button
+            tooltipPlacement="bottom"
+            :tooltip="$t('label.save.new.rule')"
+            :disabled="!('createRolePermission' in $store.getters.apis)"
+            icon="plus-outlined"
+            type="primary"
+            @onClick="onRuleSave" />
         </div>
       </div>
 
       <draggable
         v-model="rules"
         @change="changeOrder"
-        :disabled="!('updateRolePermission' in this.$store.getters.apis)"
+        :disabled="!('updateRolePermission' in $store.getters.apis)"
         handle=".drag-handle"
         animation="200"
-        ghostClass="drag-ghost">
-        <transition-group type="transition">
-          <div
-            v-for="(record, index) in rules"
-            :key="`item-${index}`"
-            class="rules-table-item ant-list-item">
+        ghostClass="drag-ghost"
+        :component-data="{type: 'transition'}"
+        item-key="id">
+        <template #item="{element}">
+          <div class="rules-table-item ant-list-item">
             <div class="rules-table__col rules-table__col--grab drag-handle">
-              <a-icon type="drag"></a-icon>
+              <drag-outlined />
             </div>
             <div class="rules-table__col rules-table__col--rule">
-              {{ record.rule }}
+              {{ element.rule }}
             </div>
             <div class="rules-table__col rules-table__col--permission">
               <permission-editable
-                :defaultValue="record.permission"
-                @change="onPermissionChange(record, $event)" />
+                :default-value="element.permission"
+                @onChange="onPermissionChange(element, $event)" />
             </div>
             <div class="rules-table__col rules-table__col--description">
-              <template v-if="record.description">
-                {{ record.description }}
-              </template>
+              <div v-if="element.description">
+                {{ element.description }}
+              </div>
               <div v-else class="no-description">
                 {{ $t('message.no.description') }}
               </div>
@@ -102,28 +104,31 @@
             <div class="rules-table__col rules-table__col--actions">
               <rule-delete
                 :disabled="!('deleteRolePermission' in $store.getters.apis)"
-                :record="record"
-                @delete="onRuleDelete(record.id)" />
+                :record="element"
+                @delete="onRuleDelete(element.id)" />
             </div>
           </div>
-        </transition-group>
+        </template>
       </draggable>
     </div>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
 import draggable from 'vuedraggable'
 import PermissionEditable from './PermissionEditable'
 import RuleDelete from './RuleDelete'
+import TooltipButton from '@/components/widgets/TooltipButton'
+import { toCsv } from '@/utils/util.js'
 
 export default {
   name: 'RolePermissionTab',
   components: {
     RuleDelete,
     PermissionEditable,
-    draggable
+    draggable,
+    TooltipButton
   },
   props: {
     resource: {
@@ -141,24 +146,30 @@ export default {
       newRuleDescription: '',
       newRuleSelectError: false,
       drag: false,
-      apis: []
+      apis: [],
+      searchRule: ''
     }
   },
-  mounted () {
-    this.apis = Object.keys(this.$store.getters.apis).sort((a, b) => a.localeCompare(b))
+  created () {
+    this.apis = Object.keys(this.$store.getters.apis)
+      .sort((a, b) => a.localeCompare(b))
+      .map(value => { return { value: value } })
     this.fetchData()
   },
   watch: {
-    resource: function () {
-      this.fetchData(() => {
-        this.resetNewFields()
-      })
+    resource: {
+      deep: true,
+      handler () {
+        this.fetchData(() => {
+          this.resetNewFields()
+        })
+      }
     }
   },
   methods: {
     filterOption (input, option) {
       return (
-        option.componentOptions.children[0].text.toUpperCase().indexOf(input.toUpperCase()) >= 0
+        option.value.toUpperCase().indexOf(input.toUpperCase()) >= 0
       )
     },
     resetNewFields () {
@@ -169,31 +180,42 @@ export default {
     },
     fetchData (callback = null) {
       if (!this.resource.id) return
-      api('listRolePermissions', { roleid: this.resource.id }).then(response => {
+      getAPI('listRolePermissions', { roleid: this.resource.id }).then(response => {
         this.rules = response.listrolepermissionsresponse.rolepermission
+        this.totalRules = this.rules
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
         this.loadingTable = false
         this.updateTable = false
+        this.updateApis()
         if (callback) callback()
       })
     },
+    updateApis () {
+      this.apis = Object.keys(this.$store.getters.apis)
+        .sort((a, b) => a.localeCompare(b))
+      var apisSupported = this.rules?.map(rule => rule.rule) || []
+      this.apis = this.apis.filter(api => !apisSupported.includes(api.value)).map(value => { return { value: value } })
+    },
     changeOrder () {
-      api('updateRolePermission', {}, 'POST', {
+      this.updateTable = true
+      postAPI('updateRolePermission', {
         roleid: this.resource.id,
         ruleorder: this.rules.map(rule => rule.id)
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
+        this.updateTable = false
         this.fetchData()
       })
     },
     onRuleDelete (key) {
       this.updateTable = true
-      api('deleteRolePermission', { id: key }).catch(error => {
+      postAPI('deleteRolePermission', { id: key }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
+        this.updateTable = false
         this.fetchData()
       })
     },
@@ -203,7 +225,7 @@ export default {
       if (!record) return
 
       this.updateTable = true
-      api('updateRolePermission', {
+      postAPI('updateRolePermission', {
         roleid: this.resource.id,
         ruleid: record.id,
         permission: value
@@ -211,6 +233,8 @@ export default {
         this.fetchData()
       }).catch(error => {
         this.$notifyError(error)
+      }).finally(() => {
+        this.updateTable = false
       })
     },
     onRuleSelect (value) {
@@ -223,7 +247,7 @@ export default {
       }
 
       this.updateTable = true
-      api('createRolePermission', {
+      postAPI('createRolePermission', {
         rule: this.newRule,
         permission: this.newRulePermission,
         description: this.newRuleDescription,
@@ -234,40 +258,30 @@ export default {
       }).finally(() => {
         this.resetNewFields()
         this.fetchData()
+        this.updateTable = false
       })
-    },
-    rulesDataToCsv ({ data = null, columnDelimiter = ',', lineDelimiter = '\n' }) {
-      if (data === null || !data.length) {
-        return null
-      }
-
-      const keys = ['rule', 'permission', 'description']
-      let result = ''
-      result += keys.join(columnDelimiter)
-      result += lineDelimiter
-
-      data.forEach(item => {
-        keys.forEach(key => {
-          if (item[key] === undefined) {
-            item[key] = ''
-          }
-          result += typeof item[key] === 'string' && item[key].includes(columnDelimiter) ? `"${item[key]}"` : item[key]
-          result += columnDelimiter
-        })
-        result = result.slice(0, -1)
-        result += lineDelimiter
-      })
-
-      return result
     },
     exportRolePermissions () {
-      const rulesCsvData = this.rulesDataToCsv({ data: this.rules })
+      const rulesCsvData = toCsv({ keys: ['rule', 'permission', 'description'], data: this.rules })
       const hiddenElement = document.createElement('a')
       hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(rulesCsvData)
       hiddenElement.target = '_blank'
       hiddenElement.download = this.resource.name + '_' + this.resource.type + '.csv'
       hiddenElement.click()
-      hiddenElement.delete()
+      hiddenElement.remove()
+    },
+    searchRulePermission (searchValue) {
+      searchValue = searchValue.toLowerCase()
+      if (!searchValue) {
+        this.rules = this.totalRules
+      } else {
+        this.updateTable = true
+        const searchRules = this.totalRules.filter((rule) => rule.rule.toLowerCase().includes(searchValue))
+        this.rules = searchRules
+        setTimeout(() => {
+          this.updateTable = false
+        })
+      }
     }
   }
 }

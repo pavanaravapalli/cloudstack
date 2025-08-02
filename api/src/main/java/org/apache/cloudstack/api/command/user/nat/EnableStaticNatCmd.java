@@ -16,7 +16,7 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.nat;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -39,9 +39,7 @@ import com.cloud.uservm.UserVm;
 @APICommand(name = "enableStaticNat", description = "Enables static NAT for given IP address", responseObject = SuccessResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class EnableStaticNatCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(CreateIpForwardingRuleCmd.class.getName());
 
-    private static final String s_name = "enablestaticnatresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -113,11 +111,6 @@ public class EnableStaticNatCmd extends BaseCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         UserVm userVm = _entityMgr.findById(UserVm.class, getVirtualMachineId());
         if (userVm != null) {
@@ -138,10 +131,19 @@ public class EnableStaticNatCmd extends BaseCmd {
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to enable static NAT");
             }
         } catch (NetworkRuleConflictException ex) {
-            s_logger.info("Network rule conflict: " + ex.getMessage());
-            s_logger.trace("Network Rule Conflict: ", ex);
+            logger.info("Network rule conflict: " + ex.getMessage());
+            logger.trace("Network Rule Conflict: ", ex);
             throw new ServerApiException(ApiErrorCode.NETWORK_RULE_CONFLICT_ERROR, ex.getMessage());
         }
     }
 
+    @Override
+    public Long getApiResourceId() {
+        return getVirtualMachineId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
+    }
 }

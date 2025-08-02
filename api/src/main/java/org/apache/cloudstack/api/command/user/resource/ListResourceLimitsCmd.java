@@ -19,24 +19,21 @@ package org.apache.cloudstack.api.command.user.resource;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.cloud.configuration.Resource;
-import com.cloud.exception.InvalidParameterValueException;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseListProjectAndAccountResourcesCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.ResourceLimitResponse;
-import org.apache.log4j.Logger;
 
+import com.cloud.configuration.Resource;
 import com.cloud.configuration.ResourceLimit;
+import com.cloud.exception.InvalidParameterValueException;
 
 @APICommand(name = "listResourceLimits", description = "Lists resource limits.", responseObject = ResourceLimitResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListResourceLimitsCmd extends BaseListProjectAndAccountResourcesCmd {
-    public static final Logger s_logger = Logger.getLogger(ListResourceLimitsCmd.class.getName());
 
-    private static final String s_name = "listresourcelimitsresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -54,8 +51,8 @@ public class ListResourceLimitsCmd extends BaseListProjectAndAccountResourcesCmd
         + "5 - Project. Number of projects an account can own. "
         + "6 - Network. Number of networks an account can own. "
         + "7 - VPC. Number of VPC an account can own. "
-        + "8 - CPU. Number of CPU an account can allocate for his resources. "
-        + "9 - Memory. Amount of RAM an account can allocate for his resources. "
+        + "8 - CPU. Number of CPU an account can allocate for their resources. "
+        + "9 - Memory. Amount of RAM an account can allocate for their resources. "
         + "10 - PrimaryStorage. Total primary storage space (in GiB) a user can use. "
         + "11 - SecondaryStorage. Total secondary storage space (in GiB) a user can use. ")
     private Integer resourceType;
@@ -69,11 +66,15 @@ public class ListResourceLimitsCmd extends BaseListProjectAndAccountResourcesCmd
             + "project - Project. Number of projects an account can own. "
             + "network - Network. Number of networks an account can own. "
             + "vpc - VPC. Number of VPC an account can own. "
-            + "cpu - CPU. Number of CPU an account can allocate for his resources. "
-            + "memory - Memory. Amount of RAM an account can allocate for his resources. "
+            + "cpu - CPU. Number of CPU an account can allocate for their resources. "
+            + "memory - Memory. Amount of RAM an account can allocate for their resources. "
             + "primary_storage - PrimaryStorage. Total primary storage space (in GiB) a user can use. "
             + "secondary_storage - SecondaryStorage. Total secondary storage space (in GiB) a user can use. ")
     private String resourceTypeName;
+
+    @Parameter(name = ApiConstants.TAG, type = CommandType.STRING, description = "Tag for the resource type", since = "4.20.0")
+    private String tag;
+
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -91,20 +92,19 @@ public class ListResourceLimitsCmd extends BaseListProjectAndAccountResourcesCmd
         return resourceTypeName;
     }
 
+    public String getTag() {
+        return tag;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public void execute() {
         List<? extends ResourceLimit> result =
                 _resourceLimitService.searchForLimits(id, _accountService.finalyzeAccountId(this.getAccountName(), this.getDomainId(), this.getProjectId(), false), this.getDomainId(),
-                        getResourceTypeEnum(), this.getStartIndex(), this.getPageSizeVal());
+                        getResourceTypeEnum(), getTag(), this.getStartIndex(), this.getPageSizeVal());
         ListResponse<ResourceLimitResponse> response = new ListResponse<ResourceLimitResponse>();
         List<ResourceLimitResponse> limitResponses = new ArrayList<ResourceLimitResponse>();
         for (ResourceLimit limit : result) {

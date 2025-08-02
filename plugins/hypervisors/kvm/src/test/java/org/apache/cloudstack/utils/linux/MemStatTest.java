@@ -16,18 +16,21 @@
 // under the License.
 package org.apache.cloudstack.utils.linux;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.MockedConstruction;
+import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnitRunner;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest(MemStat.class)
+@RunWith(MockitoJUnitRunner.class)
 public class MemStatTest {
     final String memInfo = "MemTotal:        5830236 kB\n" +
                            "MemFree:          156752 kB\n" +
@@ -37,18 +40,37 @@ public class MemStatTest {
                            "Active:          4260808 kB\n" +
                            "Inactive:         949392 kB\n";
 
+    MockedConstruction<Scanner> scanner;
+
     @Before
     public void setup() throws Exception {
-        Scanner scanner = new Scanner(memInfo);
-        PowerMockito.whenNew(Scanner.class).withAnyArguments().thenReturn(scanner);
+        scanner = Mockito.mockConstruction(Scanner.class, (mock, context) -> {
+            String[] memInfoLines = memInfo.split("\\n");
+            List<Boolean> hasNextReturnList = Arrays.stream(memInfoLines).map(line -> true).collect(
+                    Collectors.toList());
+            hasNextReturnList.add(false);
+            Mockito.when(mock.next()).thenReturn(memInfoLines[0], Arrays.copyOfRange(memInfoLines, 1,
+                    memInfoLines.length));
+            Mockito.when(mock.hasNext()).thenReturn(true,
+                    Arrays.copyOfRange(hasNextReturnList.toArray(new Boolean[0]), 1, hasNextReturnList.size()));
+        });
+
+    }
+
+    @After
+    public void tearDown() {
+        scanner.close();
     }
 
     @Test
     public void getMemInfoParseTest() {
         MemStat memStat = new MemStat();
+        if (!System.getProperty("os.name").equals("Linux")) {
+            return;
+        }
 
         Assert.assertEquals(memStat.getTotal(), 5970161664L);
-        Assert.assertEquals(memStat.getAvailable(), 2829840384L);
+        Assert.assertEquals(memStat.getAvailable(), 3164520448L);
         Assert.assertEquals(memStat.getFree(), 160514048L);
         Assert.assertEquals(memStat.getCache(), 2669326336L);
     }
@@ -56,6 +78,9 @@ public class MemStatTest {
     @Test
     public void reservedMemoryTest() {
         MemStat memStat = new MemStat(1024, 2048);
+        if (!System.getProperty("os.name").equals("Linux")) {
+            return;
+        }
         Assert.assertEquals(memStat.getTotal(), 5970162688L);
     }
 }

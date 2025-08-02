@@ -21,7 +21,7 @@ import com.cloud.serializer.Param;
 import com.google.gson.annotations.SerializedName;
 import org.apache.cloudstack.api.response.ClusterResponse;
 
-public class ClusterMetricsResponse extends ClusterResponse {
+public class ClusterMetricsResponse extends ClusterResponse implements HostMetricsSummary {
     @SerializedName("state")
     @Param(description = "state of the cluster")
     private String state;
@@ -93,6 +93,10 @@ public class ClusterMetricsResponse extends ClusterResponse {
     @SerializedName("memoryallocateddisablethreshold")
     @Param(description = "memory allocated disable threshold exceeded")
     private Boolean memoryAllocatedDisableThresholdExceeded;
+
+    @SerializedName("drsimbalance")
+    @Param(description = "DRS imbalance for the cluster")
+    private String drsImbalance;
 
     public void setState(final String allocationState, final String managedState) {
         this.state = allocationState;
@@ -206,6 +210,14 @@ public class ClusterMetricsResponse extends ClusterResponse {
     public void setMemoryAllocatedDisableThreshold(final Long memAllocated, final Long memTotal, final Float threshold) {
         if (memAllocated != null && memTotal != null && threshold != null && memTotal != 0) {
             this.memoryAllocatedDisableThresholdExceeded = (1.0 * memAllocated / memTotal) > threshold;
+        }
+    }
+
+    public void setDrsImbalance(Double drsImbalance) {
+        if (drsImbalance != null) {
+            this.drsImbalance = String.format("%.2f%%", drsImbalance);
+        } else {
+            this.drsImbalance = null;
         }
     }
 }

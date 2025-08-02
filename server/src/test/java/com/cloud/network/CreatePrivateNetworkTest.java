@@ -17,26 +17,6 @@
 
 package com.cloud.network;
 
-import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.when;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
-import org.apache.cloudstack.acl.ControlledEntity.ACLType;
-import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
-import org.apache.log4j.Logger;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
 import com.cloud.dc.DataCenter.NetworkType;
 import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.dao.DataCenterDao;
@@ -58,16 +38,41 @@ import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
 import com.cloud.user.AccountVO;
+import com.cloud.user.User;
+import com.cloud.user.UserVO;
+import com.cloud.utils.Pair;
 import com.cloud.utils.db.DB;
 import com.cloud.utils.db.TransactionLegacy;
 import com.cloud.utils.exception.CloudRuntimeException;
-
 import junit.framework.Assert;
+import org.apache.cloudstack.acl.ControlledEntity.ACLType;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 
 //@Ignore("Requires database to be set up")
 public class CreatePrivateNetworkTest {
 
-    private static final Logger s_logger = Logger.getLogger(CreatePrivateNetworkTest.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     NetworkServiceImpl networkService = new NetworkServiceImpl();
 
@@ -85,10 +90,11 @@ public class CreatePrivateNetworkTest {
     NetworkOrchestrationService _networkMgr;
     @Mock
     PrivateIpDao _privateIpDao;
+    private AutoCloseable closeable;
 
     @Before
     public void setup() throws Exception {
-        MockitoAnnotations.initMocks(this);
+        closeable = MockitoAnnotations.openMocks(this);
 
         networkService._accountMgr = _accountMgr;
         networkService._networkOfferingDao = _networkOfferingDao;
@@ -98,8 +104,11 @@ public class CreatePrivateNetworkTest {
         networkService._networkMgr = _networkMgr;
         networkService._privateIpDao = _privateIpDao;
 
-        Account account = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account account = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         when(networkService._accountMgr.getAccount(anyLong())).thenReturn(account);
+
+        UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
+        CallContext.register(user, account);
 
         NetworkOfferingVO ntwkOff =
             new NetworkOfferingVO("offer", "fakeOffer", TrafficType.Guest, true, true, null, null, false, null, null, GuestType.Isolated, false, false, false, false,
@@ -123,12 +132,17 @@ public class CreatePrivateNetworkTest {
                 ACLType.Account, false, 1L, false);
         when(networkService._networkMgr.createGuestNetwork(eq(ntwkOff.getId()), eq("bla"), eq("fake"), eq("10.1.1.1"), eq("10.1.1.0/24"), nullable(String.class), nullable(Boolean.class), nullable(String.class),
                         eq(account), nullable(Long.class), eq(physicalNetwork), eq(physicalNetwork.getDataCenterId()), eq(ACLType.Account), nullable(Boolean.class), eq(1L), nullable(String.class), nullable(String.class),
-                        nullable(Boolean.class), nullable(String.class), nullable(Network.PVlanType.class), nullable(String.class), nullable(String.class), nullable(String.class))).thenReturn(net);
+                        nullable(Boolean.class), nullable(String.class), nullable(Network.PVlanType.class), nullable(String.class), nullable(String.class), nullable(String.class), nullable(String.class), nullable(String.class), nullable(String.class), nullable(String.class), nullable(Pair.class), nullable(Integer.class))).thenReturn(net);
         when(
             networkService._networkMgr.createPrivateNetwork(eq(ntwkOff.getId()), eq("bla"), eq("fake"), eq("10.1.1.1"), eq("10.1.1.0/24"), anyString(), anyBoolean(), eq(account), eq(physicalNetwork), eq(1L))).thenReturn(net);
 
         when(networkService._privateIpDao.findByIpAndSourceNetworkId(net.getId(), "10.1.1.2")).thenReturn(null);
         when(networkService._privateIpDao.findByIpAndSourceNetworkIdAndVpcId(eq(1L), anyString(), eq(1L))).thenReturn(null);
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        closeable.close();
     }
 
     @Test
@@ -139,21 +153,21 @@ public class CreatePrivateNetworkTest {
         /* Network nw; */
         try {
             /* nw = */
-            networkService.createPrivateNetwork("bla", "fake", 1L, "vlan:1", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1L, 1L, true, 1L, false);
+            networkService.createPrivateNetwork("bla", "fake", 1L, "vlan:1", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1L, 1L, true, 1L, false, null);
             /* nw = */
-            networkService.createPrivateNetwork("bla", "fake", 1L, "lswitch:3", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1L, 1L, false, 1L, false);
+            networkService.createPrivateNetwork("bla", "fake", 1L, "lswitch:3", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1L, 1L, false, 1L, false, null);
             boolean invalid = false;
             boolean unsupported = false;
             try {
                 /* nw = */
-                networkService.createPrivateNetwork("bla", "fake", 1, "bla:2", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1, 1L, true, 1L, false);
+                networkService.createPrivateNetwork("bla", "fake", 1, "bla:2", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1, 1L, true, 1L, false, null);
             } catch (CloudRuntimeException e) {
                 Assert.assertEquals("unexpected parameter exception", "string 'bla:2' has an unknown BroadcastDomainType.", e.getMessage());
                 invalid = true;
             }
             try {
                 /* nw = */
-                networkService.createPrivateNetwork("bla", "fake", 1, "mido://4", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1, 1L, false, 1L, false);
+                networkService.createPrivateNetwork("bla", "fake", 1, "mido://4", "10.1.1.2", null, "10.1.1.1", "255.255.255.0", 1, 1L, false, 1L, false, null);
             } catch (InvalidParameterValueException e) {
                 Assert.assertEquals("unexpected parameter exception", "unsupported type of broadcastUri specified: mido://4", e.getMessage());
                 unsupported = true;
@@ -161,13 +175,13 @@ public class CreatePrivateNetworkTest {
             Assert.assertEquals("'bla' should not be accepted as scheme", true, invalid);
             Assert.assertEquals("'mido' should not yet be supported as scheme", true, unsupported);
         } catch (ResourceAllocationException e) {
-            s_logger.error("no resources", e);
+            logger.error("no resources", e);
             fail("no resources");
         } catch (ConcurrentOperationException e) {
-            s_logger.error("another one is in the way", e);
+            logger.error("another one is in the way", e);
             fail("another one is in the way");
         } catch (InsufficientCapacityException e) {
-            s_logger.error("no capacity", e);
+            logger.error("no capacity", e);
             fail("no capacity");
         } finally {
             __txn.close("createInvalidlyHostedPrivateNetworkTest");

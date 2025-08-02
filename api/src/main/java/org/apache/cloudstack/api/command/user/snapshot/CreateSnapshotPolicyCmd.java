@@ -18,10 +18,12 @@ package org.apache.cloudstack.api.command.user.snapshot;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseCmd;
@@ -29,8 +31,8 @@ import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.SnapshotPolicyResponse;
 import org.apache.cloudstack.api.response.VolumeResponse;
+import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.commons.collections.MapUtils;
-import org.apache.log4j.Logger;
 
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.PermissionDeniedException;
@@ -42,9 +44,7 @@ import com.cloud.user.Account;
 @APICommand(name = "createSnapshotPolicy", description = "Creates a snapshot policy for the account.", responseObject = SnapshotPolicyResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class CreateSnapshotPolicyCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(CreateSnapshotPolicyCmd.class.getName());
 
-    private static final String s_name = "createsnapshotpolicyresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -74,6 +74,14 @@ public class CreateSnapshotPolicyCmd extends BaseCmd {
 
     @Parameter(name = ApiConstants.TAGS, type = CommandType.MAP, description = "Map of tags (key/value pairs)")
     private Map tags;
+
+    @Parameter(name = ApiConstants.ZONE_ID_LIST,
+            type=CommandType.LIST,
+            collectionType = CommandType.UUID,
+            entityType = ZoneResponse.class,
+            description = "A list of IDs of the zones in which the snapshots will be made available." +
+                    "The snapshots will always be made available in the zone in which the volume is present.")
+    protected List<Long> zoneIds;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -107,14 +115,13 @@ public class CreateSnapshotPolicyCmd extends BaseCmd {
             return display;
     }
 
+    public List<Long> getZoneIds() {
+        return zoneIds;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -125,7 +132,7 @@ public class CreateSnapshotPolicyCmd extends BaseCmd {
 
         Account account = _accountService.getAccount(volume.getAccountId());
         //Can create templates for enabled projects/accounts only
-        if (account.getType() == Account.ACCOUNT_TYPE_PROJECT) {
+        if (account.getType() == Account.Type.PROJECT) {
             Project project = _projectService.findByProjectAccountId(volume.getAccountId());
             if (project.getState() != Project.State.Active) {
                 PermissionDeniedException ex =
@@ -133,7 +140,7 @@ public class CreateSnapshotPolicyCmd extends BaseCmd {
                 ex.addProxyObject(project.getUuid(), "projectId");
                 throw ex;
             }
-        } else if (account.getState() == Account.State.disabled) {
+        } else if (account.getState() == Account.State.DISABLED) {
             throw new PermissionDeniedException("The owner of template is disabled: " + account);
         }
 
@@ -162,5 +169,15 @@ public class CreateSnapshotPolicyCmd extends BaseCmd {
         } else {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to create snapshot policy");
         }
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return getVolumeId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Volume;
     }
 }

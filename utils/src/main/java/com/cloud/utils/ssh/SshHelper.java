@@ -25,9 +25,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.joda.time.Duration;
 
 import com.trilead.ssh2.ChannelCondition;
@@ -38,18 +39,30 @@ import com.cloud.utils.Pair;
 public class SshHelper {
     private static final int DEFAULT_CONNECT_TIMEOUT = 180000;
     private static final int DEFAULT_KEX_TIMEOUT = 60000;
+    private static final int DEFAULT_WAIT_RESULT_TIMEOUT = 120000;
 
-    private static final Logger s_logger = Logger.getLogger(SshHelper.class);
+    protected static Logger LOGGER = LogManager.getLogger(SshHelper.class);
 
     public static Pair<Boolean, String> sshExecute(String host, int port, String user, File pemKeyFile, String password, String command) throws Exception {
 
-        return sshExecute(host, port, user, pemKeyFile, password, command, DEFAULT_CONNECT_TIMEOUT, DEFAULT_KEX_TIMEOUT, 120000);
+        return sshExecute(host, port, user, pemKeyFile, password, command, DEFAULT_CONNECT_TIMEOUT, DEFAULT_KEX_TIMEOUT, DEFAULT_WAIT_RESULT_TIMEOUT);
+    }
+
+    public static Pair<Boolean, String> sshExecute(String host, int port, String user, File pemKeyFile, String password, String command, int waitResultTimeoutInMs) throws Exception {
+
+        return sshExecute(host, port, user, pemKeyFile, password, command, DEFAULT_CONNECT_TIMEOUT, DEFAULT_KEX_TIMEOUT, waitResultTimeoutInMs);
     }
 
     public static void scpTo(String host, int port, String user, File pemKeyFile, String password, String remoteTargetDirectory, String localFile, String fileMode)
             throws Exception {
 
         scpTo(host, port, user, pemKeyFile, password, remoteTargetDirectory, localFile, fileMode, DEFAULT_CONNECT_TIMEOUT, DEFAULT_KEX_TIMEOUT);
+    }
+
+    public static void scpTo(String host, int port, String user, File pemKeyFile, String password, String remoteTargetDirectory, String[] localFiles, String fileMode)
+            throws Exception {
+
+        scpTo(host, port, user, pemKeyFile, password, remoteTargetDirectory, localFiles, fileMode, DEFAULT_CONNECT_TIMEOUT, DEFAULT_KEX_TIMEOUT);
     }
 
     public static void scpTo(String host, int port, String user, File pemKeyFile, String password, String remoteTargetDirectory, byte[] data, String remoteFileName,
@@ -59,6 +72,10 @@ public class SshHelper {
     }
 
     public static void scpFrom(String host, int port, String user, File permKeyFile, String localTargetDirectory, String remoteTargetFile) throws Exception {
+        scpFrom(host, port, user, permKeyFile, null,  localTargetDirectory, remoteTargetFile);
+    }
+
+    public static void scpFrom(String host, int port, String user, File permKeyFile, String password, String localTargetDirectory, String remoteTargetFile) throws Exception {
         com.trilead.ssh2.Connection conn = null;
         com.trilead.ssh2.SCPClient scpClient = null;
 
@@ -66,11 +83,20 @@ public class SshHelper {
             conn = new com.trilead.ssh2.Connection(host, port);
             conn.connect(null, DEFAULT_CONNECT_TIMEOUT, DEFAULT_KEX_TIMEOUT);
 
-            if (!conn.authenticateWithPublicKey(user, permKeyFile, null)) {
-                String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                s_logger.error(msg);
-                throw new Exception(msg);
+            if (permKeyFile == null) {
+                if (!conn.authenticateWithPassword(user, password)) {
+                    String msg = "Failed to authentication SSH user " + user + " on host " + host;
+                    LOGGER.error(msg);
+                    throw new Exception(msg);
+                }
+            } else {
+                if (!conn.authenticateWithPublicKey(user, permKeyFile, password)) {
+                    String msg = "Failed to authentication SSH user " + user + " on host " + host;
+                    LOGGER.error(msg);
+                    throw new Exception(msg);
+                }
             }
+
             scpClient = conn.createSCPClient();
 
             scpClient.get(remoteTargetFile, localTargetDirectory);
@@ -95,13 +121,13 @@ public class SshHelper {
             if (pemKeyFile == null) {
                 if (!conn.authenticateWithPassword(user, password)) {
                     String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                    s_logger.error(msg);
+                    LOGGER.error(msg);
                     throw new Exception(msg);
                 }
             } else {
                 if (!conn.authenticateWithPublicKey(user, pemKeyFile, password)) {
                     String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                    s_logger.error(msg);
+                    LOGGER.error(msg);
                     throw new Exception(msg);
                 }
             }
@@ -112,6 +138,42 @@ public class SshHelper {
                 scpClient.put(localFile, remoteTargetDirectory, fileMode);
             else
                 scpClient.put(localFile, remoteTargetDirectory);
+        } finally {
+            if (conn != null)
+                conn.close();
+        }
+    }
+
+    public static void scpTo(String host, int port, String user, File pemKeyFile, String password, String remoteTargetDirectory, String[] localFiles, String fileMode,
+                             int connectTimeoutInMs, int kexTimeoutInMs) throws Exception {
+
+        com.trilead.ssh2.Connection conn = null;
+        com.trilead.ssh2.SCPClient scpClient = null;
+
+        try {
+            conn = new com.trilead.ssh2.Connection(host, port);
+            conn.connect(null, connectTimeoutInMs, kexTimeoutInMs);
+
+            if (pemKeyFile == null) {
+                if (!conn.authenticateWithPassword(user, password)) {
+                    String msg = "Failed to authentication SSH user " + user + " on host " + host;
+                    LOGGER.error(msg);
+                    throw new Exception(msg);
+                }
+            } else {
+                if (!conn.authenticateWithPublicKey(user, pemKeyFile, password)) {
+                    String msg = "Failed to authentication SSH user " + user + " on host " + host;
+                    LOGGER.error(msg);
+                    throw new Exception(msg);
+                }
+            }
+
+            scpClient = conn.createSCPClient();
+
+            if (fileMode != null)
+                scpClient.put(localFiles, remoteTargetDirectory, fileMode);
+            else
+                scpClient.put(localFiles, remoteTargetDirectory);
         } finally {
             if (conn != null)
                 conn.close();
@@ -131,13 +193,13 @@ public class SshHelper {
             if (pemKeyFile == null) {
                 if (!conn.authenticateWithPassword(user, password)) {
                     String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                    s_logger.error(msg);
+                    LOGGER.error(msg);
                     throw new Exception(msg);
                 }
             } else {
                 if (!conn.authenticateWithPublicKey(user, pemKeyFile, password)) {
                     String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                    s_logger.error(msg);
+                    LOGGER.error(msg);
                     throw new Exception(msg);
                 }
             }
@@ -170,13 +232,13 @@ public class SshHelper {
             if (pemKeyFile == null) {
                 if (!conn.authenticateWithPassword(user, password)) {
                     String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                    s_logger.error(msg);
+                    LOGGER.error(msg);
                     throw new Exception(msg);
                 }
             } else {
                 if (!conn.authenticateWithPublicKey(user, pemKeyFile, password)) {
                     String msg = "Failed to authentication SSH user " + user + " on host " + host;
-                    s_logger.error(msg);
+                    LOGGER.error(msg);
                     throw new Exception(msg);
                 }
             }
@@ -223,19 +285,19 @@ public class SshHelper {
                     result = IOUtils.toString(stdout, StandardCharsets.UTF_8);
                 }
                 catch (IOException e) {
-                    s_logger.error("Couldn't get content of input stream due to: " + e.getMessage());
+                    LOGGER.error("Couldn't get content of input stream due to: " + e.getMessage());
                     return new Pair<Boolean, String>(false, result);
                 }
             }
 
             if (sess.getExitStatus() == null) {
                 //Exit status is NOT available. Returning failure result.
-                s_logger.error(String.format("SSH execution of command %s has no exit status set. Result output: %s", command, result));
+                LOGGER.error(String.format("SSH execution of command %s has no exit status set. Result output: %s", command, result));
                 return new Pair<Boolean, String>(false, result);
             }
 
             if (sess.getExitStatus() != null && sess.getExitStatus().intValue() != 0) {
-                s_logger.error(String.format("SSH execution of command %s has an error status code in return. Result output: %s", command, result));
+                LOGGER.error(String.format("SSH execution of command %s has an error status code in return. Result output: %s", command, result));
                 return new Pair<Boolean, String>(false, result);
             }
             return new Pair<Boolean, String>(true, result);
@@ -260,7 +322,7 @@ public class SshHelper {
      * does not have an exit status, it returns true to break the loop; otherwise, it returns
      * false.
      */
-    protected static boolean canEndTheSshConnection(int waitResultTimeoutInMs, com.trilead.ssh2.Session sess, int conditions) throws SshException {
+    protected static boolean canEndTheSshConnection(int waitResultTimeoutInMs, com.trilead.ssh2.Session sess, int conditions) throws SshException, InterruptedException {
         if (isChannelConditionEof(conditions)) {
             int newConditions = sess.waitForCondition(ChannelCondition.EXIT_STATUS, waitResultTimeoutInMs);
             throwSshExceptionIfConditionsTimeout(newConditions);
@@ -277,7 +339,7 @@ public class SshHelper {
     protected static void throwSshExceptionIfConditionsTimeout(int conditions) throws SshException {
         if ((conditions & ChannelCondition.TIMEOUT) != 0) {
             String msg = "Timed out in waiting for SSH execution exit status";
-            s_logger.error(msg);
+            LOGGER.error(msg);
             throw new SshException(msg);
         }
     }
@@ -300,7 +362,7 @@ public class SshHelper {
     protected static void throwSshExceptionIfStdoutOrStdeerIsNull(InputStream stdout, InputStream stderr) throws SshException {
         if (stdout == null || stderr == null) {
             String msg = "Stdout or Stderr of SSH session is null";
-            s_logger.error(msg);
+            LOGGER.error(msg);
             throw new SshException(msg);
         }
     }

@@ -24,9 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.cloud.utils.Pair;
 import org.apache.cloudstack.storage.to.VolumeObjectTO;
-import org.apache.log4j.Logger;
 
 import com.cloud.agent.api.Answer;
 import com.cloud.agent.api.MigrateWithStorageAnswer;
@@ -35,12 +33,14 @@ import com.cloud.agent.api.to.NicTO;
 import com.cloud.agent.api.to.StorageFilerTO;
 import com.cloud.agent.api.to.VirtualMachineTO;
 import com.cloud.agent.api.to.VolumeTO;
+import com.cloud.hypervisor.xenserver.resource.CitrixHelper;
 import com.cloud.hypervisor.xenserver.resource.XenServer610Resource;
 import com.cloud.hypervisor.xenserver.resource.XsHost;
 import com.cloud.hypervisor.xenserver.resource.XsLocalNetwork;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.resource.CommandWrapper;
 import com.cloud.resource.ResourceWrapper;
+import com.cloud.utils.Pair;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.xensource.xenapi.Connection;
 import com.xensource.xenapi.Host;
@@ -55,7 +55,6 @@ import com.xensource.xenapi.VM;
 @ResourceWrapper(handles =  MigrateWithStorageCommand.class)
 public final class XenServer610MigrateWithStorageCommandWrapper extends CommandWrapper<MigrateWithStorageCommand, Answer, XenServer610Resource> {
 
-    private static final Logger s_logger = Logger.getLogger(XenServer610MigrateWithStorageCommandWrapper.class);
 
     @Override
     public Answer execute(final MigrateWithStorageCommand command, final XenServer610Resource xenServer610Resource) {
@@ -88,7 +87,9 @@ public final class XenServer610MigrateWithStorageCommandWrapper extends CommandW
             for (final Pair<VolumeTO, StorageFilerTO> entry : volumeToFiler) {
                 final StorageFilerTO storageFiler = entry.second();
                 final VolumeTO volume = entry.first();
-                vdiMap.put(xenServer610Resource.getVDIbyUuid(connection, volume.getPath()), xenServer610Resource.getStorageRepository(connection, storageFiler.getUuid()));
+                vdiMap.put(xenServer610Resource.getVDIbyUuid(connection, volume.getPath()),
+                        xenServer610Resource.getStorageRepository(connection,
+                                CitrixHelper.getSRNameLabel(storageFiler.getUuid(), storageFiler.getType(), storageFiler.getPath())));
             }
 
             // Get the vm to migrate.
@@ -105,7 +106,7 @@ public final class XenServer610MigrateWithStorageCommandWrapper extends CommandW
                 xenServer610Resource.waitForTask(connection, task, 1000, timeout);
                 xenServer610Resource.checkForSuccess(connection, task);
             } catch (final Types.HandleInvalid e) {
-                s_logger.error("Error while checking if vm " + vmName + " can be migrated to the destination host " + host, e);
+                logger.error("Error while checking if vm " + vmName + " can be migrated to the destination host " + host, e);
                 throw new CloudRuntimeException("Error while checking if vm " + vmName + " can be migrated to the " + "destination host " + host, e);
             }
 
@@ -117,7 +118,7 @@ public final class XenServer610MigrateWithStorageCommandWrapper extends CommandW
                 xenServer610Resource.waitForTask(connection, task, 1000, timeout);
                 xenServer610Resource.checkForSuccess(connection, task);
             } catch (final Types.HandleInvalid e) {
-                s_logger.error("Error while migrating vm " + vmName + " to the destination host " + host, e);
+                logger.error("Error while migrating vm " + vmName + " to the destination host " + host, e);
                 throw new CloudRuntimeException("Error while migrating vm " + vmName + " to the destination host " + host, e);
             }
 
@@ -126,14 +127,14 @@ public final class XenServer610MigrateWithStorageCommandWrapper extends CommandW
             vmToMigrate.setAffinity(connection, host);
             return new MigrateWithStorageAnswer(command, volumeToList);
         } catch (final Exception e) {
-            s_logger.warn("Catch Exception " + e.getClass().getName() + ". Storage motion failed due to " + e.toString(), e);
+            logger.warn("Catch Exception " + e.getClass().getName() + ". Storage motion failed due to " + e.toString(), e);
             return new MigrateWithStorageAnswer(command, e);
         } finally {
             if (task != null) {
                 try {
                     task.destroy(connection);
                 } catch (final Exception e) {
-                    s_logger.debug("Unable to destroy task " + task.toString() + " on host " + uuid + " due to " + e.toString());
+                    logger.debug("Unable to destroy task " + task.toString() + " on host " + uuid + " due to " + e.toString());
                 }
             }
         }

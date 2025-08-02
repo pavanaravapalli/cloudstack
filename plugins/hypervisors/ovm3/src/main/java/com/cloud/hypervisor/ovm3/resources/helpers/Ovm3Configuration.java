@@ -25,7 +25,8 @@ import java.util.Map;
 import javax.naming.ConfigurationException;
 
 import org.apache.commons.lang.BooleanUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import com.cloud.hypervisor.ovm3.objects.Network;
 import com.cloud.utils.NumbersUtil;
@@ -33,8 +34,7 @@ import com.cloud.utils.net.NetUtils;
 
 /* holds config data for the Ovm3 Hypervisor */
 public class Ovm3Configuration {
-    private static final Logger LOGGER = Logger
-            .getLogger(Ovm3Configuration.class);
+    protected Logger logger = LogManager.getLogger(getClass());
     private String agentIp;
     private Long agentZoneId;
     private Long agentPodId;
@@ -50,8 +50,8 @@ public class Ovm3Configuration {
     private Boolean agentOvsAgentSsl = false;
     private String agentSshKeyFile = "id_rsa.cloud";
     private String agentOwnedByUuid = "d1a749d4295041fb99854f52ea4dea97";
-    private Boolean agentIsMaster = false;
-    private Boolean agentHasMaster = false;
+    private Boolean agentIsPrimary = false;
+    private Boolean agentHasPrimary = false;
     private Boolean agentInOvm3Pool = false;
     private Boolean agentInOvm3Cluster = false;
     private String ovm3PoolVip = "";
@@ -127,11 +127,11 @@ public class Ovm3Configuration {
      */
     private void validatePoolAndCluster() {
         if (agentInOvm3Cluster) {
-            LOGGER.debug("Clustering requires a pool, setting pool to true");
+            logger.debug("Clustering requires a pool, setting pool to true");
             agentInOvm3Pool = true;
         }
         if (!NetUtils.isValidIp4(ovm3PoolVip)) {
-            LOGGER.debug("No VIP, Setting ovm3pool and ovm3cluster to false");
+            logger.debug("No VIP, Setting ovm3pool and ovm3cluster to false");
             agentInOvm3Pool = false;
             agentInOvm3Cluster = false;
             ovm3PoolVip = "";
@@ -266,20 +266,20 @@ public class Ovm3Configuration {
         this.agentOwnedByUuid = agentOwnedByUuid;
     }
 
-    public Boolean getAgentIsMaster() {
-        return agentIsMaster;
+    public Boolean getAgentIsPrimary() {
+        return agentIsPrimary;
     }
 
-    public void setAgentIsMaster(Boolean agentIsMaster) {
-        this.agentIsMaster = agentIsMaster;
+    public void setAgentIsPrimary(Boolean agentIsPrimary) {
+        this.agentIsPrimary = agentIsPrimary;
     }
 
-    public Boolean getAgentHasMaster() {
-        return agentHasMaster;
+    public Boolean getAgentHasPrimary() {
+        return agentHasPrimary;
     }
 
-    public void setAgentHasMaster(Boolean agentHasMaster) {
-        this.agentHasMaster = agentHasMaster;
+    public void setAgentHasPrimary(Boolean agentHasPrimary) {
+        this.agentHasPrimary = agentHasPrimary;
     }
 
     public Boolean getAgentInOvm3Pool() {
@@ -450,7 +450,7 @@ public class Ovm3Configuration {
     private String validateParam(String name, String param) throws ConfigurationException {
         if (param == null) {
             String msg = "Unable to get " + name + " params are null";
-            LOGGER.debug(msg);
+            logger.debug(msg);
             throw new ConfigurationException(msg);
         }
         return param;

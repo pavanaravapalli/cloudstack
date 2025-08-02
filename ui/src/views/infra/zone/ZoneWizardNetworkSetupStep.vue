@@ -17,12 +17,18 @@
 
 <template>
   <div style="width: auto;">
-    <a-steps progressDot :current="currentStep" size="small" style="margin-left: 0px; margin-top: 16px;">
+    <a-steps
+      ref="zoneNetStep"
+      progressDot
+      :current="currentStep"
+      size="small"
+      style="margin-left: 0px; margin-top: 16px;">
       <a-step
-        v-for="step in steps"
+        v-for="(step, index) in steps"
         :key="step.title"
         :title="$t(step.title)"
-        :style="stepScales"></a-step>
+        :style="stepScales"
+        :ref="`netStep${index}`"></a-step>
     </a-steps>
     <zone-wizard-physical-network-setup-step
       v-if="steps && steps[currentStep].formKey === 'physicalNetwork'"
@@ -45,7 +51,7 @@
       :isFixError="isFixError"
     />
     <ip-address-range-form
-      v-if="steps && steps[currentStep].formKey === 'publicTraffic'"
+      v-if="steps && ['publicTraffic', 'nsxPublicTraffic', 'netrisPublicTraffic'].includes(steps[currentStep].formKey)"
       @nextPressed="nextPressed"
       @backPressed="handleBack"
       @fieldsChanged="fieldsChanged"
@@ -53,6 +59,46 @@
       traffic="public"
       :description="publicTrafficDescription[zoneType.toLowerCase()]"
       :prefillContent="prefillContent"
+      :isFixError="isFixError"
+      :forNsx="steps[currentStep].formKey === 'nsxPublicTraffic'"
+      :isNsxZone="isNsxZone"
+      :forNetris="steps[currentStep].formKey === 'netrisPublicTraffic'"
+      :isNetrisZone="isNetrisZone"
+    />
+
+    <static-inputs-form
+      v-if="steps && steps[currentStep].formKey === 'tungsten'"
+      @nextPressed="nextPressed"
+      @backPressed="handleBack"
+      @fieldsChanged="fieldsChanged"
+      @submitLaunchZone="submitLaunchZone"
+      :fields="tungstenFields"
+      :prefillContent="prefillContent"
+      :description="tungstenSetupDescription"
+      :isFixError="isFixError"
+    />
+
+    <static-inputs-form
+      v-if="steps && steps[currentStep].formKey === 'nsx'"
+      @nextPressed="nextPressed"
+      @backPressed="handleBack"
+      @fieldsChanged="fieldsChanged"
+      @submitLaunchZone="submitLaunchZone"
+      :fields="nsxFields"
+      :prefillContent="prefillContent"
+      :description="nsxSetupDescription"
+      :isFixError="isFixError"
+    />
+
+    <static-inputs-form
+      v-if="steps && steps[currentStep].formKey === 'netris'"
+      @nextPressed="nextPressed"
+      @backPressed="handleBack"
+      @fieldsChanged="fieldsChanged"
+      @submitLaunchZone="submitLaunchZone"
+      :fields="netrisFields"
+      :prefillContent="prefillContent"
+      :description="netrisSetupDescription"
       :isFixError="isFixError"
     />
 
@@ -62,7 +108,7 @@
       @backPressed="handleBack"
       @fieldsChanged="fieldsChanged"
       @submitLaunchZone="submitLaunchZone"
-      :fields="podFields"
+      :fields="filteredPodFields"
       :prefillContent="prefillContent"
       :description="podSetupDescription"
       :isFixError="isFixError"
@@ -77,19 +123,19 @@
         @submitLaunchZone="submitLaunchZone"
         :fields="guestTrafficFields"
         :prefillContent="prefillContent"
-        :description="guestTrafficDescription[this.zoneType.toLowerCase()]"
+        :description="guestTrafficDescription[zoneType.toLowerCase()]"
         :isFixError="isFixError"
       />
     </div>
     <div v-else>
       <advanced-guest-traffic-form
-        v-if="steps && steps[currentStep].formKey === 'guestTraffic'"
+        v-if="steps && steps[currentStep].formKey === 'guestTraffic' && !isNsxZone"
         @nextPressed="nextPressed"
         @backPressed="handleBack"
         @fieldsChanged="fieldsChanged"
         @submitLaunchZone="submitLaunchZone"
         :prefillContent="prefillContent"
-        :description="guestTrafficDescription[this.zoneType.toLowerCase()]"
+        :description="guestTrafficDescription[zoneType.toLowerCase()]"
         :isFixError="isFixError"
       />
     </div>
@@ -109,7 +155,9 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { nextTick } from 'vue'
+import { getAPI } from '@/api'
+import { mixinDevice } from '@/utils/mixin.js'
 import ZoneWizardPhysicalNetworkSetupStep from '@views/infra/zone/ZoneWizardPhysicalNetworkSetupStep'
 import IpAddressRangeForm from '@views/infra/zone/IpAddressRangeForm'
 import StaticInputsForm from '@views/infra/zone/StaticInputsForm'
@@ -122,6 +170,7 @@ export default {
     StaticInputsForm,
     AdvancedGuestTrafficForm
   },
+  mixins: [mixinDevice],
   props: {
     prefillContent: {
       type: Object,
@@ -140,17 +189,53 @@ export default {
   },
   computed: {
     zoneType () {
-      return this.prefillContent.zoneType ? this.prefillContent.zoneType.value : null
+      return this.prefillContent?.zoneType || null
+    },
+    isAdvancedZone () {
+      return this.zoneType === 'Advanced'
     },
     sgEnabled () {
-      return this.prefillContent.securityGroupsEnabled ? this.prefillContent.securityGroupsEnabled.value : false
+      return this.prefillContent?.securityGroupsEnabled || false
     },
     havingNetscaler () {
-      return this.prefillContent.networkOfferingSelected ? this.prefillContent.networkOfferingSelected.havingNetscaler : false
+      return this.prefillContent?.networkOfferingSelected?.havingNetscaler || false
+    },
+    isEdgeZone () {
+      return this.prefillContent?.zoneSuperType === 'Edge' || false
     },
     guestTrafficRangeMode () {
       return this.zoneType === 'Basic' ||
         (this.zoneType === 'Advanced' && this.sgEnabled)
+    },
+    isTungstenZone () {
+      let isTungsten = false
+      if (!this.prefillContent.physicalNetworks) {
+        isTungsten = false
+      } else {
+        const tungstenIdx = this.prefillContent.physicalNetworks.findIndex(network => network.isolationMethod === 'TF')
+        isTungsten = tungstenIdx > -1
+      }
+      return isTungsten
+    },
+    isNsxZone () {
+      let isNsx = false
+      if (!this.prefillContent.physicalNetworks) {
+        isNsx = false
+      } else {
+        const nsxIdx = this.prefillContent.physicalNetworks.findIndex(network => network.isolationMethod === 'NSX')
+        isNsx = nsxIdx > -1
+      }
+      return isNsx
+    },
+    isNetrisZone () {
+      let isNetris = false
+      if (!this.prefillContent.physicalNetworks) {
+        isNetris = false
+      } else {
+        const netrisIdx = this.prefillContent.physicalNetworks.findIndex(network => network.isolationMethod === 'Netris')
+        isNetris = netrisIdx > -1
+      }
+      return isNetris
     },
     allSteps () {
       const steps = []
@@ -158,6 +243,24 @@ export default {
         title: 'label.physical.network',
         formKey: 'physicalNetwork'
       })
+      if (this.isTungstenZone) {
+        steps.push({
+          title: 'label.tungsten.provider',
+          formKey: 'tungsten'
+        })
+      }
+      if (this.isNsxZone) {
+        steps.push({
+          title: 'label.nsx.provider',
+          formKey: 'nsx'
+        })
+      }
+      if (this.isNetrisZone) {
+        steps.push({
+          title: 'label.netris.provider',
+          formKey: 'netris'
+        })
+      }
       if (this.havingNetscaler) {
         steps.push({
           title: 'label.netScaler',
@@ -169,15 +272,31 @@ export default {
         formKey: 'publicTraffic',
         trafficType: 'public'
       })
+      if (this.isNsxZone) {
+        steps.push({
+          title: 'label.public.traffic.nsx',
+          formKey: 'nsxPublicTraffic',
+          trafficType: 'public'
+        })
+      }
+      if (this.isNetrisZone) {
+        steps.push({
+          title: 'label.public.traffic.netris',
+          formKey: 'netrisPublicTraffic',
+          trafficType: 'public'
+        })
+      }
       steps.push({
         title: 'label.pod',
         formKey: 'pod'
       })
-      steps.push({
-        title: 'label.guest.traffic',
-        formKey: 'guestTraffic',
-        trafficType: 'guest'
-      })
+      if (!this.isTungstenZone && !this.isNsxZone) {
+        steps.push({
+          title: 'label.guest.traffic',
+          formKey: 'guestTraffic',
+          trafficType: 'guest'
+        })
+      }
       steps.push({
         title: 'label.storage.traffic',
         formKey: 'storageTraffic',
@@ -187,10 +306,51 @@ export default {
       return steps
     },
     stepScales () {
-      if (this.allSteps.length > 4) {
-        return { width: 'calc(100% / ' + this.allSteps.length + ')' }
+      if (!this.isMobile() && this.steps.length > 4) {
+        return { width: 'calc(100% / ' + this.steps.length + ')' }
       }
       return {}
+    },
+    tungstenFields () {
+      const fields = [
+        {
+          title: 'label.tungsten.provider.name',
+          key: 'tungstenName',
+          placeHolder: 'message.installwizard.tooltip.tungsten.provider.name',
+          required: true
+        },
+        {
+          title: 'label.tungsten.provider.hostname',
+          key: 'tungstenHostname',
+          placeHolder: 'message.installwizard.tooltip.tungsten.provider.hostname',
+          required: true
+        },
+        {
+          title: 'label.tungsten.provider.gateway',
+          key: 'tungstenGateway',
+          placeHolder: 'message.installwizard.tooltip.tungsten.provider.gateway',
+          required: true
+        },
+        {
+          title: 'label.tungsten.provider.port',
+          key: 'tungstenPort',
+          placeHolder: 'message.installwizard.tooltip.tungsten.provider.port',
+          required: false
+        },
+        {
+          title: 'label.tungsten.provider.vrouterport',
+          key: 'tungstenVrouterport',
+          placeHolder: 'message.installwizard.tooltip.tungsten.provider.vrouterport',
+          required: false
+        },
+        {
+          title: 'label.tungsten.provider.introspectport',
+          key: 'tungstenIntrospectPort',
+          placeHolder: 'message.installwizard.tooltip.tungsten.provider.introspectport',
+          required: false
+        }
+      ]
+      return fields
     },
     netscalerFields () {
       return [
@@ -261,6 +421,108 @@ export default {
         }
       ]
     },
+    nsxFields () {
+      const fields = [
+        {
+          title: 'label.nsx.provider.name',
+          key: 'nsxName',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.name',
+          required: true
+        },
+        {
+          title: 'label.nsx.provider.hostname',
+          key: 'nsxHostname',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.hostname',
+          required: true
+        },
+        {
+          title: 'label.nsx.provider.port',
+          key: 'nsxPort',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.port',
+          required: false
+        },
+        {
+          title: 'label.nsx.provider.username',
+          key: 'username',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.username',
+          required: true
+        },
+        {
+          title: 'label.nsx.provider.password',
+          key: 'password',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.password',
+          required: true,
+          password: true
+        },
+        {
+          title: 'label.nsx.provider.edgecluster',
+          key: 'edgeCluster',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.edgecluster',
+          required: true
+        },
+        {
+          title: 'label.nsx.provider.tier0gateway',
+          key: 'tier0Gateway',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.tier0gateway',
+          required: true
+        },
+        {
+          title: 'label.nsx.provider.transportzone',
+          key: 'transportZone',
+          placeHolder: 'message.installwizard.tooltip.nsx.provider.transportZone',
+          required: true
+        }
+      ]
+      return fields
+    },
+    netrisFields () {
+      const fields = [
+        {
+          title: 'label.netris.provider.name',
+          key: 'netrisName',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.name',
+          required: true
+        },
+        {
+          title: 'label.netris.provider.url',
+          key: 'url',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.url',
+          required: true
+        },
+        {
+          title: 'label.netris.provider.username',
+          key: 'username',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.username',
+          required: true
+        },
+        {
+          title: 'label.netris.provider.password',
+          key: 'password',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.password',
+          required: true,
+          password: true
+        },
+        {
+          title: 'label.netris.provider.site',
+          key: 'siteName',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.site',
+          required: true
+        },
+        {
+          title: 'label.netris.provider.tenant.name',
+          key: 'tenantName',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.tenant.name',
+          required: true
+        },
+        {
+          title: 'label.netris.provider.tag',
+          key: 'netrisTag',
+          placeHolder: 'message.installwizard.tooltip.netris.provider.tag',
+          required: true
+        }
+      ]
+      return fields
+    },
     guestTrafficFields () {
       const fields = [
         {
@@ -303,6 +565,14 @@ export default {
       }
 
       return fields
+    },
+    filteredPodFields () {
+      var fields = [...this.podFields]
+      if (this.isEdgeZone) {
+        fields = fields.filter(x => !['podReservedGateway', 'podReservedNetmask', 'podReservedStartIp', 'podReservedStopIp'].includes(x.key))
+        return fields
+      }
+      return fields
     }
   },
   data () {
@@ -321,6 +591,9 @@ export default {
         basic: 'message.guest.traffic.in.basic.zone'
       },
       podSetupDescription: 'message.add.pod.during.zone.creation',
+      tungstenSetupDescription: 'message.infra.setup.tungsten.description',
+      nsxSetupDescription: 'message.infra.setup.nsx.description',
+      netrisSetupDescription: 'message.infra.setup.netris.description',
       netscalerSetupDescription: 'label.please.specify.netscaler.info',
       storageTrafficDescription: 'label.zonewizard.traffictype.storage',
       podFields: [
@@ -354,22 +627,23 @@ export default {
           title: 'label.end.reserved.system.ip',
           key: 'podReservedStopIp',
           placeHolder: 'message.installwizard.tooltip.addpod.reservedsystemendip',
-          required: false,
+          required: true,
           ipV4: true,
           message: 'message.error.ipv4.address'
         }
       ]
     }
   },
-  mounted () {
+  created () {
     this.physicalNetworks = this.prefillContent.physicalNetworks
     this.steps = this.filteredSteps()
-    this.currentStep = this.prefillContent.networkStep ? this.prefillContent.networkStep : 0
+    this.currentStep = this.prefillContent?.networkStep || 0
     if (this.stepChild && this.stepChild !== '') {
       this.currentStep = this.steps.findIndex(item => item.formKey === this.stepChild)
     }
+    this.scrollToStepActive()
     if (this.zoneType === 'Basic' ||
-      (this.zoneType === 'Advanced' && this.sgEnabled)) {
+      (this.zoneType === 'Advanced' && (this.sgEnabled || this.isNsxZone))) {
       this.skipGuestTrafficStep = false
     } else {
       this.fetchConfiguration()
@@ -393,7 +667,6 @@ export default {
         description: 'NetScaler SDX LoadBalancer'
       })
       this.netscalerType = items
-      this.$forceUpdate()
     },
     nextPressed () {
       if (this.currentStep === this.steps.length - 1) {
@@ -401,6 +674,7 @@ export default {
       } else {
         this.currentStep++
         this.$emit('fieldsChanged', { networkStep: this.currentStep })
+        this.scrollToStepActive()
       }
     },
     handleBack (e) {
@@ -409,7 +683,23 @@ export default {
       } else {
         this.currentStep--
         this.$emit('fieldsChanged', { networkStep: this.currentStep })
+        this.scrollToStepActive()
       }
+    },
+    scrollToStepActive () {
+      if (!this.isMobile()) {
+        return
+      }
+      nextTick().then(() => {
+        if (!this.$refs.zoneNetStep) {
+          return
+        }
+        if (this.currentStep === 0) {
+          this.$refs.zoneNetStep.$el.scrollLeft = 0
+          return
+        }
+        this.$refs.zoneNetStep.$el.scrollLeft = this.$refs['netStep' + (this.currentStep - 1)][0].$el.offsetLeft
+      })
     },
     submitLaunchZone () {
       this.$emit('submitLaunchZone')
@@ -423,6 +713,7 @@ export default {
     },
     filteredSteps () {
       return this.allSteps.filter(step => {
+        if (step.formKey === 'pod' && this.isEdgeZone) return false
         if (!step.trafficType) return true
         if (this.physicalNetworks) {
           let neededTraffic = false
@@ -440,7 +731,7 @@ export default {
     },
     fetchConfiguration () {
       this.skipGuestTrafficStep = false
-      api('listConfigurations', { name: 'sdn.ovs.controller' }).then(json => {
+      getAPI('listConfigurations', { name: 'sdn.ovs.controller' }).then(json => {
         const items = json.listconfigurationsresponse.configuration
         items.forEach(item => {
           if (item.name === 'sdn.ovs.controller') {

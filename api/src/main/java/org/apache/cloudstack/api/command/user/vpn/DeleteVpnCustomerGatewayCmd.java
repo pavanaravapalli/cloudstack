@@ -16,7 +16,7 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vpn;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
@@ -36,9 +36,7 @@ import com.cloud.user.Account;
 @APICommand(name = "deleteVpnCustomerGateway", description = "Delete site to site vpn customer gateway", responseObject = SuccessResponse.class, entityType = {Site2SiteCustomerGateway.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class DeleteVpnCustomerGatewayCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(DeleteVpnCustomerGatewayCmd.class.getName());
 
-    private static final String s_name = "deletevpncustomergatewayresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -62,11 +60,6 @@ public class DeleteVpnCustomerGatewayCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -96,5 +89,15 @@ public class DeleteVpnCustomerGatewayCmd extends BaseAsyncCmd {
         } else {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to delete customer VPN gateway");
         }
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return getId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VpnCustomerGateway;
     }
 }

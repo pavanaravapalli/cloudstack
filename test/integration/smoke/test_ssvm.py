@@ -121,7 +121,7 @@ class TestSSVMs(cloudstackTestCase):
         #    should return only ONE SSVM per zone
         # 2. The returned SSVM should be in Running state
         # 3. listSystemVM for secondarystoragevm should list publicip,
-        #    privateip and link-localip
+        #    privateip, link-localip and service offering id/name
         # 4. The gateway programmed on the ssvm by listSystemVm should be
         #    the same as the gateway returned by listVlanIpRanges
         # 5. DNS entries must match those given for the zone
@@ -186,6 +186,18 @@ class TestSSVMs(cloudstackTestCase):
                 hasattr(ssvm, 'publicip'),
                 True,
                 "Check whether SSVM has public IP field"
+            )
+
+            self.assertEqual(
+                hasattr(ssvm, 'serviceofferingid'),
+                True,
+                "Check whether SSVM has service offering id field"
+            )
+
+            self.assertEqual(
+                hasattr(ssvm, 'serviceofferingname'),
+                True,
+                "Check whether SSVM has service offering name field"
             )
 
             # Fetch corresponding ip ranges information from listVlanIpRanges
@@ -261,8 +273,8 @@ class TestSSVMs(cloudstackTestCase):
         # 1. listSystemVM (systemvmtype=consoleproxy) should return
         #    at least ONE CPVM per zone
         # 2. The returned ConsoleProxyVM should be in Running state
-        # 3. listSystemVM for console proxy should list publicip, privateip
-        #    and link-localip
+        # 3. listSystemVM for console proxy should list publicip, privateip,
+        #    link-localip and service offering id/name
         # 4. The gateway programmed on the console proxy should be the same
         #    as the gateway returned by listZones
         # 5. DNS entries must match those given for the zone
@@ -326,6 +338,18 @@ class TestSSVMs(cloudstackTestCase):
                 hasattr(cpvm, 'publicip'),
                 True,
                 "Check whether CPVM has public IP field"
+            )
+
+            self.assertEqual(
+                hasattr(cpvm, 'serviceofferingid'),
+                True,
+                "Check whether CPVM has service offering id field"
+            )
+
+            self.assertEqual(
+                hasattr(cpvm, 'serviceofferingname'),
+                True,
+                "Check whether CPVM has service offering name field"
             )
             # Fetch corresponding ip ranges information from listVlanIpRanges
             ipranges_response = list_vlan_ipranges(
@@ -470,27 +494,46 @@ class TestSSVMs(cloudstackTestCase):
         if self.hypervisor.lower() in ('vmware', 'hyperv'):
             # SSH into SSVMs is done via management server for Vmware and
             # Hyper-V
-            result = get_process_status(
-                self.apiclient.connection.mgtSvr,
-                22,
-                self.apiclient.connection.user,
-                self.apiclient.connection.passwd,
-                ssvm.privateip,
-                "systemctl is-active cloud",
-                hypervisor=self.hypervisor
-            )
+            retries = 3
+            while retries > -1:
+                result = get_process_status(
+                                self.apiclient.connection.mgtSvr,
+                                22,
+                                self.apiclient.connection.user,
+                                self.apiclient.connection.passwd,
+                                ssvm.privateip,
+                                "systemctl is-active cloud",
+                                hypervisor=self.hypervisor
+                            )
+                if ("deactivating" in result) or ("activating" in result):
+                    if retries >= 0:
+                        retries = retries - 1
+                        time.sleep(10)
+                        continue
+                else:
+                    return result
         else:
             try:
                 host.user, host.passwd = get_host_credentials(
                     self.config, host.ipaddress)
-                result = get_process_status(
-                    host.ipaddress,
-                    22,
-                    host.user,
-                    host.passwd,
-                    ssvm.linklocalip,
-                    "systemctl is-active cloud"
-                )
+                retries = 3
+                while retries > -1:
+                    result = get_process_status(
+                        host.ipaddress,
+                        22,
+                        host.user,
+                        host.passwd,
+                        ssvm.linklocalip,
+                        "systemctl is-active cloud"
+                    )
+                    print("result is %s" % result)
+                    if ("deactivating" in result) or ("activating" in result):
+                        if retries >= 0:
+                            retries = retries - 1
+                            time.sleep(10)
+                            continue
+                    else:
+                        return result
             except KeyError:
                 self.skipTest(
                     "Marvin configuration has no host\
@@ -945,6 +988,9 @@ class TestSSVMs(cloudstackTestCase):
 
         # Private IP Address of System VMs are allowed to change after reboot - CLOUDSTACK-7745
 
+        # Agent in Up state for a while after reboot, wait for the agent to Disconnect and back Up.
+        time.sleep(60)
+
         # Wait for the agent to be up
         self.waitForSystemVMAgent(cpvm_response.name)
 
@@ -1059,6 +1105,9 @@ class TestSSVMs(cloudstackTestCase):
             str(cpvm_response.state),
             "Check whether CPVM is running or not"
         )
+
+        # Agent in Up state for a while after reboot, wait for the agent to Disconnect and back Up.
+        time.sleep(60)
 
         # Wait for the agent to be up
         self.waitForSystemVMAgent(cpvm_response.name)
@@ -1225,7 +1274,7 @@ class TestSSVMs(cloudstackTestCase):
         # 2) Get id and url from mounted nfs store
         # 3) Update NFS version for previous image store
         # 4) Stop SSVM
-        # 5) Check NFS version of mounted nfs store after SSVM starts 
+        # 5) Check NFS version of mounted nfs store after SSVM starts
 
         nfs_version = self.config.nfsVersion
         if nfs_version == None:

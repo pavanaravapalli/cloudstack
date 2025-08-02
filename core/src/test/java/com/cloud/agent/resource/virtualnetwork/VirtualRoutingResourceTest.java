@@ -333,7 +333,7 @@ public class VirtualRoutingResourceTest implements VirtualRouterDeployer {
                 assertEquals(VRScripts.IP_ASSOCIATION_CONFIG, args);
                 break;
             default:
-                fail("Failed to recongize the match!");
+                fail("Failed to recognize the match!");
             }
         } else {
             assertEquals(script, VRScripts.UPDATE_CONFIG);
@@ -349,7 +349,7 @@ public class VirtualRoutingResourceTest implements VirtualRouterDeployer {
                 assertEquals(VRScripts.IP_ASSOCIATION_CONFIG, args);
                 break;
             default:
-                fail("Failed to recongize the match!");
+                fail("Failed to recognize the match!");
             }
         }
     }
@@ -495,17 +495,17 @@ public class VirtualRoutingResourceTest implements VirtualRouterDeployer {
     public void testSite2SiteVpnCfgCommand() {
         _count = 0;
 
-        Site2SiteVpnCfgCommand cmd = new Site2SiteVpnCfgCommand(true, "64.10.1.10", "64.10.1.1", "192.168.1.1/16", "124.10.1.10", "192.168.100.1/24", "3des-sha1,aes128-sha1;modp1536", "3des-sha1,aes128-md5", "psk", Long.valueOf(1800), Long.valueOf(1800), true, false, false);
+        Site2SiteVpnCfgCommand cmd = new Site2SiteVpnCfgCommand(true, "64.10.1.10", "64.10.1.1", "192.168.1.1/16", "124.10.1.10", "192.168.100.1/24", "3des-sha1,aes128-sha1;modp1536", "3des-sha1,aes128-md5", "psk", Long.valueOf(1800), Long.valueOf(1800), true, false, false, false, "ike");
         cmd.setAccessDetail(NetworkElementCommand.ROUTER_NAME, ROUTERNAME);
         Answer answer = _resource.executeRequest(cmd);
         assertTrue(answer.getResult());
 
-        cmd = new Site2SiteVpnCfgCommand(true, "64.10.1.10", "64.10.1.1", "192.168.1.1/16", "124.10.1.10", "192.168.100.1/24", "3des-sha1,aes128-sha1;modp1536", "3des-sha1,aes128-md5", "psk", Long.valueOf(1800), Long.valueOf(1800), false, true, false);
+        cmd = new Site2SiteVpnCfgCommand(true, "64.10.1.10", "64.10.1.1", "192.168.1.1/16", "124.10.1.10", "192.168.100.1/24", "3des-sha1,aes128-sha1;modp1536", "3des-sha1,aes128-md5", "psk", Long.valueOf(1800), Long.valueOf(1800), false, true, false, false, "ike");
         cmd.setAccessDetail(NetworkElementCommand.ROUTER_NAME, ROUTERNAME);
         answer = _resource.executeRequest(cmd);
         assertTrue(answer.getResult());
 
-        cmd = new Site2SiteVpnCfgCommand(false, "64.10.1.10", "64.10.1.1", "192.168.1.1/16", "124.10.1.10", "192.168.100.1/24", "3des-sha1,aes128-sha1;modp1536", "3des-sha1,aes128-md5", "psk", Long.valueOf(1800), Long.valueOf(1800), false, true, false);
+        cmd = new Site2SiteVpnCfgCommand(false, "64.10.1.10", "64.10.1.1", "192.168.1.1/16", "124.10.1.10", "192.168.100.1/24", "3des-sha1,aes128-sha1;modp1536", "3des-sha1,aes128-md5", "psk", Long.valueOf(1800), Long.valueOf(1800), false, true, false, false, "ike");
         cmd.setAccessDetail(NetworkElementCommand.ROUTER_NAME, ROUTERNAME);
         answer = _resource.executeRequest(cmd);
         assertTrue(answer.getResult());
@@ -829,7 +829,7 @@ public class VirtualRoutingResourceTest implements VirtualRouterDeployer {
                     "\tretries 3\n" +
                     "\toption redispatch\n" +
                     "\toption forwardfor\n" +
-                    "\toption forceclose\n" +
+                    "\toption httpclose\n" +
                     "\ttimeout connect    5000\n" +
                     "\ttimeout client     50000\n" +
                     "\ttimeout server     50000\n" +

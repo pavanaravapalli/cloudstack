@@ -19,12 +19,11 @@ package org.apache.cloudstack.api.command.user.autoscale;
 
 import java.util.List;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -41,20 +40,24 @@ import com.cloud.user.Account;
 @APICommand(name = "updateAutoScalePolicy", description = "Updates an existing autoscale policy.", responseObject = AutoScalePolicyResponse.class, entityType = {AutoScalePolicy.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateAutoScalePolicyCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateAutoScalePolicyCmd.class.getName());
 
-    private static final String s_name = "updateautoscalepolicyresponse";
 
     // ///////////////////////////////////////////////////
     // ////////////// API parameters /////////////////////
     // ///////////////////////////////////////////////////
 
-    @Parameter(name = ApiConstants.DURATION, type = CommandType.INTEGER, description = "the duration for which the conditions have to be true before action is taken")
+    @Parameter(name = ApiConstants.NAME,
+            type = CommandType.STRING,
+            description = "the name of the autoscale policy",
+            since = "4.18.0")
+    private String name;
+
+    @Parameter(name = ApiConstants.DURATION, type = CommandType.INTEGER, description = "the duration in which the conditions have to be true before action is taken")
     private Integer duration;
 
     @Parameter(name = ApiConstants.QUIETTIME,
                type = CommandType.INTEGER,
-               description = "the cool down period for which the policy should not be evaluated after the action has been taken")
+               description = "the cool down period in which the policy should not be evaluated after the action has been taken")
     private Integer quietTime;
 
     @Parameter(name = ApiConstants.CONDITION_IDS,
@@ -93,6 +96,10 @@ public class UpdateAutoScalePolicyCmd extends BaseAsyncCmd {
         return id;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public Integer getDuration() {
         return duration;
     }
@@ -103,11 +110,6 @@ public class UpdateAutoScalePolicyCmd extends BaseAsyncCmd {
 
     public List<Long> getConditionIds() {
         return conditionIds;
-    }
-
-    @Override
-    public String getCommandName() {
-        return s_name;
     }
 
     @Override
@@ -132,7 +134,7 @@ public class UpdateAutoScalePolicyCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.AutoScalePolicy;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.AutoScalePolicy;
     }
 }

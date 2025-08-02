@@ -18,7 +18,6 @@
 package org.apache.cloudstack.diagnostics;
 
 import static org.apache.cloudstack.diagnostics.DiagnosticsHelper.getTimeDifference;
-import static org.apache.cloudstack.diagnostics.DiagnosticsHelper.umountSecondaryStorage;
 import static org.apache.cloudstack.diagnostics.fileprocessor.DiagnosticsFilesList.RouterDefaultSupportedFiles;
 import static org.apache.cloudstack.diagnostics.fileprocessor.DiagnosticsFilesList.SystemVMDefaultSupportedFiles;
 
@@ -31,6 +30,7 @@ import java.util.regex.Pattern;
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
 
+import com.cloud.capacity.CapacityManager;
 import org.apache.cloudstack.api.command.admin.diagnostics.GetDiagnosticsDataCmd;
 import org.apache.cloudstack.api.command.admin.diagnostics.RunDiagnosticsCmd;
 import org.apache.cloudstack.diagnostics.fileprocessor.DiagnosticsFilesList;
@@ -51,7 +51,6 @@ import org.apache.cloudstack.storage.NfsMountManager;
 import org.apache.cloudstack.storage.image.datastore.ImageStoreEntity;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.log4j.Logger;
 
 import com.cloud.agent.AgentManager;
 import com.cloud.agent.api.Answer;
@@ -75,10 +74,8 @@ import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VirtualMachineManager;
 import com.cloud.vm.dao.VMInstanceDao;
-import com.google.common.base.Strings;
 
 public class DiagnosticsServiceImpl extends ManagerBase implements PluggableService, DiagnosticsService, Configurable {
-    private static final Logger LOGGER = Logger.getLogger(DiagnosticsServiceImpl.class);
 
     @Inject
     private AgentManager agentManager;
@@ -107,7 +104,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
             "Enable the garbage collector background task to delete old files from secondary storage.", false);
     private static final ConfigKey<Integer> GarbageCollectionInterval = new ConfigKey<>("Advanced", Integer.class,
             "diagnostics.data.gc.interval", "86400",
-            "The interval at which the garbage collector background tasks in seconds", false);
+            "The interval at which the garbage collector background tasks in seconds", false, EnableGarbageCollector.key());
 
     // These are easily computed properties and need not need a restart of the management server
     private static final ConfigKey<Long> DataRetrievalTimeout = new ConfigKey<>("Advanced", Long.class,
@@ -115,7 +112,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
             "Overall system VM script execution time out in seconds.", true);
     private static final ConfigKey<Long> MaximumFileAgeforGarbageCollection = new ConfigKey<>("Advanced", Long.class,
             "diagnostics.data.max.file.age", "86400",
-            "Sets the maximum time in seconds a file can stay in secondary storage before it is deleted.", true);
+            "Sets the maximum time in seconds a file can stay in secondary storage before it is deleted.", true, EnableGarbageCollector.key());
     private static final ConfigKey<Double> DiskQuotaPercentageThreshold = new ConfigKey<>("Advanced", Double.class,
             "diagnostics.data.disable.threshold", "0.9",
             "Sets the secondary storage disk utilisation percentage for file retrieval. " +
@@ -142,7 +139,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
 
         final String shellCmd = prepareShellCmd(cmdType, ipAddress, optionalArguments);
 
-        if (Strings.isNullOrEmpty(shellCmd)) {
+        if (StringUtils.isEmpty(shellCmd)) {
             throw new IllegalArgumentException("Optional parameters contain unwanted characters: " + optionalArguments);
         }
 
@@ -151,8 +148,8 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
         final DiagnosticsCommand command = new DiagnosticsCommand(shellCmd, vmManager.getExecuteInSequence(hypervisorType));
         final Map<String, String> accessDetails = networkManager.getSystemVMAccessDetails(vmInstance);
 
-        if (Strings.isNullOrEmpty(accessDetails.get(NetworkElementCommand.ROUTER_IP))) {
-            throw new CloudRuntimeException("Unable to set system vm ControlIP for system vm with ID: " + vmId);
+        if (StringUtils.isEmpty(accessDetails.get(NetworkElementCommand.ROUTER_IP))) {
+            throw new CloudRuntimeException("Unable to set system vm ControlIP for system vm: " + vmInstance);
         }
 
         command.setAccessDetail(accessDetails);
@@ -170,7 +167,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
     }
 
     protected boolean hasValidChars(String optionalArgs) {
-        if (Strings.isNullOrEmpty(optionalArgs)) {
+        if (StringUtils.isEmpty(optionalArgs)) {
             return true;
         } else {
             final String regex = "^[\\w\\-\\s.]+$";
@@ -181,7 +178,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
 
     protected String prepareShellCmd(String cmdType, String ipAddress, String optionalParams) {
         final String CMD_TEMPLATE = String.format("%s %s", cmdType, ipAddress);
-        if (Strings.isNullOrEmpty(optionalParams)) {
+        if (StringUtils.isEmpty(optionalParams)) {
             return CMD_TEMPLATE;
         } else {
             if (hasValidChars(optionalParams)) {
@@ -230,7 +227,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
         final long zoneId = vmInstance.getDataCenterId();
         VMInstanceVO ssvm = getSecondaryStorageVmInZone(zoneId);
         if (ssvm == null) {
-            throw new CloudRuntimeException("No SSVM found in zone with ID: " + zoneId);
+            throw new CloudRuntimeException("No SSVM found in zone: " + dataCenterDao.findById(zoneId));
         }
 
         // Secondary Storage install path = "diagnostics_data/diagnostics_files_xxxx.tar
@@ -268,7 +265,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
     private void configureNetworkElementCommand(NetworkElementCommand cmd, VMInstanceVO vmInstance) {
         Map<String, String> accessDetails = networkManager.getSystemVMAccessDetails(vmInstance);
         if (StringUtils.isBlank(accessDetails.get(NetworkElementCommand.ROUTER_IP))) {
-            throw new CloudRuntimeException("Unable to set system vm ControlIP for system vm with ID: " + vmInstance.getId());
+            throw new CloudRuntimeException(String.format("Unable to set system vm ControlIP for system vm: %s", vmInstance));
         }
         cmd.setAccessDetail(accessDetails);
     }
@@ -285,10 +282,10 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
         configureNetworkElementCommand(cmd, vmInstance);
         final Answer fileCleanupAnswer = agentManager.easySend(vmInstance.getHostId(), cmd);
         if (fileCleanupAnswer == null) {
-            LOGGER.error(String.format("Failed to cleanup diagnostics zip file on vm: %s", vmInstance.getUuid()));
+            logger.error("Failed to cleanup diagnostics zip file on vm: {}", vmInstance);
         } else {
             if (!fileCleanupAnswer.getResult()) {
-                LOGGER.error(String.format("Zip file cleanup for vm %s has failed with: %s", vmInstance.getUuid(), fileCleanupAnswer.getDetails()));
+                logger.error("Zip file cleanup for vm {} has failed with: {}", vmInstance, fileCleanupAnswer.getDetails());
             }
         }
 
@@ -314,7 +311,8 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
     }
 
     private Pair<Boolean, String> copyToSecondaryStorageNonVMware(final DataStore store, final String vmControlIp, String fileToCopy, Long vmHostId) {
-        CopyToSecondaryStorageCommand toSecondaryStorageCommand = new CopyToSecondaryStorageCommand(store.getUri(), vmControlIp, fileToCopy);
+        String nfsVersion = CapacityManager.ImageStoreNFSVersion.valueIn(store.getId());
+        CopyToSecondaryStorageCommand toSecondaryStorageCommand = new CopyToSecondaryStorageCommand(store.getUri(), vmControlIp, fileToCopy, nfsVersion);
         Answer copyToSecondaryAnswer = agentManager.easySend(vmHostId, toSecondaryStorageCommand);
         Pair<Boolean, String> copyAnswer;
         if (copyToSecondaryAnswer != null) {
@@ -326,11 +324,11 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
     }
 
     private Pair<Boolean, String> copyToSecondaryStorageVMware(final DataStore store, final String vmSshIp, String diagnosticsFile) {
-        LOGGER.info(String.format("Copying %s from %s to secondary store %s", diagnosticsFile, vmSshIp, store.getUri()));
+        logger.info(String.format("Copying %s from %s to secondary store %s", diagnosticsFile, vmSshIp, store.getUri()));
         boolean success = false;
         String mountPoint = mountManager.getMountPoint(store.getUri(), imageStoreDetailsUtil.getNfsVersion(store.getId()));
         if (StringUtils.isBlank(mountPoint)) {
-            LOGGER.error("Failed to generate mount point for copying to secondary storage for " + store.getName());
+            logger.error("Failed to generate mount point for copying to secondary storage for {}", store);
             return new Pair<>(false, "Failed to mount secondary storage:" + store.getName());
         }
 
@@ -341,7 +339,8 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
             boolean existsInSecondaryStore = dataDirectory.exists() || dataDirectory.mkdir();
             if (existsInSecondaryStore) {
                 // scp from system VM to mounted sec storage directory
-                File permKey = new File("/var/cloudstack/management/.ssh/id_rsa");
+                String homeDir = System.getProperty("user.home");
+                File permKey = new File(homeDir + "/.ssh/id_rsa");
                 SshHelper.scpFrom(vmSshIp, 3922, "root", permKey, dataDirectoryInSecondaryStore, diagnosticsFile);
             }
 
@@ -350,10 +349,8 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
             success = fileInSecondaryStore.exists();
         } catch (Exception e) {
             String msg = String.format("Exception caught during scp from %s to secondary store %s: ", vmSshIp, dataDirectoryInSecondaryStore);
-            LOGGER.error(msg, e);
+            logger.error(msg, e);
             return new Pair<>(false, msg);
-        } finally {
-            umountSecondaryStorage(mountPoint);
         }
 
         return new Pair<>(success, "File copied to secondary storage successfully");
@@ -374,7 +371,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
     private DataStore getImageStore(Long zoneId) {
         List<DataStore> stores = storeMgr.getImageStoresByScopeExcludingReadOnly(new ZoneScope(zoneId));
         if (CollectionUtils.isEmpty(stores)) {
-            throw new CloudRuntimeException("No Secondary storage found in Zone with Id: " + zoneId);
+            throw new CloudRuntimeException(String.format("No Secondary storage found in Zone: %s", dataCenterDao.findById(zoneId)));
         }
         DataStore imageStore = null;
         for (DataStore store : stores) {
@@ -385,7 +382,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
             }
         }
         if (imageStore == null) {
-            throw new CloudRuntimeException("No suitable secondary storage found to retrieve diagnostics in Zone: " + zoneId);
+            throw new CloudRuntimeException(String.format("No suitable secondary storage found to retrieve diagnostics in Zone: %s", dataCenterDao.findById(zoneId)));
         }
         return imageStore;
     }
@@ -406,7 +403,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
                 VirtualMachine.Type.DomainRouter, VirtualMachine.Type.SecondaryStorageVm);
         if (vmInstance == null) {
             String msg = String.format("Unable to find vm instance with id: %s", vmId);
-            LOGGER.error(msg);
+            logger.error(msg);
             throw new CloudRuntimeException("Diagnostics command execution failed, " + msg);
         }
 
@@ -421,7 +418,7 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
         Map<String, String> accessDetails = networkManager.getSystemVMAccessDetails(vmInstance);
         String controlIP = accessDetails.get(NetworkElementCommand.ROUTER_IP);
         if (StringUtils.isBlank(controlIP)) {
-            throw new CloudRuntimeException("Unable to find system vm ssh/control IP for  vm with ID: " + vmInstance.getId());
+            throw new CloudRuntimeException(String.format("Unable to find system vm ssh/control IP for vm: %s", vmInstance));
         }
         return controlIP;
     }
@@ -447,15 +444,15 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
             this.serviceImpl = serviceImpl;
         }
 
-        private static void deleteOldDiagnosticsFiles(File directory, String storeName) {
+        private void deleteOldDiagnosticsFiles(File directory, String storeName) {
             final File[] fileList = directory.listFiles();
             if (fileList != null) {
                 String msg = String.format("Found %s diagnostics files in store %s for garbage collection", fileList.length, storeName);
-                LOGGER.info(msg);
+                logger.info(msg);
                 for (File file : fileList) {
                     if (file.isFile() && MaximumFileAgeforGarbageCollection.value() <= getTimeDifference(file)) {
                         boolean success = file.delete();
-                        LOGGER.info(file.getName() + " delete status: " + success);
+                        logger.info(file.getName() + " delete status: " + success);
                     }
                 }
             }
@@ -481,17 +478,12 @@ public class DiagnosticsServiceImpl extends ManagerBase implements PluggableServ
 
         private void cleanupOldDiagnosticFiles(DataStore store) {
             String mountPoint = null;
-            try {
-                mountPoint = serviceImpl.mountManager.getMountPoint(store.getUri(), null);
-                if (StringUtils.isNotBlank(mountPoint)) {
-                    File directory = new File(mountPoint + File.separator + DIAGNOSTICS_DIRECTORY);
-                    if (directory.isDirectory()) {
-                        deleteOldDiagnosticsFiles(directory, store.getName());
-                    }
-                }
-            } finally {
-                if (StringUtils.isNotBlank(mountPoint)) {
-                    umountSecondaryStorage(mountPoint);
+            mountPoint = serviceImpl.mountManager.getMountPoint(store.getUri(),
+                    serviceImpl.imageStoreDetailsUtil.getNfsVersion(store.getId()));
+            if (StringUtils.isNotBlank(mountPoint)) {
+                File directory = new File(mountPoint + File.separator + DIAGNOSTICS_DIRECTORY);
+                if (directory.isDirectory()) {
+                    deleteOldDiagnosticsFiles(directory, store.getName());
                 }
             }
         }

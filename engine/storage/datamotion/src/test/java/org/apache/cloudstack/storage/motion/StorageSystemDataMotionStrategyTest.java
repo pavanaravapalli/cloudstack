@@ -19,6 +19,7 @@
 package org.apache.cloudstack.storage.motion;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -45,17 +46,22 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.Spy;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import com.cloud.agent.api.MigrateCommand;
 import com.cloud.host.HostVO;
 import com.cloud.storage.DataStoreRole;
 import com.cloud.storage.ImageStore;
+import com.cloud.storage.ScopeType;
 import com.cloud.storage.Storage;
 import com.cloud.storage.Storage.StoragePoolType;
 import com.cloud.storage.Volume;
 import com.cloud.storage.VolumeVO;
 import java.util.AbstractMap;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @RunWith(MockitoJUnitRunner.class)
 public class StorageSystemDataMotionStrategyTest {
@@ -74,6 +80,14 @@ public class StorageSystemDataMotionStrategyTest {
     private ImageStore destinationStore;
     @Mock
     private PrimaryDataStoreDao primaryDataStoreDao;
+
+    @Mock
+    StoragePoolVO sourceStoragePoolVoMock, destinationStoragePoolVoMock;
+
+    @Mock
+    Map<String, Storage.StoragePoolType> mapStringStoragePoolTypeMock;
+
+    List<ScopeType> scopeTypes = Arrays.asList(ScopeType.CLUSTER, ScopeType.ZONE);
 
     @Before
     public void setUp() throws Exception {
@@ -175,12 +189,25 @@ public class StorageSystemDataMotionStrategyTest {
     public void configureMigrateDiskInfoTest() {
         VolumeObject srcVolumeInfo = Mockito.spy(new VolumeObject());
         Mockito.doReturn("volume path").when(srcVolumeInfo).getPath();
-        MigrateCommand.MigrateDiskInfo migrateDiskInfo = strategy.configureMigrateDiskInfo(srcVolumeInfo, "destPath");
+        MigrateCommand.MigrateDiskInfo migrateDiskInfo = strategy.configureMigrateDiskInfo(srcVolumeInfo, "destPath", null);
         Assert.assertEquals(MigrateCommand.MigrateDiskInfo.DiskType.BLOCK, migrateDiskInfo.getDiskType());
         Assert.assertEquals(MigrateCommand.MigrateDiskInfo.DriverType.RAW, migrateDiskInfo.getDriverType());
         Assert.assertEquals(MigrateCommand.MigrateDiskInfo.Source.DEV, migrateDiskInfo.getSource());
         Assert.assertEquals("destPath", migrateDiskInfo.getSourceText());
         Assert.assertEquals("volume path", migrateDiskInfo.getSerialNumber());
+    }
+
+    @Test
+    public void configureMigrateDiskInfoWithBackingTest() {
+        VolumeObject srcVolumeInfo = Mockito.spy(new VolumeObject());
+        Mockito.doReturn("volume path").when(srcVolumeInfo).getPath();
+        MigrateCommand.MigrateDiskInfo migrateDiskInfo = strategy.configureMigrateDiskInfo(srcVolumeInfo, "destPath", "backingPath");
+        Assert.assertEquals(MigrateCommand.MigrateDiskInfo.DiskType.BLOCK, migrateDiskInfo.getDiskType());
+        Assert.assertEquals(MigrateCommand.MigrateDiskInfo.DriverType.RAW, migrateDiskInfo.getDriverType());
+        Assert.assertEquals(MigrateCommand.MigrateDiskInfo.Source.DEV, migrateDiskInfo.getSource());
+        Assert.assertEquals("destPath", migrateDiskInfo.getSourceText());
+        Assert.assertEquals("volume path", migrateDiskInfo.getSerialNumber());
+        Assert.assertEquals("backingPath", migrateDiskInfo.getBackingStoreText());
     }
 
     @Test
@@ -287,5 +314,59 @@ public class StorageSystemDataMotionStrategyTest {
         Mockito.when(dataStore.getId()).thenReturn(to);
 
         Assert.assertEquals(String.format("{volume: \"%s\", from: \"%s\", to:\"%s\"}", volume, from, to), strategy.formatEntryOfVolumesAndStoragesAsJsonToDisplayOnLog(new AbstractMap.SimpleEntry<>(volumeInfo, dataStore)));
+    }
+
+    @Test
+    public void validateSupportStoragePoolTypeDefaultValues() {
+        Set<StoragePoolType> supportedTypes = new HashSet<>();
+        supportedTypes.add(StoragePoolType.NetworkFilesystem);
+        supportedTypes.add(StoragePoolType.SharedMountPoint);
+
+        for (StoragePoolType poolType : StoragePoolType.values()) {
+            boolean isSupported = strategy.supportStoragePoolType(poolType);
+            if (supportedTypes.contains(poolType)) {
+                assertTrue(isSupported);
+            } else {
+                assertFalse(isSupported);
+            }
+        }
+    }
+
+    @Test
+    public void validateSupportStoragePoolTypeExtraValues() {
+        Set<StoragePoolType> supportedTypes = new HashSet<>();
+        supportedTypes.add(StoragePoolType.NetworkFilesystem);
+        supportedTypes.add(StoragePoolType.SharedMountPoint);
+        supportedTypes.add(StoragePoolType.Iscsi);
+        supportedTypes.add(StoragePoolType.CLVM);
+
+        for (StoragePoolType poolType : StoragePoolType.values()) {
+            boolean isSupported = strategy.supportStoragePoolType(poolType, StoragePoolType.Iscsi, StoragePoolType.CLVM);
+            if (supportedTypes.contains(poolType)) {
+                assertTrue(isSupported);
+            } else {
+                assertFalse(isSupported);
+            }
+        }
+    }
+
+    @Test
+    public void validateIsStoragePoolTypeInListReturnsTrue() {
+        StoragePoolType[] listTypes = new StoragePoolType[3];
+        listTypes[0] = StoragePoolType.LVM;
+        listTypes[1] = StoragePoolType.NetworkFilesystem;
+        listTypes[2] = StoragePoolType.SharedMountPoint;
+
+        assertTrue(strategy.isStoragePoolTypeInList(StoragePoolType.SharedMountPoint, listTypes));
+    }
+
+    @Test
+    public void validateIsStoragePoolTypeInListReturnsFalse() {
+        StoragePoolType[] listTypes = new StoragePoolType[3];
+        listTypes[0] = StoragePoolType.LVM;
+        listTypes[1] = StoragePoolType.NetworkFilesystem;
+        listTypes[2] = StoragePoolType.RBD;
+
+        assertFalse(strategy.isStoragePoolTypeInList(StoragePoolType.SharedMountPoint, listTypes));
     }
 }

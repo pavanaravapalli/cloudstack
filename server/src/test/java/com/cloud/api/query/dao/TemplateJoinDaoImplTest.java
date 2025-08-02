@@ -16,38 +16,49 @@
 // under the License.
 package com.cloud.api.query.dao;
 
+import com.cloud.api.query.vo.TemplateJoinVO;
 import com.cloud.hypervisor.Hypervisor;
 import com.cloud.storage.Storage;
+import com.cloud.storage.VnfTemplateDetailVO;
+import com.cloud.storage.VnfTemplateNicVO;
+import com.cloud.storage.dao.VnfTemplateDetailsDao;
+import com.cloud.storage.dao.VnfTemplateNicDao;
+import com.cloud.template.TemplateManager;
 import com.cloud.user.Account;
 import org.apache.cloudstack.api.response.TemplateResponse;
+import org.apache.cloudstack.api.response.VnfTemplateResponse;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
-
-import com.cloud.api.ApiDBUtils;
-import com.cloud.api.query.vo.TemplateJoinVO;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest(ApiDBUtils.class)
+@RunWith(MockitoJUnitRunner.class)
 public class TemplateJoinDaoImplTest extends GenericDaoBaseWithTagInformationBaseTest<TemplateJoinVO, TemplateResponse> {
 
     @InjectMocks
     private TemplateJoinDaoImpl _templateJoinDaoImpl;
+
+    @Mock
+    private VnfTemplateNicDao vnfTemplateNicDao;
+
+    @Mock
+    private VnfTemplateDetailsDao vnfTemplateDetailsDao;
 
     private TemplateJoinVO template = new TemplateJoinVO();
     private TemplateResponse templateResponse = new TemplateResponse();
 
     //TemplateJoinVO fields
     private String uuid = "1234567890abc";
-    private String name = "xs-tools.iso";
+    private String name = TemplateManager.XS_TOOLS_ISO;
     private String displayText = "xen-pv-drv-iso";
     private boolean publicTemplate = true;
     private Date created = new Date();
@@ -57,12 +68,14 @@ public class TemplateJoinDaoImplTest extends GenericDaoBaseWithTagInformationBas
     private boolean bootable = true;
     private Hypervisor.HypervisorType hypervisorType = Hypervisor.HypervisorType.XenServer;
     private boolean dynamicallyScalable = true;
-    private short accountType = Account.ACCOUNT_TYPE_NORMAL;
+    private Account.Type accountType = Account.Type.NORMAL;
     private String accountName = "system";
     private String domainUuid = "abcde1234567890";
     private String domainName = "ROOT";
     private String detailName = "detail_name1";
     private String detailValue = "detail_val";
+    private Storage.TemplateType templateType = Storage.TemplateType.VNF;
+    private Long templateId = 101L;
 
     @Before
     public void setup() {
@@ -71,7 +84,7 @@ public class TemplateJoinDaoImplTest extends GenericDaoBaseWithTagInformationBas
     }
 
     @Test
-    public void testUpdateTemplateTagInfo(){
+    public void testUpdateTemplateTagInfo() {
         testUpdateTagInformation(_templateJoinDaoImpl, template, templateResponse);
     }
 
@@ -92,8 +105,8 @@ public class TemplateJoinDaoImplTest extends GenericDaoBaseWithTagInformationBas
         Assert.assertEquals(accountName, ReflectionTestUtils.getField(response, "account"));
         Assert.assertEquals(domainUuid, ReflectionTestUtils.getField(response, "domainId"));
         Assert.assertEquals(domainName, ReflectionTestUtils.getField(response, "domainName"));
-        Assert.assertTrue(((Map)ReflectionTestUtils.getField(response, "details")).containsKey(detailName));
-        Assert.assertEquals(detailValue, ((Map)ReflectionTestUtils.getField(response, "details")).get(detailName));
+        Assert.assertTrue(((Map) ReflectionTestUtils.getField(response, "details")).containsKey(detailName));
+        Assert.assertEquals(detailValue, ((Map) ReflectionTestUtils.getField(response, "details")).get(detailName));
     }
 
     private void populateTemplateJoinVO() {
@@ -114,5 +127,27 @@ public class TemplateJoinDaoImplTest extends GenericDaoBaseWithTagInformationBas
         ReflectionTestUtils.setField(template, "domainName", domainName);
         ReflectionTestUtils.setField(template, "detailName", detailName);
         ReflectionTestUtils.setField(template, "detailValue", detailValue);
+        ReflectionTestUtils.setField(template, "templateType", templateType);
+    }
+
+    @Test
+    public void testNewUpdateResponseForVnf() {
+        ReflectionTestUtils.setField(template, "id", templateId);
+        ReflectionTestUtils.setField(template, "templateType", templateType);
+
+        VnfTemplateNicVO vnfNic1 = new VnfTemplateNicVO(templateId, 0L, "eth0", true, true, "first");
+        VnfTemplateNicVO vnfNic2 = new VnfTemplateNicVO(templateId, 1L, "eth1", true, true, "second");
+        Mockito.doReturn(Arrays.asList(vnfNic1, vnfNic2)).when(vnfTemplateNicDao).listByTemplateId(templateId);
+
+        VnfTemplateDetailVO detail1 = new VnfTemplateDetailVO(templateId, "name1", "value1", true);
+        VnfTemplateDetailVO detail2 = new VnfTemplateDetailVO(templateId, "name2", "value2", true);
+        VnfTemplateDetailVO detail3 = new VnfTemplateDetailVO(templateId, "name3", "value3", true);
+        Mockito.doReturn(Arrays.asList(detail1, detail2, detail3)).when(vnfTemplateDetailsDao).listDetails(templateId);
+
+        final TemplateResponse response = _templateJoinDaoImpl.newUpdateResponse(template);
+        Assert.assertTrue(response instanceof VnfTemplateResponse);
+        Assert.assertEquals(2, ((VnfTemplateResponse)response).getVnfNics().size());
+        Assert.assertEquals(3, ((VnfTemplateResponse)response).getVnfDetails().size());
+
     }
 }

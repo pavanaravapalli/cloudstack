@@ -17,57 +17,118 @@
 
 <template>
   <div class="user-menu">
-
+    <span class="action">
+      <create-menu v-if="device === 'desktop'" />
+    </span>
+    <external-link class="action"/>
     <translation-menu class="action"/>
     <header-notice class="action"/>
+    <label class="user-menu-server-info action" v-if="$config.multipleServer">
+      <database-outlined />
+      {{ server.name || server.apiBase || 'Local-Server' }}
+    </label>
     <a-dropdown>
       <span class="user-menu-dropdown action">
-        <a-avatar class="user-menu-avatar avatar" size="small" :src="avatar()"/>
+        <span v-if="image">
+          <resource-icon :image="image" size="4x" style="margin-right: 5px; margin-top: -3px"/>
+        </span>
+        <a-avatar v-else-if="userInitials" class="user-menu-avatar avatar" size="small" :style="{ backgroundColor: $config.theme['@primary-color'], color: 'white' }">
+          {{ userInitials }}
+        </a-avatar>
+        <a-avatar v-else class="user-menu-avatar avatar" size="small" :style="{ backgroundColor: $config.theme['@primary-color'], color: 'white' }">
+          <template #icon><user-outlined /></template>
+        </a-avatar>
         <span>{{ nickname() }}</span>
       </span>
-      <a-menu slot="overlay" class="user-menu-wrapper">
-        <a-menu-item class="user-menu-item" key="0">
-          <router-link :to="{ path: '/accountuser/' + $store.getters.userInfo.id }">
-            <a-icon class="user-menu-item-icon" type="user"/>
+      <template #overlay>
+        <a-menu class="user-menu-wrapper" @click="handleClickMenu">
+          <a-menu-item class="user-menu-item" key="profile">
+            <UserOutlined class="user-menu-item-icon" />
             <span class="user-menu-item-name">{{ $t('label.profilename') }}</span>
-          </router-link>
-        </a-menu-item>
-        <a-menu-item class="user-menu-item" key="1">
-          <a @click="toggleUseBrowserTimezone">
-            <a-icon class="user-menu-item-icon" type="clock-circle"/>
+          </a-menu-item>
+          <a-menu-item class="user-menu-item" key="limits">
+            <ControlOutlined class="user-menu-item-icon" />
+            <span class="user-menu-item-name">{{ $t('label.limits') }}</span>
+          </a-menu-item>
+          <a-menu-item class="user-menu-item" key="timezone">
+            <ClockCircleOutlined class="user-menu-item-icon" />
             <span class="user-menu-item-name" style="margin-right: 5px">{{ $t('label.use.local.timezone') }}</span>
-            <a-switch
-              :checked="$store.getters.usebrowsertimezone" />
-          </a>
-        </a-menu-item>
-        <a-menu-item class="user-menu-item" key="2" disabled>
-          <a :href="$config.docBase" target="_blank">
-            <a-icon class="user-menu-item-icon" type="question-circle-o"></a-icon>
+            <a-switch :checked="$store.getters.usebrowsertimezone" />
+          </a-menu-item>
+          <a-menu-item class="user-menu-item" key="document">
+            <QuestionCircleOutlined class="user-menu-item-icon" />
             <span class="user-menu-item-name">{{ $t('label.help') }}</span>
-          </a>
-        </a-menu-item>
-        <a-menu-divider/>
-        <a-menu-item class="user-menu-item" key="3">
-          <a href="javascript:;" @click="handleLogout">
-            <a-icon class="user-menu-item-icon" type="logout"/>
+          </a-menu-item>
+          <a-menu-divider/>
+          <a-menu-item class="user-menu-item" key="logout">
+            <LogoutOutlined class="user-menu-item-icon" />
             <span class="user-menu-item-name">{{ $t('label.logout') }}</span>
-          </a>
-        </a-menu-item>
-      </a-menu>
+          </a-menu-item>
+        </a-menu>
+      </template>
     </a-dropdown>
   </div>
 </template>
 
 <script>
+import { getAPI } from '@/api'
+import CreateMenu from './CreateMenu'
+import ExternalLink from './ExternalLink'
 import HeaderNotice from './HeaderNotice'
 import TranslationMenu from './TranslationMenu'
 import { mapActions, mapGetters } from 'vuex'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import eventBus from '@/config/eventBus'
+import { SERVER_MANAGER } from '@/store/mutation-types'
+import { sourceToken } from '@/utils/request'
+import { applyCustomGuiTheme } from '@/utils/guiTheme'
 
 export default {
   name: 'UserMenu',
   components: {
+    CreateMenu,
+    ExternalLink,
     TranslationMenu,
-    HeaderNotice
+    HeaderNotice,
+    ResourceIcon
+  },
+  props: {
+    device: {
+      type: String,
+      required: false,
+      default: 'desktop'
+    }
+  },
+  data () {
+    return {
+      image: '',
+      userInitials: '',
+      countNotify: 0
+    }
+  },
+  created () {
+    this.userInitials = (this.$store.getters.userInfo.firstname.toUpperCase().charAt(0) || '') +
+      (this.$store.getters.userInfo.lastname.toUpperCase().charAt(0) || '')
+    this.getIcon()
+    eventBus.on('refresh-header', () => {
+      this.getIcon()
+    })
+    this.$store.watch(
+      (state, getters) => getters.countNotify,
+      (newValue, oldValue) => {
+        this.countNotify = newValue
+      }
+    )
+  },
+  watch: {
+    image () {
+      this.getIcon()
+    }
+  },
+  computed: {
+    server () {
+      return this.$localStorage.get(SERVER_MANAGER) || this.$config.servers[0]
+    }
   },
   methods: {
     ...mapActions(['Logout']),
@@ -75,8 +136,53 @@ export default {
     toggleUseBrowserTimezone () {
       this.$store.dispatch('SetUseBrowserTimezone', !this.$store.getters.usebrowsertimezone)
     },
+    async getIcon () {
+      await this.fetchResourceIcon(this.$store.getters.userInfo.id)
+    },
+    fetchResourceIcon (id) {
+      return new Promise((resolve, reject) => {
+        if (this.$store.getters.avatar) {
+          this.image = this.$store.getters.avatar
+          resolve(this.image)
+        }
+        getAPI('listUsers', {
+          id: id,
+          showicon: true
+        }).then(json => {
+          const response = json.listusersresponse.user || []
+          if (response?.[0]) {
+            this.image = response[0]?.icon?.base64image || ''
+            this.$store.commit('SET_AVATAR', this.image)
+            resolve(this.image)
+          }
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    },
+    handleClickMenu (item) {
+      switch (item.key) {
+        case 'profile':
+          this.$router.push(`/accountuser/${this.$store.getters.userInfo.id}`)
+          break
+        case 'limits':
+          this.$router.push(`/account/${this.$store.getters.userInfo.accountid}?tab=limits`)
+          break
+        case 'timezone':
+          this.toggleUseBrowserTimezone()
+          break
+        case 'document':
+          window.open(this.$config.docBase, '_blank')
+          break
+        case 'logout':
+          this.handleLogout()
+          break
+      }
+    },
     handleLogout () {
-      return this.Logout({}).then(() => {
+      this.Logout({}).finally(async () => {
+        sourceToken.init()
+        await applyCustomGuiTheme(null, null)
         this.$router.push('/user/login')
       }).catch(err => {
         this.$message.error({
@@ -84,6 +190,10 @@ export default {
           description: err.message
         })
       })
+    },
+    clearAllNotify () {
+      this.$store.commit('SET_COUNT_NOTIFY', 0)
+      this.$notification.destroy()
     }
   }
 }
@@ -107,6 +217,12 @@ export default {
   &-item-icon i {
     min-width: 12px;
     margin-right: 8px;
+  }
+
+  &-server-info {
+    .anticon {
+      margin-right: 5px;
+    }
   }
 }
 </style>

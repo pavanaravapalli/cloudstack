@@ -41,12 +41,13 @@ import javax.persistence.SecondaryTables;
 import javax.persistence.Table;
 import javax.persistence.Transient;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import static com.cloud.utils.AutoCloseableUtil.closeAutoCloseable;
 
 public class DbUtil {
-    protected final static Logger s_logger = Logger.getLogger(DbUtil.class);
+    protected static Logger LOGGER = LogManager.getLogger(DbUtil.class);
 
     private static Map<String, Connection> s_connectionForGlobalLocks = new HashMap<String, Connection>();
 
@@ -54,7 +55,7 @@ public class DbUtil {
         synchronized (s_connectionForGlobalLocks) {
             if (forLock) {
                 if (s_connectionForGlobalLocks.get(name) != null) {
-                    s_logger.error("Sanity check failed, global lock name " + name + " is already in use");
+                    LOGGER.error("Sanity check failed, global lock name " + name + " is already in use");
                     assert (false);
                 }
 
@@ -124,7 +125,7 @@ public class DbUtil {
     public static Field findField(Class<?> clazz, String columnName) {
         for (Field field : clazz.getDeclaredFields()) {
             if (field.getAnnotation(Embedded.class) != null || field.getAnnotation(EmbeddedId.class) != null) {
-                findField(field.getClass(), columnName);
+                findField(field.getType(), columnName);
             } else {
                 if (columnName.equals(DbUtil.getColumnName(field))) {
                     return field;
@@ -170,7 +171,7 @@ public class DbUtil {
         }
 
         if (field.getAnnotation(EmbeddedId.class) != null) {
-            assert (field.getClass().getAnnotation(Embeddable.class) != null) : "Class " + field.getClass().getName() + " must be Embeddable to be used as Embedded Id";
+            assert (field.getType().getAnnotation(Embeddable.class) != null) : "Class " + field.getType().getName() + " must be Embeddable to be used as Embedded Id";
             return true;
         }
 
@@ -198,7 +199,7 @@ public class DbUtil {
     public static boolean getGlobalLock(String name, int timeoutSeconds) {
         Connection conn = getConnectionForGlobalLocks(name, true);
         if (conn == null) {
-            s_logger.error("Unable to acquire DB connection for global lock system");
+            LOGGER.error("Unable to acquire DB connection for global lock system");
             return false;
         }
 
@@ -211,15 +212,15 @@ public class DbUtil {
                     if (rs.getInt(1) > 0) {
                         return true;
                     } else {
-                        if (s_logger.isDebugEnabled())
-                            s_logger.debug("GET_LOCK() timed out on lock : " + name);
+                        if (LOGGER.isDebugEnabled())
+                            LOGGER.debug("GET_LOCK() timed out on lock : " + name);
                     }
                 }
             }
         } catch (SQLException e) {
-            s_logger.error("GET_LOCK() throws exception ", e);
+            LOGGER.error("GET_LOCK() throws exception ", e);
         } catch (Throwable e) {
-            s_logger.error("GET_LOCK() throws exception ", e);
+            LOGGER.error("GET_LOCK() throws exception ", e);
         }
 
         removeConnectionForGlobalLocks(name);
@@ -234,7 +235,7 @@ public class DbUtil {
     public static boolean releaseGlobalLock(String name) {
         try (Connection conn = getConnectionForGlobalLocks(name, false);) {
             if (conn == null) {
-                s_logger.error("Unable to acquire DB connection for global lock system");
+                LOGGER.error("Unable to acquire DB connection for global lock system");
                 assert (false);
                 return false;
             }
@@ -245,13 +246,13 @@ public class DbUtil {
                     if (rs != null && rs.first()) {
                         return rs.getInt(1) > 0;
                     }
-                    s_logger.error("releaseGlobalLock:RELEASE_LOCK() returns unexpected result");
+                    LOGGER.error("releaseGlobalLock:RELEASE_LOCK() returns unexpected result");
                 }
             }
         } catch (SQLException e) {
-            s_logger.error("RELEASE_LOCK() throws exception ", e);
+            LOGGER.error("RELEASE_LOCK() throws exception ", e);
         } catch (Throwable e) {
-            s_logger.error("RELEASE_LOCK() throws exception ", e);
+            LOGGER.error("RELEASE_LOCK() throws exception ", e);
         }
         return false;
     }
@@ -280,6 +281,26 @@ public class DbUtil {
 
     public static void closeConnection(final Connection connection) {
         closeAutoCloseable(connection, "exception while close connection.");
+    }
+
+    public static Map<String, String> getDbInfo(String type, String ... var) {
+        String vars = String.join(",", var);
+        Map<String, String> result = new HashMap<>();
+        String sql = String.format("SHOW %s WHERE FIND_IN_SET(Variable_name,?)",type);
+        try (TransactionLegacy txn = TransactionLegacy.open("metrics")) {
+            PreparedStatement pstmt = txn.prepareAutoCloseStatement(sql);
+            pstmt.setString(1, vars);
+            final ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                String variableName = rs.getString("Variable_name");
+                String value = rs.getString("value");
+                result.put(variableName, value);
+            }
+        } catch (SQLException e) {
+            LOGGER.error("failed to get the database status: " + e.getLocalizedMessage());
+            LOGGER.debug("failed to get the database status", e);
+        }
+        return result;
     }
 
 }

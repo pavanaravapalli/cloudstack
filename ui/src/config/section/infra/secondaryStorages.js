@@ -14,18 +14,24 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
+import { shallowRef, defineAsyncComponent } from 'vue'
 import store from '@/store'
 
 export default {
   name: 'imagestore',
   title: 'label.secondary.storage',
-  icon: 'picture',
+  icon: 'picture-outlined',
   docHelp: 'adminguide/storage.html#secondary-storage',
   permission: ['listImageStores'],
+  searchFilters: ['name', 'zoneid', 'provider'],
   columns: () => {
     var fields = ['name', 'url', 'protocol', 'scope', 'zonename']
     if (store.getters.apis.listImageStores.params.filter(x => x.name === 'readonly').length > 0) {
-      fields.push('readonly')
+      fields.push({
+        field: 'readonly',
+        customTitle: 'access'
+      })
     }
     return fields
   },
@@ -36,53 +42,73 @@ export default {
     }
     return fields
   },
+  resourceType: 'SecondaryStorage',
+  related: [{
+    name: 'template',
+    title: 'label.templates',
+    param: 'imagestoreid'
+  },
+  {
+    name: 'iso',
+    title: 'label.isos',
+    param: 'imagestoreid'
+  },
+  {
+    name: 'snapshot',
+    title: 'label.snapshots',
+    param: 'imagestoreid'
+  }],
   tabs: [{
     name: 'details',
-    component: () => import('@/components/view/DetailsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
   }, {
     name: 'settings',
-    component: () => import('@/components/view/SettingsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/SettingsTab.vue')))
+  }, {
+    name: 'browser',
+    resourceType: 'ImageStore',
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/StorageBrowser.vue')))
+  }, {
+    name: 'events',
+    resourceType: 'ImageStore',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+    show: () => { return 'listEvents' in store.getters.apis }
+  }, {
+    name: 'comments',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/AnnotationsTab.vue')))
   }],
   actions: [
     {
-      api: 'migrateSecondaryStorageData',
-      icon: 'drag',
-      label: 'label.migrate.data.from.image.store',
-      listView: true,
-      popup: true,
-      component: () => import('@/views/infra/MigrateData.vue')
-    },
-    {
       api: 'addImageStore',
-      icon: 'plus',
+      icon: 'plus-outlined',
       docHelp: 'installguide/configuration.html#add-secondary-storage',
       label: 'label.add.secondary.storage',
       listView: true,
       popup: true,
-      component: () => import('@/views/infra/AddSecondaryStorage.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/AddSecondaryStorage.vue')))
+    },
+    {
+      api: 'migrateSecondaryStorageData',
+      icon: 'drag-outlined',
+      label: 'label.migrate.data.from.image.store',
+      listView: true,
+      popup: true,
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/MigrateData.vue')))
+    },
+    {
+      api: 'updateImageStore',
+      icon: 'edit-outlined',
+      label: 'label.edit',
+      dataView: true,
+      args: ['name', 'readonly', 'capacitybytes']
     },
     {
       api: 'deleteImageStore',
-      icon: 'delete',
+      icon: 'delete-outlined',
       label: 'label.action.delete.secondary.storage',
       message: 'message.action.delete.secondary.storage',
-      dataView: true
-    },
-    {
-      api: 'updateImageStore',
-      icon: 'stop',
-      label: 'Make Image store read-only',
       dataView: true,
-      defaultArgs: { readonly: true },
-      show: (record) => { return record.readonly === false }
-    },
-    {
-      api: 'updateImageStore',
-      icon: 'check-circle',
-      label: 'Make Image store read-write',
-      dataView: true,
-      defaultArgs: { readonly: false },
-      show: (record) => { return record.readonly === true }
+      displayName: (record) => { return record.name || record.displayName || record.id }
     }
   ]
 }

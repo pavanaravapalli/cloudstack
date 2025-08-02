@@ -16,43 +16,70 @@
 // under the License.
 
 <template>
-  <div class="take-snapshot">
+  <div class="take-snapshot" v-ctrl-enter="handleSubmit">
     <a-spin :spinning="loading || actionLoading">
-      <label>
-        {{ $t('label.header.volume.take.snapshot') }}
-      </label>
+      <a-alert type="warning">
+        <template #message>
+          <div v-html="$t('label.header.volume.take.snapshot')" />
+        </template>
+      </a-alert>
       <a-form
         class="form"
-        :form="form"
+        :ref="formRef"
+        :model="form"
+        :rules="rules"
         layout="vertical"
-        @submit="handleSubmit">
-        <a-row :gutter="12">
-          <a-col :md="24" :lg="24">
-            <a-form-item :label="$t('label.name')">
-              <a-input
-                v-decorator="['name']"
-                :placeholder="apiParams.name.description" />
-            </a-form-item>
-          </a-col>
-          <a-col :md="24" :lg="24" v-if="!supportsStorageSnapshot">
-            <a-form-item :label="$t('label.asyncbackup')">
-              <a-switch v-decorator="['asyncbackup']" />
-            </a-form-item>
-          </a-col>
-          <a-col :md="24" :lg="24" v-if="quiescevm">
-            <a-form-item :label="$t('label.quiescevm')">
-              <a-switch v-decorator="['quiescevm']" />
-            </a-form-item>
-          </a-col>
-        </a-row>
+        @finish="handleSubmit"
+       >
+        <a-form-item :label="$t('label.name')" name="name" ref="name">
+          <a-input
+            v-model:value="form.name"
+            :placeholder="apiParams.name.description"
+            v-focus="true" />
+        </a-form-item>
+        <a-form-item ref="zoneids" name="zoneids">
+          <template #label>
+            <tooltip-label :title="$t('label.zones')" :tooltip="''"/>
+          </template>
+          <a-alert type="info" style="margin-bottom: 2%">
+            <template #message>
+              <div v-html="formattedAdditionalZoneMessage"/>
+            </template>
+          </a-alert>
+          <a-select
+            id="zone-selection"
+            v-model:value="form.zoneids"
+            mode="multiple"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return  option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }"
+            :loading="zoneLoading"
+            :placeholder="''">
+            <a-select-option v-for="opt in zones" :key="opt.id" :label="opt.name || opt.description">
+              <span>
+                <resource-icon v-if="opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                <global-outlined v-else style="margin-right: 5px" />
+                {{ opt.name || opt.description }}
+              </span>
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('label.asyncbackup')" name="asyncbackup" ref="asyncbackup" v-if="!supportsStorageSnapshot">
+          <a-switch v-model:checked="form.asyncbackup" />
+        </a-form-item>
+        <a-form-item :label="$t('label.quiescevm')" name="quiescevm" ref="quiescevm" v-if="quiescevm && hypervisorSupportsQuiesceVm">
+          <a-switch v-model:checked="form.quiescevm" />
+        </a-form-item>
         <a-divider/>
         <div class="tagsTitle">{{ $t('label.tags') }}</div>
         <div>
-          <template v-for="(tag, index) in tags">
+          <div v-for="(tag, index) in tags" :key="index">
             <a-tag :key="index" :closable="true">
               {{ tag.key }} = {{ tag.value }}
             </a-tag>
-          </template>
+          </div>
           <div v-if="inputVisible">
             <a-input-group
               type="text"
@@ -61,32 +88,33 @@
               @keyup.enter="handleInputConfirm"
               compact>
               <a-input ref="input" :value="inputKey" @change="handleKeyChange" style="width: 100px; text-align: center" :placeholder="$t('label.key')" />
-              <a-input style=" width: 30px; border-left: 0; pointer-events: none; backgroundColor: #fff" placeholder="=" disabled />
+              <a-input
+                class="tag-disabled-input"
+                style=" width: 30px; border-left: 0; pointer-events: none; text-align: center"
+                placeholder="="
+                disabled />
               <a-input :value="inputValue" @change="handleValueChange" style="width: 100px; text-align: center; border-left: 0" :placeholder="$t('label.value')" />
-              <a-button shape="circle" size="small" @click="handleInputConfirm">
-                <a-icon type="check"/>
-              </a-button>
-              <a-button shape="circle" size="small" @click="inputVisible=false">
-                <a-icon type="close"/>
-              </a-button>
+              <tooltip-button :tooltip="$t('label.ok')" icon="check-outlined" size="small" @onClick="handleInputConfirm" />
+              <tooltip-button :tooltip="$t('label.cancel')" icon="close-outlined" size="small" @onClick="inputVisible=false" />
             </a-input-group>
           </div>
-          <a-tag v-else @click="showInput" style="background: #fff; borderStyle: dashed;">
-            <a-icon type="plus" /> {{ $t('label.new.tag') }}
+          <a-tag v-else @click="showInput" class="btn-add-tag" style="borderStyle: dashed;">
+            <plus-outlined /> {{ $t('label.new.tag') }}
           </a-tag>
         </div>
         <div :span="24" class="action-button">
           <a-button
             :loading="actionLoading"
             @click="closeAction">
-            {{ this.$t('label.cancel') }}
+            {{ $t('label.cancel') }}
           </a-button>
           <a-button
             v-if="handleShowButton()"
             :loading="actionLoading"
             type="primary"
+            ref="submit"
             @click="handleSubmit">
-            {{ this.$t('label.ok') }}
+            {{ $t('label.ok') }}
           </a-button>
         </div>
       </a-form>
@@ -95,10 +123,21 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { ref, reactive, toRaw } from 'vue'
+import { getAPI, postAPI } from '@/api'
+import { mixinForm } from '@/utils/mixin'
+import TooltipButton from '@/components/widgets/TooltipButton'
+import TooltipLabel from '@/components/widgets/TooltipLabel'
+import ResourceIcon from '@/components/view/ResourceIcon'
 
 export default {
   name: 'TakeSnapshot',
+  mixins: [mixinForm],
+  components: {
+    TooltipButton,
+    TooltipLabel,
+    ResourceIcon
+  },
   props: {
     loading: {
       type: Boolean,
@@ -113,33 +152,65 @@ export default {
     return {
       actionLoading: false,
       quiescevm: false,
+      hypervisorSupportsQuiesceVm: false,
       supportsStorageSnapshot: false,
       inputValue: '',
       inputKey: '',
       inputVisible: '',
+      zones: [],
+      zoneLoading: false,
       tags: [],
       dataSource: []
     }
   },
   beforeCreate () {
-    this.form = this.$form.createForm(this)
-    this.apiConfig = this.$store.getters.apis.createSnapshot || {}
-    this.apiParams = {}
-    this.apiConfig.params.forEach(param => {
-      this.apiParams[param.name] = param
-    })
+    this.apiParams = this.$getApiParams('createSnapshot')
   },
-  mounted () {
+  created () {
+    this.initForm()
     this.quiescevm = this.resource.quiescevm
+    if (['KVM', 'VMware'].includes(this.resource.hypervisor)) {
+      this.hypervisorSupportsQuiesceVm = true
+    }
+
     this.supportsStorageSnapshot = this.resource.supportsstoragesnapshot
+    this.fetchZoneData()
+  },
+  computed: {
+    formattedAdditionalZoneMessage () {
+      return `${this.$t('message.snapshot.additional.zones').replace('%x', this.resource.zonename)}`
+    }
   },
   methods: {
+    initForm () {
+      this.formRef = ref()
+      this.form = reactive({
+        name: undefined,
+        asyncbackup: undefined,
+        quiescevm: false
+      })
+      this.rules = reactive({})
+    },
+    fetchZoneData () {
+      const params = {}
+      params.showicon = true
+      this.zoneLoading = true
+      getAPI('listZones', params).then(json => {
+        const listZones = json.listzonesresponse.zone
+        if (listZones) {
+          this.zones = listZones
+          this.zones = this.zones.filter(zone => zone.type !== 'Edge' && zone.id !== this.resource.zoneid)
+        }
+      }).finally(() => {
+        this.zoneLoading = false
+      })
+    },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((error, values) => {
-        if (error) {
-          return
-        }
+      if (this.actionLoading) return
+      this.formRef.value.validate().then(() => {
+        const formRaw = toRaw(this.form)
+        const values = this.handleRemoveFields(formRaw)
 
         let params = {}
         params.volumeId = this.resource.id
@@ -154,6 +225,9 @@ export default {
         if (values.quiescevm) {
           params.quiescevm = values.quiescevm
         }
+        if (values.zoneids && values.zoneids.length > 0) {
+          params.zoneids = values.zoneids.join()
+        }
         for (let i = 0; i < this.tags.length; i++) {
           const formattedTagData = {}
           const tag = this.tags[i]
@@ -165,20 +239,14 @@ export default {
         this.actionLoading = true
         const title = this.$t('label.action.take.snapshot')
         const description = this.$t('label.volume') + ' ' + this.resource.id
-        api('createSnapshot', params).then(json => {
+        postAPI('createSnapshot', params).then(json => {
           const jobId = json.createsnapshotresponse.jobid
           if (jobId) {
             this.$pollJob({
               jobId,
-              successMethod: result => {
-                const successDescription = result.jobresult.snapshot.name
-                this.$store.dispatch('AddAsyncJob', {
-                  title: title,
-                  jobid: jobId,
-                  description: successDescription,
-                  status: 'progress'
-                })
-              },
+              title,
+              description: values.name || this.resource.id,
+              successMethod: result => {},
               loadingMessage: `${title} ${this.$t('label.in.progress.for')} ${description}`,
               catchMessage: this.$t('error.fetching.async.job.result')
             })
@@ -189,6 +257,8 @@ export default {
         }).finally(() => {
           this.actionLoading = false
         })
+      }).catch((error) => {
+        this.formRef.value.scrollToField(error.errorFields[0].name)
       })
     },
     handleVisibleInterval (intervalType) {
@@ -262,15 +332,6 @@ export default {
 
 .tagsTitle {
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.85);
   margin-bottom: 12px;
-}
-
-.action-button {
-  text-align: right;
-
-  button {
-    margin-right: 5px;
-  }
 }
 </style>

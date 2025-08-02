@@ -16,14 +16,20 @@
 // under the License.
 package com.cloud.api;
 
-import org.apache.log4j.Logger;
+import java.util.HashMap;
+import java.util.Map;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 
 import org.apache.cloudstack.api.ResponseObject;
 
 public class ApiSerializerHelper {
-    public static final Logger s_logger = Logger.getLogger(ApiSerializerHelper.class.getName());
+    protected static Logger LOGGER = LogManager.getLogger(ApiSerializerHelper.class);
     private static String token = "/";
 
     public static String toSerializedString(Object result) {
@@ -43,7 +49,6 @@ public class ApiSerializerHelper {
     public static Object fromSerializedString(String result) {
         try {
             if (result != null && !result.isEmpty()) {
-
                 String[] serializedParts = result.split(token);
 
                 if (serializedParts.length < 2) {
@@ -76,8 +81,30 @@ public class ApiSerializerHelper {
             }
             return null;
         } catch (RuntimeException e) {
-            s_logger.error("Caught runtime exception when doing GSON deserialization on: " + result);
+            LOGGER.error("Caught runtime exception when doing GSON deserialization on: " + result);
             throw e;
         }
+    }
+
+    public static Map<String, Object> fromSerializedStringToMap(String result) {
+        Map<String,Object> objParams = null;
+        try {
+            Object obj = fromSerializedString(result);
+            if (obj != null) {
+                Gson gson = ApiGsonHelper.getBuilder().create();
+                String objJson = gson.toJson(obj);
+                objParams = new ObjectMapper().readValue(objJson, HashMap.class);
+                objParams.put("class", obj.getClass().getName());
+
+                String nameField = ((ResponseObject)obj).getObjectName();
+                if (nameField != null) {
+                    objParams.put("object", nameField);
+                }
+            }
+        } catch (RuntimeException | JsonProcessingException e) {
+            LOGGER.error("Caught runtime exception when doing GSON deserialization to map on: " + result, e);
+        }
+
+        return objParams;
     }
 }

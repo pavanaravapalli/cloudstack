@@ -24,9 +24,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.net.util.SubnetUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.bouncycastle.util.IPAddress;
 
 import com.cloud.agent.AgentManager;
@@ -76,7 +77,7 @@ import com.cloud.vm.dao.NicDao;
 import com.cloud.vm.dao.VMInstanceDao;
 
 public class BigSwitchBcfUtils {
-    private static final Logger s_logger = Logger.getLogger(BigSwitchBcfUtils.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     private final NetworkDao _networkDao;
     private final NicDao _nicDao;
@@ -133,10 +134,10 @@ public class BigSwitchBcfUtils {
             _hostDao.loadDetails(bigswitchBcfHost);
             GetControllerDataAnswer answer = (GetControllerDataAnswer) _agentMgr.easySend(bigswitchBcfHost.getId(), cmd);
             if (answer != null){
-                if (answer.isMaster()) {
-                    cluster.setMaster(bigswitchBcfHost);
+                if (answer.isPrimary()) {
+                    cluster.setPrimary(bigswitchBcfHost);
                 } else {
-                    cluster.setSlave(bigswitchBcfHost);
+                    cluster.setSecondary(bigswitchBcfHost);
                 }
             }
         }
@@ -447,7 +448,7 @@ public class BigSwitchBcfUtils {
         }
         BcfAnswer syncAnswer = (BcfAnswer) _agentMgr.easySend(bigswitchBcfHost.getId(), syncCmd);
         if (syncAnswer == null || !syncAnswer.getResult()) {
-            s_logger.error("SyncBcfTopologyCommand failed");
+            logger.error("SyncBcfTopologyCommand failed");
             return null;
         }
         return syncAnswer.getHash();
@@ -462,7 +463,7 @@ public class BigSwitchBcfUtils {
         }
         BcfAnswer syncAnswer = (BcfAnswer) _agentMgr.easySend(bigswitchBcfHost.getId(), syncCmd);
         if (syncAnswer == null || !syncAnswer.getResult()) {
-            s_logger.error("SyncBcfTopologyCommand failed");
+            logger.error("SyncBcfTopologyCommand failed");
             return null;
         }
         return syncAnswer.getHash();
@@ -471,33 +472,33 @@ public class BigSwitchBcfUtils {
     public BcfAnswer sendBcfCommandWithNetworkSyncCheck(BcfCommand cmd, Network network)throws IllegalArgumentException{
         // get registered Big Switch controller
         ControlClusterData cluster = getControlClusterData(network.getPhysicalNetworkId());
-        if(cluster.getMaster()==null){
+        if(cluster.getPrimary()==null){
             return new BcfAnswer(cmd, new CloudRuntimeException("Big Switch Network controller temporarily unavailable"));
         }
 
         TopologyData topo = getTopology(network.getPhysicalNetworkId());
 
         cmd.setTopology(topo);
-        BcfAnswer answer =  (BcfAnswer) _agentMgr.easySend(cluster.getMaster().getId(), cmd);
+        BcfAnswer answer =  (BcfAnswer) _agentMgr.easySend(cluster.getPrimary().getId(), cmd);
 
         if (answer == null || !answer.getResult()) {
-            s_logger.error ("BCF API Command failed");
+            logger.error ("BCF API Command failed");
             throw new IllegalArgumentException("Failed API call to Big Switch Network plugin");
         }
 
         String newHash = answer.getHash();
         if (cmd.isTopologySyncRequested()) {
-            newHash = syncTopologyToBcfHost(cluster.getMaster());
+            newHash = syncTopologyToBcfHost(cluster.getPrimary());
         }
         if(newHash != null){
             commitTopologyHash(network.getPhysicalNetworkId(), newHash);
         }
 
-        HostVO slave = cluster.getSlave();
-        if(slave != null){
+        HostVO secondary = cluster.getSecondary();
+        if(secondary != null){
             TopologyData newTopo = getTopology(network.getPhysicalNetworkId());
             CacheBcfTopologyCommand cacheCmd = new CacheBcfTopologyCommand(newTopo);
-            _agentMgr.easySend(cluster.getSlave().getId(), cacheCmd);
+            _agentMgr.easySend(cluster.getSecondary().getId(), cacheCmd);
         }
 
         return answer;

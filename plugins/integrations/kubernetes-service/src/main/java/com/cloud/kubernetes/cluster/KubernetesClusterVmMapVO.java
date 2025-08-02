@@ -28,32 +28,6 @@ import javax.persistence.GenerationType;
 @Table(name = "kubernetes_cluster_vm_map")
 public class KubernetesClusterVmMapVO implements KubernetesClusterVmMap {
 
-    @Override
-    public long getId() {
-        return id;
-    }
-
-    @Override
-    public long getClusterId() {
-        return clusterId;
-
-    }
-
-    public void setClusterId(long clusterId) {
-
-        this.clusterId = clusterId;
-    }
-
-    @Override
-    public long getVmId() {
-        return vmId;
-    }
-
-    public void setVmId(long vmId) {
-
-        this.vmId = vmId;
-    }
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -65,12 +39,92 @@ public class KubernetesClusterVmMapVO implements KubernetesClusterVmMap {
     @Column(name = "vm_id")
     long vmId;
 
-    public KubernetesClusterVmMapVO() {
+    @Column(name = "control_node")
+    boolean controlNode;
 
+    @Column(name = "etcd_node")
+    boolean etcdNode;
+
+    @Column(name = "external_node")
+    boolean externalNode;
+
+    @Column(name = "manual_upgrade")
+    boolean manualUpgrade;
+
+    @Column(name = "kubernetes_node_version")
+    String nodeVersion;
+
+    public KubernetesClusterVmMapVO() {
     }
 
-    public KubernetesClusterVmMapVO(long clusterId, long vmId) {
+    public KubernetesClusterVmMapVO(long clusterId, long vmId, boolean controlNode) {
         this.vmId = vmId;
         this.clusterId = clusterId;
+        this.controlNode = controlNode;
+    }
+
+
+    @Override
+    public long getId() {
+        return id;
+    }
+
+    @Override
+    public long getClusterId() {
+        return clusterId;
+    }
+
+    public void setClusterId(long clusterId) {
+        this.clusterId = clusterId;
+    }
+
+    @Override
+    public long getVmId() {
+        return vmId;
+    }
+
+    public void setVmId(long vmId) {
+        this.vmId = vmId;
+    }
+
+    @Override
+    public boolean isControlNode() {
+        return controlNode;
+    }
+
+    public void setControlNode(boolean controlNode) {
+        this.controlNode = controlNode;
+    }
+
+    public boolean isEtcdNode() {
+        return etcdNode;
+    }
+
+    public void setEtcdNode(boolean etcdNode) {
+        this.etcdNode = etcdNode;
+    }
+
+    public boolean isExternalNode() {
+        return externalNode;
+    }
+
+    public void setExternalNode(boolean externalNode) {
+        this.externalNode = externalNode;
+    }
+
+    public boolean isManualUpgrade() {
+        return manualUpgrade;
+    }
+
+    public void setManualUpgrade(boolean manualUpgrade) {
+        this.manualUpgrade = manualUpgrade;
+    }
+
+    public String getNodeVersion() {
+        return nodeVersion;
+    }
+
+    public void setNodeVersion(String nodeVersion) {
+        this.nodeVersion = nodeVersion;
     }
 }

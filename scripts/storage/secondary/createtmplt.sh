@@ -6,9 +6,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -16,7 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
- 
 
 # $Id: createtmplt.sh 9132 2010-06-04 20:17:43Z manuel $ $HeadURL: svn://svn.lab.vmops.com/repos/vmdev/java/scripts/storage/secondary/createtmplt.sh $
 # createtmplt.sh -- install a template
@@ -42,7 +41,7 @@ fi
 untar() {
   local ft=$(file $1| awk -F" " '{print $2}')
   case $ft in
-  USTAR) 
+  USTAR)
      printf "tar archives not supported\n"  >&2
      return 1
           ;;
@@ -88,12 +87,12 @@ uncompress() {
 	;;
   esac
 
-  if [ $? -gt 0 ] 
+  if [ $? -gt 0 ]
   then
     printf "Failed to uncompress file (filetype=$ft), exiting "
-    return 1 
+    return 1
   fi
- 
+
   rm -f $1
   printf $tmpfile
 
@@ -110,6 +109,16 @@ create_from_file() {
 
 }
 
+create_from_file_user() {
+  local tmpltfs=$1
+  local tmpltimg=$2
+  local tmpltname=$3
+
+  [ -n "$verbose" ] && echo "Copying to $tmpltfs/$tmpltname...could take a while" >&2
+  sudo cp $tmpltimg /$tmpltfs/$tmpltname
+
+}
+
 tflag=
 nflag=
 fflag=
@@ -118,8 +127,9 @@ hflag=
 hvm=false
 cleanup=false
 dflag=
+cloud=false
 
-while getopts 'vuht:n:f:s:d:S:' OPTION
+while getopts 'vcuht:n:f:s:d:S:' OPTION
 do
   case $OPTION in
   t)	tflag=1
@@ -144,6 +154,8 @@ do
   h)	hflag=1
 		hvm="true"
 		;;
+  c)	cloud="true"
+		;;
   u)	cleanup="true"
 		;;
   v)	verbose="true"
@@ -155,7 +167,7 @@ do
 done
 
 isCifs() {
-   #TO:DO incase of multiple zone where cifs and nfs exists, 
+   #TO:DO incase of multiple zone where cifs and nfs exists,
    #then check if the template file is from cifs using df -P filename
    #Currently only cifs is supported in hyperv zone.
    mount | grep "type cifs" > /dev/null
@@ -170,7 +182,7 @@ fi
 
 mkdir -p $tmpltfs
 
-if [ ! -f $tmpltimg ] 
+if [ ! -f $tmpltimg ]
 then
   printf "root disk file $tmpltimg doesn't exist\n"
   exit 3
@@ -199,7 +211,14 @@ fi
 
 imgsize=$(ls -l $tmpltimg2| awk -F" " '{print $5}')
 
-create_from_file $tmpltfs $tmpltimg2 $tmpltname
+if [ "$cloud" == "true" ]
+then
+    create_from_file_user $tmpltfs $tmpltimg2 $tmpltname
+    tmpltfs=/tmp/cloud/templates/
+else
+    create_from_file $tmpltfs $tmpltimg2 $tmpltname
+fi
+
 
 touch /$tmpltfs/template.properties
 rollback_if_needed $tmpltfs $? "Failed to create template.properties file"
@@ -213,7 +232,7 @@ echo "description=$descr" >> /$tmpltfs/template.properties
 echo "hvm=$hvm" >> /$tmpltfs/template.properties
 echo "size=$imgsize" >> /$tmpltfs/template.properties
 
-if [ "$cleanup" == "true" ]
+if [[ "$cleanup" == "true" ]] && [[ $cloud != "true" ]]
 then
   rm -f $tmpltimg
 fi

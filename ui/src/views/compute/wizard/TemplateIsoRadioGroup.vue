@@ -23,23 +23,36 @@
       size="small"
       :dataSource="osList"
       :pagination="false">
-      <a-list-item slot="renderItem" slot-scope="os, osIndex" key="os.id" @click="onClickRow(os)">
-        <a-radio-group
-          class="radio-group"
-          :key="osIndex"
-          v-model="value"
-          @change="($event) => updateSelectionTemplateIso($event.target.value)">
-          <a-radio
-            class="radio-group__radio"
-            :value="os.id">
-            {{ os.displaytext }}&nbsp;
-            <os-logo
-              class="radio-group__os-logo"
-              :osId="os.ostypeid"
-              :os-name="os.osName" />
-          </a-radio>
-        </a-radio-group>
-      </a-list-item>
+      <template #renderItem="{ item, index }">
+        <a-list-item :key="item.id" @click="onClickRow(item)">
+          <a-radio-group
+            class="radio-group"
+            :key="index"
+            v-model:value="value"
+            @change="($event) => updateSelectionTemplateIso($event.target.value)">
+            <a-radio
+              class="radio-group__radio"
+              :value="item.id">
+              <resource-icon
+                v-if="item.icon && item.icon.base64image"
+                class="radio-group__os-logo"
+                :image="item.icon.base64image"
+                size="2x" />
+              <os-logo
+                v-else
+                class="radio-group__os-logo"
+                size="2x"
+                :osId="item.ostypeid"
+                :os-name="item.osName" />
+              &nbsp;
+              {{ item.displaytext }}
+              <span v-if="item?.projectid">
+                | <project-outlined /> {{ item.project }}
+            </span>
+            </a-radio>
+          </a-radio-group>
+        </a-list-item>
+      </template>
     </a-list>
 
     <div style="display: block; text-align: right;">
@@ -53,7 +66,7 @@
         @change="onChangePage"
         @showSizeChange="onChangePageSize"
         showSizeChanger>
-        <template slot="buildOptionText" slot-scope="props">
+        <template #buildOptionText="props">
           <span>{{ props.value }} / {{ $t('label.page') }}</span>
         </template>
       </a-pagination>
@@ -63,10 +76,14 @@
 
 <script>
 import OsLogo from '@/components/widgets/OsLogo'
+import ResourceIcon from '@/components/view/ResourceIcon'
 
 export default {
   name: 'TemplateIsoRadioGroup',
-  components: { OsLogo },
+  components: {
+    OsLogo,
+    ResourceIcon
+  },
   props: {
     osList: {
       type: Array,
@@ -92,6 +109,7 @@ export default {
   data () {
     return {
       value: '',
+      image: '',
       options: {
         page: 1,
         pageSize: 10
@@ -142,20 +160,16 @@ export default {
   .radio-group {
     margin: 0.5rem 0;
 
-    /deep/.ant-radio {
-      margin-right: 20px;
+    :deep(.ant-radio) {
+      margin-right: 0px;
     }
 
     &__os-logo {
-      position: absolute;
-      top: 0;
-      left: 0;
-      margin-top: 2px;
-      margin-left: 23px;
+      margin-top: -4px;
     }
   }
 
-  /deep/.ant-spin-container {
+  :deep(.ant-spin-container) {
     max-height: 200px;
     overflow-y: auto;
   }
@@ -165,7 +179,7 @@ export default {
     float: right;
   }
 
-  /deep/.ant-list-split .ant-list-item {
+  :deep(.ant-list-split) .ant-list-item {
     cursor: pointer;
   }
 </style>

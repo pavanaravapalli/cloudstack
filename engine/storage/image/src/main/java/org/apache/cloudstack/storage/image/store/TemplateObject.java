@@ -23,7 +23,12 @@ import java.util.Map;
 
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
+import com.cloud.cpu.CPU;
+import com.cloud.storage.StorageManager;
+import com.cloud.user.UserData;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import org.apache.cloudstack.engine.subsystem.api.storage.DataObjectInStore;
 import org.apache.cloudstack.engine.subsystem.api.storage.DataStore;
@@ -54,11 +59,11 @@ import com.cloud.utils.component.ComponentContext;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.utils.fsm.NoTransitionException;
 
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
 @SuppressWarnings("serial")
 public class TemplateObject implements TemplateInfo {
-    private static final Logger s_logger = Logger.getLogger(TemplateObject.class);
+    protected Logger logger = LogManager.getLogger(getClass());
     private VMTemplateVO imageVO;
     private DataStore dataStore;
     private String url;
@@ -72,11 +77,17 @@ public class TemplateObject implements TemplateInfo {
     VMTemplatePoolDao templatePoolDao;
     @Inject
     TemplateDataStoreDao templateStoreDao;
+    final private boolean followRedirects;
 
     public TemplateObject() {
+        this.followRedirects = StorageManager.DataStoreDownloadFollowRedirects.value();
     }
 
     protected void configure(VMTemplateVO template, DataStore dataStore) {
+        if (template == null) {
+            String msg = String.format("Template Object is not properly initialised %s", this.toString());
+            logger.warn(msg);
+        }
         imageVO = template;
         this.dataStore = dataStore;
     }
@@ -92,7 +103,12 @@ public class TemplateObject implements TemplateInfo {
         imageVO.setSize(size);
     }
 
+    @Override
     public VMTemplateVO getImage() {
+        if (imageVO == null) {
+            String msg = String.format("Template Object is not properly initialised %s", this.toString());
+            logger.error(msg);
+        } // somehow the nullpointer is needed : refacter needed!?!
         return imageVO;
     }
 
@@ -137,26 +153,17 @@ public class TemplateObject implements TemplateInfo {
         if (dataStore == null) {
             return imageVO.getSize();
         }
-
-        /*
-         *
-         * // If the template that was passed into this allocator is not
-         * installed in the storage pool, // add 3 * (template size on secondary
-         * storage) to the running total VMTemplateHostVO templateHostVO =
-         * _storageMgr.findVmTemplateHost(templateForVmCreation.getId(), null);
-         *
-         * if (templateHostVO == null) { VMTemplateSwiftVO templateSwiftVO =
-         * _swiftMgr.findByTmpltId(templateForVmCreation.getId()); if
-         * (templateSwiftVO != null) { long templateSize =
-         * templateSwiftVO.getPhysicalSize(); if (templateSize == 0) {
-         * templateSize = templateSwiftVO.getSize(); } totalAllocatedSize +=
-         * (templateSize + _extraBytesPerVolume); } } else { long templateSize =
-         * templateHostVO.getPhysicalSize(); if ( templateSize == 0 ){
-         * templateSize = templateHostVO.getSize(); } totalAllocatedSize +=
-         * (templateSize + _extraBytesPerVolume); }
-         */
         VMTemplateVO image = imageDao.findById(imageVO.getId());
         return image.getSize();
+    }
+
+    @Override
+    public long getPhysicalSize() {
+        TemplateDataStoreVO templateDataStoreVO = templateStoreDao.findByTemplate(imageVO.getId(), DataStoreRole.Image);
+        if (templateDataStoreVO != null) {
+            return templateDataStoreVO.getPhysicalSize();
+        }
+        return imageVO.getSize();
     }
 
     @Override
@@ -251,10 +258,10 @@ public class TemplateObject implements TemplateInfo {
             }
             objectInStoreMgr.update(this, event);
         } catch (NoTransitionException e) {
-            s_logger.debug("failed to update state", e);
+            logger.debug("failed to update state", e);
             throw new CloudRuntimeException("Failed to update state" + e.toString());
         } catch (Exception ex) {
-            s_logger.debug("failed to process event and answer", ex);
+            logger.debug("failed to process event and answer", ex);
             objectInStoreMgr.delete(this);
             throw new CloudRuntimeException("Failed to process event", ex);
         } finally {
@@ -269,7 +276,7 @@ public class TemplateObject implements TemplateInfo {
      * In the case of managed storage, the install path may already be specified (by the storage plug-in), so do not overwrite it.
      */
     private void setInstallPathIfNeeded(TemplateObjectTO template, VMTemplateStoragePoolVO templatePoolRef) {
-        if (Strings.isNullOrEmpty(templatePoolRef.getInstallPath())) {
+        if (StringUtils.isEmpty(templatePoolRef.getInstallPath())) {
             templatePoolRef.setInstallPath(template.getPath());
         }
     }
@@ -278,7 +285,7 @@ public class TemplateObject implements TemplateInfo {
      * In the case of managed storage, the local download path may already be specified (by the storage plug-in), so do not overwrite it.
      */
     private void setDownloadPathIfNeeded(TemplateObjectTO template, VMTemplateStoragePoolVO templatePoolRef) {
-        if (Strings.isNullOrEmpty(templatePoolRef.getLocalDownloadPath())) {
+        if (StringUtils.isEmpty(templatePoolRef.getLocalDownloadPath())) {
             templatePoolRef.setLocalDownloadPath(template.getPath());
         }
     }
@@ -334,6 +341,26 @@ public class TemplateObject implements TemplateInfo {
     @Override
     public String getDeployAsIsConfiguration() {
         return deployAsIsConfiguration;
+    }
+
+    @Override
+    public Long getUserDataId() {
+        return imageVO.getUserDataId();
+    }
+
+    @Override
+    public UserData.UserDataOverridePolicy getUserDataOverridePolicy() {
+        return imageVO.getUserDataOverridePolicy();
+    }
+
+    @Override
+    public CPU.CPUArch getArch() {
+        return imageVO.getArch();
+    }
+
+    @Override
+    public Long getExtensionId() {
+        return imageVO.getExtensionId();
     }
 
     @Override
@@ -396,7 +423,7 @@ public class TemplateObject implements TemplateInfo {
         // Marking downloaded templates for deletion, but might skip any deletion handled for failed templates.
         // Only templates not downloaded and in error state (with no install path) cannot be deleted from the datastore, so doesn't impact last behavior for templates with other states
         if (downloadStatus == null  || downloadStatus == Status.NOT_DOWNLOADED || (downloadStatus == Status.DOWNLOAD_ERROR && downloadPercent == 0)) {
-            s_logger.debug("Template: " + getId() + " cannot be deleted from the store: " + getDataStore().getId());
+            logger.debug("Template: " + getId() + " cannot be deleted from the store: " + getDataStore().getId());
             return false;
         }
 
@@ -409,6 +436,11 @@ public class TemplateObject implements TemplateInfo {
             return false;
         }
         return this.imageVO.isDeployAsIs();
+    }
+
+    @Override
+    public boolean isForCks() {
+        return imageVO.isForCks();
     }
 
     public void setInstallPath(String installPath) {
@@ -570,5 +602,17 @@ public class TemplateObject implements TemplateInfo {
     public Date getUpdated() {
         // TODO Auto-generated method stub
         return null;
+    }
+
+    @Override
+    public boolean isFollowRedirects() {
+        return followRedirects;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("TemplateObject %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "imageVO", "dataStore"));
     }
 }

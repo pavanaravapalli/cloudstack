@@ -16,27 +16,44 @@
 // under the License.
 
 <template>
-  <div class="form">
+  <div class="form" v-ctrl-enter="submitData">
     <div v-if="loading" class="loading">
-      <a-icon type="loading"></a-icon>
+      <loading-outlined />
     </div>
 
     <div class="form__item">
       <p class="form__label">{{ $t('label.operation') }}</p>
-      <a-select v-model="selectedOperation" :defaultValue="$t('label.add')" @change="fetchData">
-        <a-select-option :value="$t('label.add')">{{ $t('label.add') }}</a-select-option>
-        <a-select-option :value="$t('label.remove')">{{ $t('label.remove') }}</a-select-option>
-        <a-select-option :value="$t('label.reset')">{{ $t('label.reset') }}</a-select-option>
+      <a-select
+        v-model:value="selectedOperation"
+        :defaultValue="'add'"
+        @change="fetchData"
+        v-focus="true"
+        showSearch
+        optionFilterProp="value"
+        :filterOption="(input, option) => {
+          return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+        }" >
+        <a-select-option :value="'add'">{{ $t('label.add') }}</a-select-option>
+        <a-select-option :value="'remove'">{{ $t('label.remove') }}</a-select-option>
+        <a-select-option :value="'reset'">{{ $t('label.reset') }}</a-select-option>
       </a-select>
     </div>
 
-    <template v-if="selectedOperation !== $t('label.reset')">
+    <template v-if="selectedOperation !== 'reset'">
       <div class="form__item">
         <p class="form__label">
           <span class="required">*</span>
           {{ $t('label.sharewith') }}
         </p>
-        <a-select v-model="selectedShareWith" :defaultValue="$t('label.account')" @change="fetchData">
+        <a-select
+          v-model:value="selectedShareWith"
+          :defaultValue="$t('label.account')"
+          @change="fetchData"
+          showSearch
+          optionFilterProp="value"
+          :filterOption="(input, option) => {
+            return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }">
           <a-select-option :value="$t('label.account')">{{ $t('label.account') }}</a-select-option>
           <a-select-option :value="$t('label.project')">{{ $t('label.project') }}</a-select-option>
         </a-select>
@@ -51,16 +68,25 @@
             <a-select
               mode="multiple"
               placeholder="Select Accounts"
-              :value="selectedAccounts"
+              v-model:value="selectedAccounts"
               @change="handleChange"
-              style="width: 100%">
-              <a-select-option v-for="account in accountsList" :key="account.name">
-                {{ account.name }}
+              style="width: 100%"
+              showSearch
+              optionFilterProp="label"
+              :filterOption="(input, option) => {
+                return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }" >
+              <a-select-option v-for="account in accountsList" :key="account.name" :label="account.name">
+                <span>
+                  <resource-icon v-if="account.icon" :image="account.icon.base64image" size="1x" style="margin-right: 5px"/>
+                  <team-outlined v-else style="margin-right: 5px" />
+                  {{ account.name }}
+                </span>
               </a-select-option>
             </a-select>
           </div>
           <div v-else>
-            <a-input v-model="selectedAccountsList" :placeholder="$t('label.comma.separated.list.description')"></a-input>
+            <a-input v-model:value="selectedAccountsList" :placeholder="$t('label.comma.separated.list.description')"></a-input>
           </div>
         </div>
       </template>
@@ -73,28 +99,35 @@
           <a-select
             mode="multiple"
             :placeholder="$t('label.select.projects')"
-            :value="selectedProjects"
+            v-model:value="selectedProjects"
             @change="handleChange"
-            style="width: 100%">
-            <a-select-option v-for="project in projectsList" :key="project.name">
-              {{ project.name }}
+            style="width: 100%"
+            showSearch
+            optionFilterProp="label"
+            :filterOption="(input, option) => {
+              return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }" >
+            <a-select-option v-for="project in projectsList" :key="project.name" :label="project.name">
+              <span>
+                <resource-icon v-if="project.icon" :image="project.icon.base64image" size="1x" style="margin-right: 5px"/>
+                <project-outlined v-else style="margin-right: 5px" />
+                {{ project.name }}
+              </span>
             </a-select-option>
           </a-select>
         </div>
       </template>
     </template>
-    <div class="actions">
-      <a-button @click="closeModal">
-        {{ $t('label.cancel') }}
-      </a-button>
-      <a-button type="primary" @click="submitData">
-        {{ $t('label.ok') }}
-      </a-button>
+
+    <div :span="24" class="action-button">
+      <a-button @click="closeModal">{{ $t('label.cancel') }}</a-button>
+      <a-button type="primary" ref="submit" @click="submitData">{{ $t('label.ok') }}</a-button>
     </div>
   </div>
 </template>
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
+import ResourceIcon from '@/components/view/ResourceIcon'
 
 export default {
   name: 'UpdateTemplateIsoPermissions',
@@ -103,6 +136,9 @@ export default {
       type: Object,
       required: true
     }
+  },
+  components: {
+    ResourceIcon
   },
   inject: ['parentFetchData'],
   data () {
@@ -114,7 +150,7 @@ export default {
       selectedAccounts: [],
       selectedProjects: [],
       selectedAccountsList: '',
-      selectedOperation: this.$t('label.add'),
+      selectedOperation: 'add',
       selectedShareWith: this.$t('label.account'),
       accountError: false,
       projectError: false,
@@ -127,7 +163,7 @@ export default {
     accountsList () {
       return this.accounts.length > 0 ? this.accounts
         .filter(a =>
-          this.selectedOperation === this.$t('label.add')
+          this.selectedOperation === 'add'
             ? !this.permittedAccounts.includes(a.name)
             : this.permittedAccounts.includes(a.name)
         ) : this.accounts
@@ -135,13 +171,13 @@ export default {
     projectsList () {
       return this.projects > 0 ? this.projects
         .filter(p =>
-          this.selectedOperation === this.$t('label.add')
+          this.selectedOperation === 'add'
             ? !this.permittedProjects.includes(p.id)
             : this.permittedProjects.includes(p.id)
         ) : this.projects
     }
   },
-  mounted () {
+  created () {
     this.isImageTypeIso = this.$route.meta.name === 'iso'
     this.fetchData()
   },
@@ -163,8 +199,9 @@ export default {
     },
     fetchAccounts () {
       this.loading = true
-      api('listAccounts', {
-        listall: true
+      getAPI('listAccounts', {
+        domainid: this.resource.domainid,
+        showicon: true
       }).then(response => {
         this.accounts = response.listaccountsresponse.account.filter(account => account.name !== this.resource.account)
       }).finally(e => {
@@ -172,8 +209,9 @@ export default {
       })
     },
     fetchProjects () {
-      api('listProjects', {
+      getAPI('listProjects', {
         details: 'min',
+        showicon: true,
         listall: true
       }).then(response => {
         this.projects = response.listprojectsresponse.project
@@ -183,7 +221,7 @@ export default {
     },
     fetchTemplatePermissions () {
       this.loading = true
-      api('listTemplatePermissions', {
+      getAPI('listTemplatePermissions', {
         id: this.resource.id
       }).then(response => {
         const permission = response.listtemplatepermissionsresponse.templatepermission
@@ -199,7 +237,7 @@ export default {
     },
     fetchIsoPermissions () {
       this.loading = true
-      api('listIsoPermissions', {
+      getAPI('listIsoPermissions', {
         id: this.resource.id
       }).then(response => {
         const permission = response.listtemplatepermissionsresponse.templatepermission
@@ -214,7 +252,7 @@ export default {
       })
     },
     handleChange (selectedItems) {
-      if (this.selectedOperation === this.$t('label.add') || this.selectedOperation === this.$t('label.remove')) {
+      if (this.selectedOperation === 'add' || this.selectedOperation === 'remove') {
         if (this.selectedShareWith === this.$t('label.account')) {
           this.selectedAccounts = selectedItems
         } else {
@@ -223,9 +261,10 @@ export default {
       }
     },
     closeModal () {
-      this.$parent.$parent.close()
+      this.$emit('close-action')
     },
     submitData () {
+      if (this.loading) return
       let variableKey = ''
       let variableValue = ''
       if (this.selectedShareWith === this.$t('label.account')) {
@@ -242,7 +281,7 @@ export default {
       this.loading = true
       const apiName = this.isImageTypeIso ? 'updateIsoPermissions' : 'updateTemplatePermissions'
       const resourceType = this.isImageTypeIso ? 'ISO' : 'template'
-      api(apiName, {
+      postAPI(apiName, {
         [variableKey]: variableValue,
         id: this.resource.id,
         ispublic: this.resource.isPublic,
@@ -287,16 +326,6 @@ export default {
       margin-bottom: 5px;
     }
 
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 20px;
-    button {
-      &:not(:last-child) {
-        margin-right: 10px;
-      }
-    }
   }
 
   .required {

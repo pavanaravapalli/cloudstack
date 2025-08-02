@@ -5,9 +5,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -175,19 +175,19 @@ class TestEgressAfterHostMaintenance(cloudstackTestCase):
         self.debug("Created security group with ID: %s" % security_group.id)
 
         # Default Security group should not have any ingress rule
-        sercurity_groups = SecurityGroup.list(
+        security_groups = SecurityGroup.list(
                                         self.apiclient,
                                         account=self.account.name,
                                         domainid=self.account.domainid
                                       )
         self.assertEqual(
-                         isinstance(sercurity_groups, list),
+                         isinstance(security_groups, list),
                          True,
                          "Check for list security groups response"
                          )
 
         self.assertEqual(
-                            len(sercurity_groups),
+                            len(security_groups),
                             2,
                             "Check List Security groups response"
                             )

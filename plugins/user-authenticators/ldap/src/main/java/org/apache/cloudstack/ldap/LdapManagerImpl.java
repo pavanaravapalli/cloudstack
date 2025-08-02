@@ -21,10 +21,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
+import javax.naming.ConfigurationException;
 import javax.naming.NamingException;
 import javax.naming.ldap.LdapContext;
+import java.util.Map;
 import java.util.UUID;
 
+import com.cloud.user.AccountManager;
+import com.cloud.user.DomainManager;
+import com.cloud.utils.component.ComponentLifecycleBase;
 import com.cloud.utils.exception.CloudRuntimeException;
 import org.apache.cloudstack.api.LdapValidator;
 import org.apache.cloudstack.api.command.LDAPConfigCmd;
@@ -42,10 +47,11 @@ import org.apache.cloudstack.api.response.LdapConfigurationResponse;
 import org.apache.cloudstack.api.response.LdapUserResponse;
 import org.apache.cloudstack.api.response.LinkAccountToLdapResponse;
 import org.apache.cloudstack.api.response.LinkDomainToLdapResponse;
+import org.apache.cloudstack.framework.messagebus.MessageBus;
+import org.apache.cloudstack.framework.messagebus.MessageSubscriber;
 import org.apache.cloudstack.ldap.dao.LdapConfigurationDao;
 import org.apache.cloudstack.ldap.dao.LdapTrustMapDao;
 import org.apache.commons.lang.Validate;
-import org.apache.log4j.Logger;
 import org.springframework.stereotype.Component;
 
 import com.cloud.domain.DomainVO;
@@ -57,8 +63,7 @@ import com.cloud.user.dao.AccountDao;
 import com.cloud.utils.Pair;
 
 @Component
-public class LdapManagerImpl implements LdapManager, LdapValidator {
-    private static final Logger LOGGER = Logger.getLogger(LdapManagerImpl.class.getName());
+public class LdapManagerImpl extends ComponentLifecycleBase implements LdapManager, LdapValidator {
 
     @Inject
     private LdapConfigurationDao _ldapConfigurationDao;
@@ -80,6 +85,9 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
     @Inject
     LdapTrustMapDao _ldapTrustMapDao;
 
+    @Inject
+    private MessageBus messageBus;
+
     public LdapManagerImpl() {
         super();
     }
@@ -94,6 +102,59 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
     }
 
     @Override
+    public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
+        super.configure(name, params);
+        logger.debug("Configuring LDAP Manager");
+
+        addAccountRemovalListener();
+        addDomainRemovalListener();
+
+        return true;
+    }
+
+    private void addAccountRemovalListener() {
+        messageBus.subscribe(AccountManager.MESSAGE_REMOVE_ACCOUNT_EVENT, new MessageSubscriber() {
+            @Override
+            public void onPublishMessage(String senderAddress, String subject, Object args) {
+                try {
+                    final Account account = accountDao.findByIdIncludingRemoved((Long) args);
+                    long domainId = account.getDomainId();
+                    LdapTrustMapVO ldapTrustMapVO = _ldapTrustMapDao.findByAccount(domainId, account.getAccountId());
+                    if (ldapTrustMapVO != null) {
+                        removeTrustmap(ldapTrustMapVO);
+                    }
+                } catch (final Exception e) {
+                    logger.error("Caught exception while removing account linked to LDAP", e);
+                }
+            }
+        });
+    }
+
+    private void addDomainRemovalListener() {
+        messageBus.subscribe(DomainManager.MESSAGE_REMOVE_DOMAIN_EVENT, new MessageSubscriber() {
+            @Override
+            public void onPublishMessage(String senderAddress, String subject, Object args) {
+                try {
+                    long domainId = ((DomainVO) args).getId();
+                    List<LdapTrustMapVO> ldapTrustMapVOs = _ldapTrustMapDao.searchByDomainId(domainId);
+                    for (LdapTrustMapVO ldapTrustMapVO : ldapTrustMapVOs) {
+                        removeTrustmap(ldapTrustMapVO);
+                    }
+                } catch (final Exception e) {
+                    logger.error("Caught exception while removing trust-map for domain linked to LDAP", e);
+                }
+            }
+        });
+    }
+
+    private void removeTrustmap(LdapTrustMapVO ldapTrustMapVO) {
+        String msg = String.format("Removing link between LDAP: %s - type: %s  and account: %s on domain: %s",
+                ldapTrustMapVO.getName(), ldapTrustMapVO.getType().name(), ldapTrustMapVO.getAccountId(), ldapTrustMapVO.getDomainId());
+        logger.debug(msg);
+        _ldapTrustMapDao.remove(ldapTrustMapVO.getId());
+    }
+
+    @Override
     public LdapConfigurationResponse addConfiguration(final LdapAddConfigurationCmd cmd) throws InvalidParameterValueException {
         return addConfigurationInternal(cmd.getHostname(),cmd.getPort(),cmd.getDomainId());
     }
@@ -105,7 +166,7 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
 
     private LdapConfigurationResponse addConfigurationInternal(final String hostname, int port, final Long domainId) throws InvalidParameterValueException {
         // TODO evaluate what the right default should be
-        if(port <= 0) {
+        if (port <= 0) {
             port = 389;
         }
 
@@ -118,11 +179,16 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
                 context = _ldapContextFactory.createBindContext(providerUrl,domainId);
                 configuration = new LdapConfigurationVO(hostname, port, domainId);
                 _ldapConfigurationDao.persist(configuration);
-                LOGGER.info("Added new ldap server with url: " + providerUrl + (domainId == null ? "": " for domain " + domainId));
+                logger.info("Added new ldap server with url: " + providerUrl + (domainId == null ? "": " for domain " + domainId));
                 return createLdapConfigurationResponse(configuration);
             } catch (NamingException | IOException e) {
-                LOGGER.debug("NamingException while doing an LDAP bind", e);
+                logger.debug("NamingException while doing an LDAP bind", e);
                 throw new InvalidParameterValueException("Unable to bind to the given LDAP server");
+            } catch (RuntimeException e) {
+                if (e.getMessage().contains("Invalid truststore")) {
+                    throw new InvalidParameterValueException("Invalid truststore or truststore password");
+                }
+                throw e;
             } finally {
                 closeContext(context);
             }
@@ -144,13 +210,13 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             // TODO return the right account for this user
             final LdapContext context = _ldapContextFactory.createUserContext(principal, password, domainId);
             closeContext(context);
-            if(LOGGER.isTraceEnabled()) {
-                LOGGER.trace(String.format("User(%s) authenticated for domain(%s)", principal, domainId));
+            if (logger.isTraceEnabled()) {
+                logger.trace(String.format("User(%s) authenticated for domain(%s)", principal, domainId));
             }
             return true;
         } catch (NamingException | IOException e) {/* AuthenticationException is caught as NamingException */
-            LOGGER.debug("Exception while doing an LDAP bind for user "+" "+principal, e);
-            LOGGER.info("Failed to authenticate user: " + principal + ". incorrect password.");
+            logger.debug("Exception while doing an LDAP bind for user "+" "+principal, e);
+            logger.info("Failed to authenticate user: " + principal + ". incorrect password.");
             return false;
         }
     }
@@ -161,14 +227,14 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
                 context.close();
             }
         } catch (final NamingException e) {
-            LOGGER.warn(e.getMessage(), e);
+            logger.warn(e.getMessage(), e);
         }
     }
 
     @Override
     public LdapConfigurationResponse createLdapConfigurationResponse(final LdapConfigurationVO configuration) {
         String domainUuid = null;
-        if(configuration.getDomainId() != null) {
+        if (configuration.getDomainId() != null) {
             DomainVO domain = domainDao.findById(configuration.getDomainId());
             if (domain != null) {
                 domainUuid = domain.getUuid();
@@ -205,7 +271,7 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             throw new InvalidParameterValueException("Cannot find configuration with hostname " + hostname);
         } else {
             _ldapConfigurationDao.remove(configuration.getId());
-            LOGGER.info("Removed ldap server with url: " + hostname + ':' + port + (domainId == null ? "" : " for domain id " + domainId));
+            logger.info("Removed ldap server with url: " + hostname + ':' + port + (domainId == null ? "" : " for domain id " + domainId));
             return createLdapConfigurationResponse(configuration);
         }
     }
@@ -237,8 +303,8 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             return _ldapUserManagerFactory.getInstance(_ldapConfiguration.getLdapProvider(null)).getUser(escapedUsername, context, domainId);
 
         } catch (NamingException | IOException e) {
-            LOGGER.debug("ldap Exception: ",e);
-            throw new NoLdapUserMatchingQueryException("No Ldap User found for username: "+username);
+            logger.debug("LDAP Exception: ", e);
+            throw new NoLdapUserMatchingQueryException("Unable to find LDAP User for username: " + username + ", due to " + e.getMessage());
         } finally {
             closeContext(context);
         }
@@ -258,8 +324,8 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             LdapUserManager userManagerFactory = _ldapUserManagerFactory.getInstance(ldapProvider);
             return userManagerFactory.getUser(escapedUsername, type, name, context, domainId);
         } catch (NamingException | IOException e) {
-            LOGGER.debug("ldap Exception: ",e);
-            throw new NoLdapUserMatchingQueryException("No Ldap User found for username: "+username + " in group: " + name + " of type: " + type);
+            logger.debug("LDAP Exception: ", e);
+            throw new NoLdapUserMatchingQueryException("Unable to find LDAP User for username: " + username + " in group: " + name + " of type: " + type + ", due to " + e.getMessage());
         } finally {
             closeContext(context);
         }
@@ -272,7 +338,7 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             context = _ldapContextFactory.createBindContext(domainId);
             return _ldapUserManagerFactory.getInstance(_ldapConfiguration.getLdapProvider(domainId)).getUsers(context, domainId);
         } catch (NamingException | IOException e) {
-            LOGGER.debug("ldap Exception: ",e);
+            logger.debug("LDAP Exception: ", e);
             throw new NoLdapUserMatchingQueryException("*");
         } finally {
             closeContext(context);
@@ -286,7 +352,7 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             context = _ldapContextFactory.createBindContext(domainId);
             return _ldapUserManagerFactory.getInstance(_ldapConfiguration.getLdapProvider(domainId)).getUsersInGroup(groupName, context, domainId);
         } catch (NamingException | IOException e) {
-            LOGGER.debug("ldap NamingException: ",e);
+            logger.debug("LDAP Exception: ", e);
             throw new NoLdapUserMatchingQueryException("groupName=" + groupName);
         } finally {
             closeContext(context);
@@ -324,7 +390,7 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
             final String escapedUsername = LdapUtils.escapeLDAPSearchFilter(username);
             return _ldapUserManagerFactory.getInstance(_ldapConfiguration.getLdapProvider(null)).getUsers("*" + escapedUsername + "*", context, null);
         } catch (NamingException | IOException e) {
-            LOGGER.debug("ldap Exception: ",e);
+            logger.debug("LDAP Exception: ",e);
             throw new NoLdapUserMatchingQueryException(username);
         } finally {
             closeContext(context);
@@ -342,22 +408,22 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
         return linkDomainToLdap(cmd.getDomainId(),cmd.getType(), ldapDomain,cmd.getAccountType());
     }
 
-    private LinkDomainToLdapResponse linkDomainToLdap(Long domainId, String type, String name, short accountType) {
+    private LinkDomainToLdapResponse linkDomainToLdap(Long domainId, String type, String name, Account.Type accountType) {
         Validate.notNull(type, "type cannot be null. It should either be GROUP or OU");
         Validate.notNull(domainId, "domainId cannot be null.");
         Validate.notEmpty(name, "GROUP or OU name cannot be empty");
         //Account type should be 0 or 2. check the constants in com.cloud.user.Account
-        Validate.isTrue(accountType==0 || accountType==2, "accountype should be either 0(normal user) or 2(domain admin)");
+        Validate.isTrue(accountType== Account.Type.NORMAL || accountType== Account.Type.DOMAIN_ADMIN, "accountype should be either 0(normal user) or 2(domain admin)");
         LinkType linkType = LdapManager.LinkType.valueOf(type.toUpperCase());
         LdapTrustMapVO vo = _ldapTrustMapDao.persist(new LdapTrustMapVO(domainId, linkType, name, accountType, 0));
         DomainVO domain = domainDao.findById(vo.getDomainId());
         String domainUuid = "<unknown>";
         if (domain == null) {
-            LOGGER.error("no domain in database for id " + vo.getDomainId());
+            logger.error("no domain in database for id " + vo.getDomainId());
         } else {
             domainUuid = domain.getUuid();
         }
-        LinkDomainToLdapResponse response = new LinkDomainToLdapResponse(domainUuid, vo.getType().toString(), vo.getName(), vo.getAccountType());
+        LinkDomainToLdapResponse response = new LinkDomainToLdapResponse(domainUuid, vo.getType().toString(), vo.getName(), vo.getAccountType().ordinal());
         return response;
     }
 
@@ -388,11 +454,12 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
         Validate.notEmpty(cmd.getLdapDomain(), "ldapDomain cannot be empty, please supply a GROUP or OU name");
         Validate.notNull(cmd.getType(), "type cannot be null. It should either be GROUP or OU");
         Validate.notEmpty(cmd.getLdapDomain(), "GROUP or OU name cannot be empty");
+        Validate.isTrue(cmd.getAccountType() != null || cmd.getRoleId() != null, "Either account type or role ID must be given");
 
         LinkType linkType = LdapManager.LinkType.valueOf(cmd.getType().toUpperCase());
         Account account = accountDao.findActiveAccount(cmd.getAccountName(),cmd.getDomainId());
         if (account == null) {
-            account = new AccountVO(cmd.getAccountName(), cmd.getDomainId(), null, cmd.getAccountType(), UUID.randomUUID().toString());
+            account = new AccountVO(cmd.getAccountName(), cmd.getDomainId(), null, cmd.getAccountType(), cmd.getRoleId(), UUID.randomUUID().toString());
             accountDao.persist((AccountVO)account);
         }
 
@@ -402,35 +469,35 @@ public class LdapManagerImpl implements LdapManager, LdapValidator {
         DomainVO domain = domainDao.findById(vo.getDomainId());
         String domainUuid = "<unknown>";
         if (domain == null) {
-            LOGGER.error("no domain in database for id " + vo.getDomainId());
+            logger.error("no domain in database for id " + vo.getDomainId());
         } else {
             domainUuid = domain.getUuid();
         }
 
-        LinkAccountToLdapResponse response = new LinkAccountToLdapResponse(domainUuid, vo.getType().toString(), vo.getName(), vo.getAccountType(), account.getUuid(), cmd.getAccountName());
+        LinkAccountToLdapResponse response = new LinkAccountToLdapResponse(domainUuid, vo.getType().toString(), vo.getName(), vo.getAccountType().ordinal(), account.getUuid(), cmd.getAccountName());
         return response;
     }
 
     private void clearOldAccountMapping(LinkAccountToLdapCmd cmd) {
         //        first find if exists log warning and update
         LdapTrustMapVO oldVo = _ldapTrustMapDao.findGroupInDomain(cmd.getDomainId(), cmd.getLdapDomain());
-        if(oldVo != null) {
+        if (oldVo != null) {
             // deal with edge cases, i.e. check if the old account is indeed deleted etc.
             if (oldVo.getAccountId() != 0l) {
                 AccountVO oldAcount = accountDao.findByIdIncludingRemoved(oldVo.getAccountId());
                 String msg = String.format("group %s is mapped to account %d in the current domain (%s)", cmd.getLdapDomain(), oldVo.getAccountId(), cmd.getDomainId());
                 if (null == oldAcount.getRemoved()) {
                     msg += ", delete the old map before mapping a new account to the same group.";
-                    LOGGER.error(msg);
+                    logger.error(msg);
                     throw new CloudRuntimeException(msg);
                 } else {
                     msg += ", the old map is deleted.";
-                    LOGGER.warn(msg);
+                    logger.warn(msg);
                     _ldapTrustMapDao.expunge(oldVo.getId());
                 }
             } else {
                 String msg = String.format("group %s is mapped to the current domain (%s) for autoimport and can not be used for autosync", cmd.getLdapDomain(), cmd.getDomainId());
-                LOGGER.error(msg);
+                logger.error(msg);
                 throw new CloudRuntimeException(msg);
             }
         }

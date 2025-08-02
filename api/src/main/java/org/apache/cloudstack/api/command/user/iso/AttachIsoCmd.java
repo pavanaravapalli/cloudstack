@@ -16,7 +16,7 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.iso;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -38,7 +38,6 @@ import com.cloud.uservm.UserVm;
 @APICommand(name = "attachIso", description = "Attaches an ISO to a virtual machine.", responseObject = UserVmResponse.class, responseView = ResponseView.Restricted,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = true)
 public class AttachIsoCmd extends BaseAsyncCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(AttachIsoCmd.class.getName());
 
     private static final String s_name = "attachisoresponse";
 
@@ -54,6 +53,10 @@ public class AttachIsoCmd extends BaseAsyncCmd implements UserCmd {
             required = true, description = "the ID of the virtual machine")
     protected Long virtualMachineId;
 
+    @Parameter(name = ApiConstants.FORCED, type = CommandType.BOOLEAN,
+            description = "If true, ejects existing ISO before attaching on VMware. Default: false", since = "4.15.1")
+    protected Boolean forced;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -64,6 +67,10 @@ public class AttachIsoCmd extends BaseAsyncCmd implements UserCmd {
 
     public Long getVirtualMachineId() {
         return virtualMachineId;
+    }
+
+    public Boolean isForced() {
+        return forced != null;
     }
 
     /////////////////////////////////////////////////////
@@ -96,9 +103,19 @@ public class AttachIsoCmd extends BaseAsyncCmd implements UserCmd {
     }
 
     @Override
+    public Long getApiResourceId() {
+        return virtualMachineId;
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
+    }
+
+    @Override
     public void execute() {
         CallContext.current().setEventDetails("Vm Id: " + getVirtualMachineId() + " ISO ID: " + getId());
-        boolean result = _templateService.attachIso(id, virtualMachineId);
+        boolean result = _templateService.attachIso(id, virtualMachineId, isForced());
         if (result) {
             UserVm userVm = _responseGenerator.findUserVmById(virtualMachineId);
             if (userVm != null) {

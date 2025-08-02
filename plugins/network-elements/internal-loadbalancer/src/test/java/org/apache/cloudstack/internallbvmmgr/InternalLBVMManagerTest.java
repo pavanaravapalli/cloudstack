@@ -31,7 +31,7 @@ import org.apache.cloudstack.network.lb.InternalLoadBalancerVMManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -58,7 +58,6 @@ import com.cloud.offerings.NetworkOfferingVO;
 import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.service.dao.ServiceOfferingDao;
-import com.cloud.storage.Storage;
 import com.cloud.storage.Storage.ProvisioningType;
 import com.cloud.user.AccountManager;
 import com.cloud.user.AccountVO;
@@ -121,7 +120,7 @@ public class InternalLBVMManagerTest extends TestCase {
         //mock system offering creation as it's used by configure() method called by initComponentsLifeCycle
         Mockito.when(_accountMgr.getAccount(1L)).thenReturn(new AccountVO());
         ServiceOfferingVO off = new ServiceOfferingVO("alena", 1, 1,
-                1, 1, 1, false, "alena", Storage.ProvisioningType.THIN, false, false, null, false, VirtualMachine.Type.InternalLoadBalancerVm, false);
+                1, 1, 1, false, "alena", false, VirtualMachine.Type.InternalLoadBalancerVm, false);
         off = setId(off, 1);
         List<ServiceOfferingVO> list = new ArrayList<ServiceOfferingVO>();
         list.add(off);
@@ -165,15 +164,15 @@ public class InternalLBVMManagerTest extends TestCase {
         }
 
         createNetwork();
-        Mockito.when(_ntwkModel.getNetwork(Matchers.anyLong())).thenReturn(ntwk);
+        Mockito.when(_ntwkModel.getNetwork(ArgumentMatchers.anyLong())).thenReturn(ntwk);
 
-        Mockito.when(_itMgr.toNicTO(Matchers.any(NicProfile.class), Matchers.any(HypervisorType.class))).thenReturn(null);
-        Mockito.when(_domainRouterDao.findById(Matchers.anyLong())).thenReturn(vm);
+        Mockito.when(_itMgr.toNicTO(ArgumentMatchers.any(NicProfile.class), ArgumentMatchers.any(HypervisorType.class))).thenReturn(null);
+        Mockito.when(_domainRouterDao.findById(ArgumentMatchers.anyLong())).thenReturn(vm);
         final DataCenterVO dc = new DataCenterVO(1L, null, null, null, null, null, null, null, null, null, NetworkType.Advanced, null, null);
-        Mockito.when(_dcDao.findById(Matchers.anyLong())).thenReturn(dc);
+        Mockito.when(_dcDao.findById(ArgumentMatchers.anyLong())).thenReturn(dc);
         final NetworkOfferingVO networkOfferingVO = new NetworkOfferingVO();
         networkOfferingVO.setConcurrentConnections(500);
-        Mockito.when(_offeringDao.findById(Matchers.anyLong())).thenReturn(networkOfferingVO);
+        Mockito.when(_offeringDao.findById(ArgumentMatchers.anyLong())).thenReturn(networkOfferingVO);
 
         Mockito.when(_domainRouterDao.findById(validVmId)).thenReturn(vm);
         Mockito.when(_domainRouterDao.findById(invalidVmId)).thenReturn(null);
@@ -341,7 +340,7 @@ public class InternalLBVMManagerTest extends TestCase {
         final ServiceOfferingVO voToReturn = vo;
         final Class<?> c = voToReturn.getClass();
         try {
-            final Field f = c.getSuperclass().getDeclaredField("id");
+            final Field f = c.getDeclaredField("id");
             f.setAccessible(true);
             f.setLong(voToReturn, id);
         } catch (final NoSuchFieldException ex) {

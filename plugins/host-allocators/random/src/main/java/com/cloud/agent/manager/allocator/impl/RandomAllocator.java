@@ -22,10 +22,16 @@ import java.util.List;
 
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.ListUtils;
+import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import com.cloud.agent.manager.allocator.HostAllocator;
+import com.cloud.capacity.CapacityManager;
+import com.cloud.dc.ClusterDetailsDao;
+import com.cloud.dc.dao.ClusterDao;
 import com.cloud.deploy.DeploymentPlan;
 import com.cloud.deploy.DeploymentPlanner.ExcludeList;
 import com.cloud.host.Host;
@@ -34,53 +40,97 @@ import com.cloud.host.HostVO;
 import com.cloud.host.dao.HostDao;
 import com.cloud.offering.ServiceOffering;
 import com.cloud.resource.ResourceManager;
+import com.cloud.storage.VMTemplateVO;
+import com.cloud.utils.Pair;
 import com.cloud.utils.component.AdapterBase;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VirtualMachineProfile;
 
 @Component
 public class RandomAllocator extends AdapterBase implements HostAllocator {
-    private static final Logger s_logger = Logger.getLogger(RandomAllocator.class);
     @Inject
     private HostDao _hostDao;
     @Inject
     private ResourceManager _resourceMgr;
+    @Inject
+    private ClusterDao clusterDao;
+    @Inject
+    private ClusterDetailsDao clusterDetailsDao;
+    @Inject
+    private CapacityManager capacityManager;
 
-    @Override
-    public List<Host> allocateTo(VirtualMachineProfile vmProfile, DeploymentPlan plan, Type type, ExcludeList avoid, int returnUpTo) {
-        return allocateTo(vmProfile, plan, type, avoid, returnUpTo, true);
+    protected List<HostVO> listHostsByTags(Host.Type type, long dcId, Long podId, Long clusterId, String offeringHostTag, String templateTag) {
+        List<HostVO> taggedHosts = new ArrayList<>();
+        if (offeringHostTag != null) {
+            taggedHosts.addAll(_hostDao.listByHostTag(type, clusterId, podId, dcId, offeringHostTag));
+        }
+        if (templateTag != null) {
+            List<HostVO> templateTaggedHosts = _hostDao.listByHostTag(type, clusterId, podId, dcId, templateTag);
+            if (taggedHosts.isEmpty()) {
+                taggedHosts = templateTaggedHosts;
+            } else {
+                taggedHosts.retainAll(templateTaggedHosts);
+            }
+        }
+        if (logger.isDebugEnabled()) {
+            logger.debug(String.format("Found %d hosts %s with type: %s, zone ID: %d, pod ID: %d, cluster ID: %s, offering host tag(s): %s, template tag: %s",
+                    taggedHosts.size(),
+                    (taggedHosts.isEmpty() ? "" : String.format("(%s)", StringUtils.join(taggedHosts.stream().map(HostVO::toString).toArray(), ","))),
+                    type.name(), dcId, podId, clusterId, offeringHostTag, templateTag));
+        }
+        return taggedHosts;
     }
-
-    @Override
-    public List<Host> allocateTo(VirtualMachineProfile vmProfile, DeploymentPlan plan, Type type, ExcludeList avoid, List<? extends Host> hosts, int returnUpTo,
-        boolean considerReservedCapacity) {
+    private List<Host> findSuitableHosts(VirtualMachineProfile vmProfile, DeploymentPlan plan, Type type,
+                                         ExcludeList avoid, List<? extends Host> hosts, int returnUpTo,
+                                         boolean considerReservedCapacity) {
         long dcId = plan.getDataCenterId();
         Long podId = plan.getPodId();
         Long clusterId = plan.getClusterId();
         ServiceOffering offering = vmProfile.getServiceOffering();
-        List<Host> suitableHosts = new ArrayList<Host>();
-        List<Host> hostsCopy = new ArrayList<Host>(hosts);
+        List<? extends Host> hostsCopy = null;
+        List<Host> suitableHosts = new ArrayList<>();
 
         if (type == Host.Type.Storage) {
             return suitableHosts;
         }
+        String offeringHostTag = offering.getHostTag();
 
-        String hostTag = offering.getHostTag();
-        if (hostTag != null) {
-            s_logger.debug("Looking for hosts in dc: " + dcId + "  pod:" + podId + "  cluster:" + clusterId + " having host tag:" + hostTag);
+        VMTemplateVO template = (VMTemplateVO)vmProfile.getTemplate();
+        String templateTag = template.getTemplateTag();
+        String hostTag = null;
+        if (ObjectUtils.anyNotNull(offeringHostTag, templateTag)) {
+            hostTag = ObjectUtils.allNotNull(offeringHostTag, templateTag) ?
+                    String.format("%s, %s", offeringHostTag, templateTag) :
+                    ObjectUtils.firstNonNull(offeringHostTag, templateTag);
+            logger.debug("Looking for hosts in dc [{}], pod [{}], cluster [{}] and complying with host tag(s): [{}]", dcId, podId, clusterId, hostTag);
         } else {
-            s_logger.debug("Looking for hosts in dc: " + dcId + "  pod:" + podId + "  cluster:" + clusterId);
+            logger.debug("Looking for hosts in dc: {} pod: {} cluster: {}", dcId , podId, clusterId);
+        }
+        if (hosts != null) {
+            // retain all computing hosts, regardless of whether they support routing...it's random after all
+            hostsCopy = new ArrayList<>(hosts);
+            if (ObjectUtils.anyNotNull(offeringHostTag, templateTag)) {
+                hostsCopy.retainAll(listHostsByTags(type, dcId, podId, clusterId, offeringHostTag, templateTag));
+            } else {
+                hostsCopy.retainAll(_hostDao.listAllHostsThatHaveNoRuleTag(type, clusterId, podId, dcId));
+            }
+        } else {
+            // list all computing hosts, regardless of whether they support routing...it's random after all
+            if (offeringHostTag != null) {
+                hostsCopy = listHostsByTags(type, dcId, podId, clusterId, offeringHostTag, templateTag);
+            } else {
+                hostsCopy = _hostDao.listAllHostsThatHaveNoRuleTag(type, clusterId, podId, dcId);
+            }
+        }
+        hostsCopy = ListUtils.union(hostsCopy, _hostDao.findHostsWithTagRuleThatMatchComputeOferringTags(offeringHostTag));
+
+        if (hostsCopy.isEmpty()) {
+            logger.info("No suitable host found for VM [{}] in {}.", vmProfile, hostTag);
+            return null;
         }
 
-        // list all computing hosts, regardless of whether they support routing...it's random after all
-        if (hostTag != null) {
-            hostsCopy.retainAll(_hostDao.listByHostTag(type, clusterId, podId, dcId, hostTag));
-        } else {
-            hostsCopy.retainAll(_resourceMgr.listAllUpAndEnabledHosts(type, clusterId, podId, dcId));
-        }
-
-        s_logger.debug("Random Allocator found " + hostsCopy.size() + "  hosts");
-        if (hostsCopy.size() == 0) {
+        logger.debug("Random Allocator found {} hosts", hostsCopy.size());
+        if (hostsCopy.isEmpty()) {
             return suitableHosts;
         }
 
@@ -89,76 +139,52 @@ public class RandomAllocator extends AdapterBase implements HostAllocator {
             if (suitableHosts.size() == returnUpTo) {
                 break;
             }
-
-            if (!avoid.shouldAvoid(host)) {
-                suitableHosts.add(host);
-            } else {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Host name: " + host.getName() + ", hostId: " + host.getId() + " is in avoid set, " + "skipping this and trying other available hosts");
+            if (avoid.shouldAvoid(host)) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(String.format("Host %s is in avoid set, skipping this and trying other available hosts", host));
                 }
+                continue;
             }
+            Pair<Boolean, Boolean> cpuCapabilityAndCapacity = capacityManager.checkIfHostHasCpuCapabilityAndCapacity(host, offering, considerReservedCapacity);
+            if (!cpuCapabilityAndCapacity.first() || !cpuCapabilityAndCapacity.second()) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(String.format("Not using host %s; host has cpu capability? %s, host has capacity? %s", host, cpuCapabilityAndCapacity.first(), cpuCapabilityAndCapacity.second()));
+                }
+                continue;
+            }
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Found a suitable host, adding to list: %s", host));
+            }
+            suitableHosts.add(host);
         }
-
-        if (s_logger.isDebugEnabled()) {
-            s_logger.debug("Random Host Allocator returning " + suitableHosts.size() + " suitable hosts");
+        if (logger.isDebugEnabled()) {
+            logger.debug("Random Host Allocator returning " + suitableHosts.size() + " suitable hosts");
         }
-
         return suitableHosts;
     }
 
     @Override
-    public List<Host> allocateTo(VirtualMachineProfile vmProfile, DeploymentPlan plan, Type type, ExcludeList avoid, int returnUpTo, boolean considerReservedCapacity) {
+    public List<Host> allocateTo(VirtualMachineProfile vmProfile, DeploymentPlan plan, Type type, ExcludeList avoid, int returnUpTo) {
+        return allocateTo(vmProfile, plan, type, avoid, returnUpTo, true);
+    }
 
-        long dcId = plan.getDataCenterId();
-        Long podId = plan.getPodId();
-        Long clusterId = plan.getClusterId();
-        ServiceOffering offering = vmProfile.getServiceOffering();
-
-        List<Host> suitableHosts = new ArrayList<Host>();
-
-        if (type == Host.Type.Storage) {
-            return suitableHosts;
-        }
-
-        String hostTag = offering.getHostTag();
-        if (hostTag != null) {
-            s_logger.debug("Looking for hosts in dc: " + dcId + "  pod:" + podId + "  cluster:" + clusterId + " having host tag:" + hostTag);
-        } else {
-            s_logger.debug("Looking for hosts in dc: " + dcId + "  pod:" + podId + "  cluster:" + clusterId);
-        }
-
-        // list all computing hosts, regardless of whether they support routing...it's random after all
-        List<? extends Host> hosts = new ArrayList<HostVO>();
-        if (hostTag != null) {
-            hosts = _hostDao.listByHostTag(type, clusterId, podId, dcId, hostTag);
-        } else {
-            hosts = _resourceMgr.listAllUpAndEnabledHosts(type, clusterId, podId, dcId);
-        }
-
-        s_logger.debug("Random Allocator found " + hosts.size() + "  hosts");
-
-        if (hosts.size() == 0) {
-            return suitableHosts;
-        }
-
-        Collections.shuffle(hosts);
-        for (Host host : hosts) {
-            if (suitableHosts.size() == returnUpTo) {
-                break;
+    @Override
+    public List<Host> allocateTo(VirtualMachineProfile vmProfile, DeploymentPlan plan, Type type,
+                                 ExcludeList avoid, List<? extends Host> hosts, int returnUpTo,
+                                 boolean considerReservedCapacity) {
+        if (CollectionUtils.isEmpty(hosts)) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Random Allocator found 0 hosts as given host list is empty");
             }
+            return new ArrayList<>();
+        }
+        return findSuitableHosts(vmProfile, plan, type, avoid, hosts, returnUpTo, considerReservedCapacity);
+    }
 
-            if (!avoid.shouldAvoid(host)) {
-                suitableHosts.add(host);
-            } else {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Host name: " + host.getName() + ", hostId: " + host.getId() + " is in avoid set, skipping this and trying other available hosts");
-                }
-            }
-        }
-        if (s_logger.isDebugEnabled()) {
-            s_logger.debug("Random Host Allocator returning " + suitableHosts.size() + " suitable hosts");
-        }
-        return suitableHosts;
+    @Override
+    public List<Host> allocateTo(VirtualMachineProfile vmProfile, DeploymentPlan plan,
+                                 Type type, ExcludeList avoid, int returnUpTo, boolean considerReservedCapacity) {
+        return findSuitableHosts(vmProfile, plan, type, avoid, null, returnUpTo, considerReservedCapacity);
     }
 
     @Override

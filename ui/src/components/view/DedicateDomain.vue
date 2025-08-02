@@ -21,16 +21,36 @@
       <a-spin :spinning="domainsLoading">
         <p class="form__label">{{ $t('label.domain') }}<span class="required">*</span></p>
         <p class="required required-label">{{ $t('label.required') }}</p>
-        <a-select style="width: 100%" @change="handleChangeDomain" v-model="domainId">
-          <a-select-option v-for="(domain, index) in domainsList" :value="domain.id" :key="index">
-            {{ domain.name }}
+        <a-select
+          style="width: 100%"
+          showSearch
+          optionFilterProp="label"
+          :filterOption="(input, option) => {
+            return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }"
+          @change="handleChangeDomain"
+          v-focus="true"
+          v-model:value="domainId">
+          <a-select-option
+            v-for="(domain, index) in domainsList"
+            :value="domain.id"
+            :key="index"
+            :label="domain.path || domain.name || domain.description">
+            {{ domain.path || domain.name || domain.description }}
           </a-select-option>
         </a-select>
       </a-spin>
     </div>
     <div class="form__item" v-if="accountsList">
       <p class="form__label">{{ $t('label.account') }}</p>
-      <a-select style="width: 100%" @change="handleChangeAccount">
+      <a-select
+        style="width: 100%"
+        @change="handleChangeAccount"
+        showSearch
+        optionFilterProp="value"
+        :filterOption="(input, option) => {
+          return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+        }" >
         <a-select-option v-for="(account, index) in accountsList" :value="account.name" :key="index">
           {{ account.name }}
         </a-select-option>
@@ -40,7 +60,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 
 export default {
   name: 'DedicateDomain',
@@ -64,13 +84,13 @@ export default {
       this.domainError = this.error
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   methods: {
     fetchData () {
       this.domainsLoading = true
-      api('listDomains', {
+      getAPI('listDomains', {
         listAll: true,
         details: 'min'
       }).then(response => {
@@ -87,7 +107,7 @@ export default {
       })
     },
     fetchAccounts () {
-      api('listAccounts', {
+      getAPI('listAccounts', {
         domainid: this.domainId
       }).then(response => {
         this.accountsList = response.listaccountsresponse.account || []

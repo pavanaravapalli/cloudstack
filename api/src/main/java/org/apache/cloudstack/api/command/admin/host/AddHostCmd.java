@@ -18,8 +18,7 @@ package org.apache.cloudstack.api.command.admin.host;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import org.apache.log4j.Logger;
+import java.util.Map;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -40,9 +39,7 @@ import com.cloud.user.Account;
 @APICommand(name = "addHost", description = "Adds a new host.", responseObject = HostResponse.class,
         requestHasSensitiveInfo = true, responseHasSensitiveInfo = false)
 public class AddHostCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(AddHostCmd.class.getName());
 
-    private static final String s_name = "addhostresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -54,7 +51,10 @@ public class AddHostCmd extends BaseCmd {
     @Parameter(name = ApiConstants.CLUSTER_NAME, type = CommandType.STRING, description = "the cluster name for the host")
     private String clusterName;
 
-    @Parameter(name = ApiConstants.PASSWORD, type = CommandType.STRING, required = true, description = "the password for the host")
+    @Parameter(name = ApiConstants.USERNAME, type = CommandType.STRING, description = "the username for the host; required to be passed for hypervisors other than VMWare")
+    private String username;
+
+    @Parameter(name = ApiConstants.PASSWORD, type = CommandType.STRING, description = "the password for the host; required to be passed for hypervisors other than VMWare")
     private String password;
 
     @Parameter(name = ApiConstants.POD_ID, type = CommandType.UUID, entityType = PodResponse.class, required = true, description = "the Pod ID for the host")
@@ -62,9 +62,6 @@ public class AddHostCmd extends BaseCmd {
 
     @Parameter(name = ApiConstants.URL, type = CommandType.STRING, required = true, description = "the host URL")
     private String url;
-
-    @Parameter(name = ApiConstants.USERNAME, type = CommandType.STRING, required = true, description = "the username for the host")
-    private String username;
 
     @Parameter(name = ApiConstants.ZONE_ID, type = CommandType.UUID, entityType = ZoneResponse.class, required = true, description = "the Zone ID for the host")
     private Long zoneId;
@@ -77,6 +74,18 @@ public class AddHostCmd extends BaseCmd {
 
     @Parameter(name = ApiConstants.HOST_TAGS, type = CommandType.LIST, collectionType = CommandType.STRING, description = "list of tags to be added to the host")
     private List<String> hostTags;
+
+    @Parameter(name = ApiConstants.STORAGE_ACCESS_GROUPS,
+            type = CommandType.LIST, collectionType = CommandType.STRING,
+            description = "comma separated list of storage access groups for the host",
+            since = "4.21.0")
+    private List<String> storageAccessGroups;
+
+    @Parameter(name = ApiConstants.EXTERNAL_DETAILS,
+            type = CommandType.MAP,
+            description = "Details in key/value pairs using format externaldetails[i].keyname=keyvalue. Example: externaldetails[0].endpoint.url=urlvalue",
+            since = "4.21.0")
+    protected Map externalDetails;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -118,18 +127,21 @@ public class AddHostCmd extends BaseCmd {
         return hostTags;
     }
 
+    public List<String> getStorageAccessGroups() {
+        return storageAccessGroups;
+    }
+
     public String getAllocationState() {
         return allocationState;
+    }
+
+    public Map<String, String> getExternalDetails() {
+        return convertExternalDetailsToMap(externalDetails);
     }
 
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -156,7 +168,7 @@ public class AddHostCmd extends BaseCmd {
 
             this.setResponseObject(response);
         } catch (DiscoveryException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
         }
     }

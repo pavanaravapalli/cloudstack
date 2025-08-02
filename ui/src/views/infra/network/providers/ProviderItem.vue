@@ -51,7 +51,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import ActionButton from '@/components/view/ActionButton'
 import ProviderDetail from '@/views/infra/network/providers/ProviderDetail'
 import ProviderListView from '@/views/infra/network/providers/ProviderListView'
@@ -103,45 +103,41 @@ export default {
   },
   inject: ['provideSetNsp', 'provideExecuteAction'],
   watch: {
-    loading (newValue, oldValue) {
-      if (newValue !== oldValue && !newValue) {
-        this.fetchData()
-      }
-    },
-    nsp (newData, oldData) {
-      if (newData && Object.keys(newData).length > 0) {
-        this.nsp = newData
-        this.resource = this.nsp
-        this.$set(this.resource, 'zoneid', this.zoneId)
-        this.provideSetNsp(this.resource)
+    nsp: {
+      deep: true,
+      handler () {
         this.fetchData()
       }
     }
   },
-  mounted () {
-    if (!this.nsp || Object.keys(this.nsp).length === 0) {
-      this.resource = {
-        name: this.itemNsp.title,
-        state: 'Disabled',
-        physicalnetworkid: this.resourceId,
-        zoneid: this.zoneId
-      }
-    } else {
-      this.resource = this.nsp
-      this.$set(this.resource, 'zoneid', this.zoneId)
+  created () {
+    if (!this.resourceId || !this.zoneId) {
+      return
     }
-    if (this.itemNsp && Object.keys(this.itemNsp).length > 0) {
-      this.provider = this.itemNsp
-      this.provideSetNsp(this.resource)
-      this.fetchData()
-    }
+    this.fetchData()
   },
   methods: {
     async fetchData () {
-      if (!this.provider.lists || this.provider.lists.length === 0) {
-        return
+      if (!this.nsp || Object.keys(this.nsp).length === 0) {
+        this.resource = {
+          name: this.itemNsp.title,
+          state: 'Disabled',
+          physicalnetworkid: this.resourceId,
+          zoneid: this.zoneId
+        }
+      } else {
+        this.resource = this.nsp
+        this.resource.zoneid = this.zoneId
       }
-      this.provider.lists.map(this.fetchOptions)
+      if (this.itemNsp && Object.keys(this.itemNsp).length > 0) {
+        this.provider = this.itemNsp
+        this.provideSetNsp(this.resource)
+
+        if (!this.provider.lists || this.provider.lists.length === 0) {
+          return
+        }
+        this.provider.lists.map(this.fetchOptions)
+      }
     },
     async fetchOptions (args) {
       if (!args || Object.keys(args).length === 0) {
@@ -151,32 +147,32 @@ export default {
       const params = {}
       if (args.mapping) {
         Object.keys(args.mapping).map(key => {
-          params[key] = 'value' in args.mapping[key] ? args.mapping[key].value(this.resource) : null
+          params[key] = args.mapping[key]?.value(this.resource) || null
         })
       }
       params.page = this.page
       params.pageSize = this.pageSize
 
       let length = args.columns.length
-      if (args.columns.includes('action')) {
+      if (args.columns.includes('actions')) {
         length--
       }
       const columns = args.columns.map(col => {
-        if (col === 'action') {
+        if (col === 'actions') {
           return {
+            key: col,
             title: this.$t('label.' + col),
             dataIndex: col,
             width: 80,
-            fixed: 'right',
-            scopedSlots: { customRender: col }
+            fixed: 'right'
           }
         }
         const width = 100 / (length) + '%'
         return {
+          key: col,
           title: this.$t('label.' + col),
           width: width,
-          dataIndex: col,
-          scopedSlots: { customRender: col }
+          dataIndex: col
         }
       })
 
@@ -197,14 +193,13 @@ export default {
         this.listData[args.title].loading = false
         this.$notification.error({
           message: this.$t('message.request.failed'),
-          description: (error.response && error.response.headers && error.response.headers['x-description']) || error.message
+          description: (error.response?.headers?.['x-description']) || error.message
         })
       }
-      this.$forceUpdate()
     },
     executeApi (apiName, params) {
       return new Promise((resolve, reject) => {
-        api(apiName, params).then(json => {
+        getAPI(apiName, params).then(json => {
           let responseName
           let objectName
           let itemCount = 0

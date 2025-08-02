@@ -1,4 +1,4 @@
-﻿// Licensed to the Apache Software Foundation (ASF) under one
+// Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
 // regarding copyright ownership.  The ASF licenses this file
@@ -203,7 +203,7 @@ namespace CloudStack.Plugin.AgentShell
             }
             catch (Exception ex)
             {
-                logger.ErrorFormat(" Error occured in installing service " + ex.Message);
+                logger.ErrorFormat(" Error occurred in installing service " + ex.Message);
                 throw;
             }
         }
@@ -228,7 +228,7 @@ namespace CloudStack.Plugin.AgentShell
             }
             catch (Exception ex)
             {
-                logger.ErrorFormat(" Error occured in uninstalling service " + ex.Message);
+                logger.ErrorFormat(" Error occurred in uninstalling service " + ex.Message);
                 throw;
             }
         }
@@ -251,7 +251,7 @@ namespace CloudStack.Plugin.AgentShell
                 }
                 catch (Exception ex)
                 {
-                    logger.ErrorFormat(" Error occured in starting service " + ex.Message);
+                    logger.ErrorFormat(" Error occurred in starting service " + ex.Message);
                     throw;
                 }
             }
@@ -274,7 +274,7 @@ namespace CloudStack.Plugin.AgentShell
                 }
                 catch (Exception ex)
                 {
-                    logger.ErrorFormat(" Error occured in stopping service " + ex.Message);
+                    logger.ErrorFormat(" Error occurred in stopping service " + ex.Message);
                     throw;
                 }
             }

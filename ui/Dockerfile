@@ -17,13 +17,13 @@
 
 # Build example: docker build -t <name> .
 
-FROM node:lts-stretch AS build
+FROM node:14-bullseye AS build
 
-MAINTAINER "Apache CloudStack" <dev@cloudstack.apache.org>
 LABEL Description="Apache CloudStack UI; Modern role-base progressive UI for Apache CloudStack"
 LABEL Vendor="Apache.org"
 LABEL License=ApacheV2
 LABEL Version=0.5.0
+LABEL Author="Apache CloudStack <dev@cloudstack.apache.org>"
 
 WORKDIR /build
 
@@ -39,7 +39,7 @@ LABEL org.opencontainers.image.title="Apache CloudStack UI" \
 	org.opencontainers.image.description="A modern role-based progressive CloudStack UI" \
 	org.opencontainers.image.authors="Apache CloudStack Contributors" \
 	org.opencontainers.image.url="https://github.com/apache/cloudstack" \
-	org.opencontainers.image.documentation="https://github.com/apache/cloudstack/blob/master/ui/README.md" \
+	org.opencontainers.image.documentation="https://github.com/apache/cloudstack/blob/main/ui/README.md" \
 	org.opencontainers.image.source="https://github.com/apache/cloudstack" \
 	org.opencontainers.image.vendor="The Apache Software Foundation" \
 	org.opencontainers.image.licenses="Apache-2.0" \

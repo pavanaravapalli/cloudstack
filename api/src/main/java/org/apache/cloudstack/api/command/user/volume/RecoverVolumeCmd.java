@@ -16,7 +16,7 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.volume;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
@@ -38,7 +38,6 @@ import com.cloud.user.Account;
             requestHasSensitiveInfo = false,
             responseHasSensitiveInfo = true)
 public class RecoverVolumeCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(RecoverVolumeCmd.class.getName());
 
     private static final String s_name = "recovervolumeresponse";
 
@@ -74,6 +73,16 @@ public class RecoverVolumeCmd extends BaseCmd {
         }
 
         return Account.ACCOUNT_ID_SYSTEM; // no account info given, parent this command to SYSTEM so ERROR events are tracked
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return id;
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Volume;
     }
 
     @Override

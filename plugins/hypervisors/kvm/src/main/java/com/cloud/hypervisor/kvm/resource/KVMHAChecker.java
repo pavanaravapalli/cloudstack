@@ -16,24 +16,22 @@
 // under the License.
 package com.cloud.hypervisor.kvm.resource;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
-import org.apache.log4j.Logger;
 
-import com.cloud.utils.script.OutputInterpreter;
-import com.cloud.utils.script.Script;
+import com.cloud.agent.api.to.HostTO;
 
 public class KVMHAChecker extends KVMHABase implements Callable<Boolean> {
-    private static final Logger s_logger = Logger.getLogger(KVMHAChecker.class);
-    private List<NfsStoragePool> _pools;
-    private String _hostIP;
-    private long _heartBeatCheckerTimeout = 360000; /* 6 minutes */
+    private List<HAStoragePool> storagePools;
+    private HostTO host;
+    private boolean reportFailureIfOneStorageIsDown;
 
-    public KVMHAChecker(List<NfsStoragePool> pools, String host) {
-        this._pools = pools;
-        this._hostIP = host;
+    public KVMHAChecker(List<HAStoragePool> pools, HostTO host, boolean reportFailureIfOneStorageIsDown) {
+        this.storagePools = pools;
+        this.host = host;
+        this.reportFailureIfOneStorageIsDown = reportFailureIfOneStorageIsDown;
     }
 
     /*
@@ -41,42 +39,31 @@ public class KVMHAChecker extends KVMHABase implements Callable<Boolean> {
      * means heartbeating is stopped definitely
      */
     @Override
-    public Boolean checkingHB() {
-        List<Boolean> results = new ArrayList<Boolean>();
-        for (NfsStoragePool pool : _pools) {
-            Script cmd = new Script(s_heartBeatPath, _heartBeatCheckerTimeout, s_logger);
-            cmd.add("-i", pool._poolIp);
-            cmd.add("-p", pool._poolMountSourcePath);
-            cmd.add("-m", pool._mountDestPath);
-            cmd.add("-h", _hostIP);
-            cmd.add("-r");
-            cmd.add("-t", String.valueOf(_heartBeatUpdateFreq / 1000));
-            OutputInterpreter.OneLineParser parser = new OutputInterpreter.OneLineParser();
-            String result = cmd.execute(parser);
-            s_logger.debug("KVMHAChecker pool: " + pool._poolIp);
-            s_logger.debug("KVMHAChecker result: " + result);
-            s_logger.debug("KVMHAChecker parser: " + parser.getLine());
-            if (result == null && parser.getLine().contains("> DEAD <")) {
-                s_logger.debug("read heartbeat failed: ");
-                results.add(false);
-            } else {
-                results.add(true);
+    public Boolean checkingHeartBeat() {
+        boolean validResult = false;
+
+        String hostAndPools = String.format("host IP [%s] in pools [%s]", host.getPrivateNetwork().getIp(), storagePools.stream().map(pool -> pool.getPoolUUID()).collect(Collectors.joining(", ")));
+
+        logger.debug(String.format("Checking heart beat with KVMHAChecker for %s", hostAndPools));
+
+        for (HAStoragePool pool : storagePools) {
+            validResult = pool.getPool().checkingHeartBeat(pool, host);
+            if (reportFailureIfOneStorageIsDown && !validResult) {
+                break;
             }
         }
 
-        for (Boolean r : results) {
-            if (r) {
-                return true;
-            }
+        if (!validResult) {
+            logger.warn(String.format("All checks with KVMHAChecker for %s considered it as dead. It may cause a shutdown of the host.", hostAndPools));
         }
 
-        return false;
+        return validResult;
     }
 
     @Override
     public Boolean call() throws Exception {
-        // s_logger.addAppender(new org.apache.log4j.ConsoleAppender(new
+        // logger.addAppender(new org.apache.log4j.ConsoleAppender(new
         // org.apache.log4j.PatternLayout(), "System.out"));
-        return checkingHB();
+        return checkingHeartBeat();
     }
 }

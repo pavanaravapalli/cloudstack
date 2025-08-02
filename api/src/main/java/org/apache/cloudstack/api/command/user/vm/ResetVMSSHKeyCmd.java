@@ -17,12 +17,11 @@
 
 package org.apache.cloudstack.api.command.user.vm;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -42,12 +41,14 @@ import com.cloud.user.Account;
 import com.cloud.uservm.UserVm;
 import com.cloud.vm.VirtualMachine;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @APICommand(name = "resetSSHKeyForVirtualMachine", responseObject = UserVmResponse.class, description = "Resets the SSH Key for virtual machine. " +
         "The virtual machine must be in a \"Stopped\" state. [async]", responseView = ResponseView.Restricted, entityType = {VirtualMachine.class},
     requestHasSensitiveInfo = false, responseHasSensitiveInfo = true)
 public class ResetVMSSHKeyCmd extends BaseAsyncCmd implements UserCmd {
 
-    public static final Logger s_logger = Logger.getLogger(ResetVMSSHKeyCmd.class.getName());
 
     private static final String s_name = "resetSSHKeyforvirtualmachineresponse";
 
@@ -58,8 +59,12 @@ public class ResetVMSSHKeyCmd extends BaseAsyncCmd implements UserCmd {
     @Parameter(name = ApiConstants.ID, type = CommandType.UUID, entityType = UserVmResponse.class, required = true, description = "The ID of the virtual machine")
     private Long id;
 
-    @Parameter(name = ApiConstants.SSH_KEYPAIR, type = CommandType.STRING, required = true, description = "name of the ssh key pair used to login to the virtual machine")
-    private String name;
+    @Deprecated
+    @Parameter(name = ApiConstants.SSH_KEYPAIR, type = CommandType.STRING ,description = "name of the ssh key pair used to login to the virtual machine")
+    String name;
+
+    @Parameter(name = ApiConstants.SSH_KEYPAIRS, type = CommandType.LIST, collectionType = CommandType.STRING, since="4.17", description = "names of the ssh key pairs to be used to login to the virtual machine")
+    List<String> names;
 
     //Owner information
     @Parameter(name = ApiConstants.ACCOUNT, type = CommandType.STRING, description = "an optional account for the ssh key. Must be used with domainId.")
@@ -78,8 +83,15 @@ public class ResetVMSSHKeyCmd extends BaseAsyncCmd implements UserCmd {
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
 
-    public String getName() {
-        return name;
+    public List<String> getNames() {
+        List<String> keypairnames = new ArrayList<String>();
+        if (names != null) {
+            keypairnames = names;
+        }
+        if (name != null && !name.isEmpty()) {
+            keypairnames.add(name);
+        }
+        return keypairnames;
     }
 
     public Long getId() {
@@ -113,8 +125,8 @@ public class ResetVMSSHKeyCmd extends BaseAsyncCmd implements UserCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.VirtualMachine;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
     }
 
     @Override
@@ -133,7 +145,7 @@ public class ResetVMSSHKeyCmd extends BaseAsyncCmd implements UserCmd {
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 

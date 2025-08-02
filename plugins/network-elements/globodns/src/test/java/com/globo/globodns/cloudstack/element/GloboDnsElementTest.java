@@ -16,8 +16,8 @@
 */
 package com.globo.globodns.cloudstack.element;
 
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
+import static org.mockito.ArgumentMatchers.eq;
+import static  org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -111,7 +111,7 @@ public class GloboDnsElementTest {
         ComponentContext.initComponentsLifeCycle();
 
         acct = new AccountVO(200L);
-        acct.setType(Account.ACCOUNT_TYPE_NORMAL);
+        acct.setType(Account.Type.NORMAL);
         acct.setAccountName("user");
         acct.setDomainId(domainId);
 

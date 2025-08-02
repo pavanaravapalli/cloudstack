@@ -16,7 +16,6 @@
 // under the License.
 package streamer.debug;
 
-import org.apache.log4j.Logger;
 
 import streamer.BaseElement;
 import streamer.ByteBuffer;
@@ -27,7 +26,6 @@ import streamer.Link;
 import streamer.SyncLink;
 
 public class FakeSource extends BaseElement {
-    private static final Logger s_logger = Logger.getLogger(FakeSource.class);
 
     /**
      * Delay for null packets in poll method when blocking is requested, in
@@ -69,7 +67,7 @@ public class FakeSource extends BaseElement {
         try {
             Thread.sleep(delay);
         } catch (InterruptedException e) {
-            s_logger.info("[ignored] interupted while creating latency", e);
+            logger.info("[ignored] interrupted while creating latency", e);
         }
     }
 
@@ -77,7 +75,7 @@ public class FakeSource extends BaseElement {
      * Initialize data.
      */
     public ByteBuffer initializeData() {
-        ByteBuffer buf = new ByteBuffer(incommingBufLength);
+        ByteBuffer buf = new ByteBuffer(incomingBufLength);
 
         // Set first byte of package to it sequance number
         buf.data[buf.offset] = (byte)(packetNumber % 128);
@@ -106,7 +104,7 @@ public class FakeSource extends BaseElement {
         Element fakeSource = new FakeSource("source 3/10/100") {
             {
                 verbose = true;
-                incommingBufLength = 3;
+                incomingBufLength = 3;
                 numBuffers = 10;
                 delay = 100;
             }

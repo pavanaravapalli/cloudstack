@@ -17,15 +17,18 @@
 
 package org.apache.cloudstack.outofbandmanagement;
 
+import org.apache.cloudstack.api.ApiCommandResourceType;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 import com.cloud.event.ActionEventUtils;
 import com.cloud.event.EventTypes;
 import com.cloud.event.EventVO;
 import com.cloud.host.Host;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
 
 public class PowerOperationTask implements Runnable {
-    public static final Logger LOG = Logger.getLogger(PowerOperationTask.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     final private OutOfBandManagementService service;
     final private Host host;
@@ -39,7 +42,7 @@ public class PowerOperationTask implements Runnable {
 
     @Override
     public String toString() {
-        return String.format("[OOBM Task] Power operation:%s on Host:%d(%s)", powerOperation, host.getId(), host.getName());
+        return String.format("[OOBM Task] Power operation: %s on Host: %s", powerOperation, host);
     }
 
     @Override
@@ -47,14 +50,13 @@ public class PowerOperationTask implements Runnable {
         try {
             service.executePowerOperation(host, powerOperation, null);
         } catch (Exception e) {
-            LOG.warn(String.format("Out-of-band management background task operation=%s for host %s failed with: %s",
-                    powerOperation.name(), host.getName(), e.getMessage()));
+            logger.warn("Out-of-band management background task operation={} for host {} failed with: {}", powerOperation.name(), host, e.getMessage());
 
             String eventMessage = String
                     .format("Error while issuing out-of-band management action %s for host: %s", powerOperation.name(), host.getName());
 
             ActionEventUtils.onCreatedActionEvent(CallContext.current().getCallingUserId(), CallContext.current().getCallingAccountId(), EventVO.LEVEL_WARN,
-                    EventTypes.EVENT_HOST_OUTOFBAND_MANAGEMENT_ACTION, true, eventMessage);
+                    EventTypes.EVENT_HOST_OUTOFBAND_MANAGEMENT_ACTION, true, eventMessage, host.getId(), ApiCommandResourceType.Host.toString());
         }
     }
 }

@@ -16,16 +16,15 @@
 // under the License.
 package org.apache.cloudstack.api;
 
-import org.apache.log4j.Logger;
-import org.apache.cloudstack.api.command.user.iso.UpdateIsoCmd;
+import com.cloud.cpu.CPU;
 import org.apache.cloudstack.api.response.GuestOSResponse;
 import org.apache.cloudstack.api.response.TemplateResponse;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collection;
 import java.util.Map;
 
 public abstract class BaseUpdateTemplateOrIsoCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateIsoCmd.class.getName());
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -34,7 +33,7 @@ public abstract class BaseUpdateTemplateOrIsoCmd extends BaseCmd {
     @Parameter(name = ApiConstants.BOOTABLE, type = CommandType.BOOLEAN, description = "true if image is bootable, false otherwise; available only for updateIso API")
     private Boolean bootable;
 
-    @Parameter(name = ApiConstants.REQUIRES_HVM, type = CommandType.BOOLEAN, description = "true if the template requres HVM, false otherwise; available only for updateTemplate API")
+    @Parameter(name = ApiConstants.REQUIRES_HVM, type = CommandType.BOOLEAN, description = "true if the template requires HVM, false otherwise; available only for updateTemplate API")
     private Boolean requiresHvm;
 
     @Parameter(name = ApiConstants.DISPLAY_TEXT, type = CommandType.STRING, description = "the display text of the image", length = 4096)
@@ -51,6 +50,10 @@ public abstract class BaseUpdateTemplateOrIsoCmd extends BaseCmd {
                entityType = GuestOSResponse.class,
                description = "the ID of the OS type that best represents the OS of this image.")
     private Long osTypeId;
+
+    @Parameter(name = ApiConstants.FORCE_UPDATE_OS_TYPE, type = CommandType.BOOLEAN, since = "4.21", description = "Force OS type update. Warning: Updating OS type will " +
+            "update the guest OS configuration for all the existing Instances deployed with this template/iso, which may affect their behavior.")
+    private Boolean forceUpdateOsType;
 
     @Parameter(name = ApiConstants.FORMAT, type = CommandType.STRING, description = "the format for the image")
     private String format;
@@ -80,6 +83,11 @@ public abstract class BaseUpdateTemplateOrIsoCmd extends BaseCmd {
             description = "optional boolean field, which indicates if details should be cleaned up or not (if set to true, details removed for this resource, details field ignored; if false or not set, no action)")
     private Boolean cleanupDetails;
 
+    @Parameter(name = ApiConstants.ARCH, type = CommandType.STRING,
+            description = "the CPU arch of the template/ISO. Valid options are: x86_64, aarch64",
+            since = "4.20")
+    private String arch;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -106,6 +114,10 @@ public abstract class BaseUpdateTemplateOrIsoCmd extends BaseCmd {
 
     public Long getOsTypeId() {
         return osTypeId;
+    }
+
+    public Boolean getForceUpdateOsType() {
+        return forceUpdateOsType;
     }
 
     public Boolean getPasswordEnabled() {
@@ -143,5 +155,12 @@ public abstract class BaseUpdateTemplateOrIsoCmd extends BaseCmd {
 
     public boolean isCleanupDetails(){
         return cleanupDetails == null ? false : cleanupDetails.booleanValue();
+    }
+
+    public CPU.CPUArch getCPUArch() {
+        if (StringUtils.isBlank(arch)) {
+            return null;
+        }
+        return CPU.CPUArch.fromType(arch);
     }
 }

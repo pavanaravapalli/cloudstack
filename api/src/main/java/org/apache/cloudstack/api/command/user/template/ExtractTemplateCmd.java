@@ -16,11 +16,8 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.template;
 
-import com.cloud.dc.DataCenter;
-import org.apache.log4j.Logger;
-
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -31,6 +28,7 @@ import org.apache.cloudstack.api.response.TemplateResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.cloudstack.context.CallContext;
 
+import com.cloud.dc.DataCenter;
 import com.cloud.event.EventTypes;
 import com.cloud.exception.InternalErrorException;
 import com.cloud.template.VirtualMachineTemplate;
@@ -39,9 +37,7 @@ import com.cloud.user.Account;
 @APICommand(name = "extractTemplate", description = "Extracts a template", responseObject = ExtractResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ExtractTemplateCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(ExtractTemplateCmd.class.getName());
 
-    private static final String s_name = "extracttemplateresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -88,15 +84,6 @@ public class ExtractTemplateCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    public static String getStaticName() {
-        return s_name;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         VirtualMachineTemplate template = _entityMgr.findById(VirtualMachineTemplate.class, getId());
         if (template != null) {
@@ -114,16 +101,24 @@ public class ExtractTemplateCmd extends BaseAsyncCmd {
 
     @Override
     public String getEventDescription() {
-     return "extracting template: " + this._uuidMgr.getUuid(VirtualMachineTemplate.class, getId()) + ((getZoneId() != null) ? " from zone: " + this._uuidMgr.getUuid(DataCenter.class, getZoneId()) : "");
+        String templateId = this._uuidMgr.getUuid(VirtualMachineTemplate.class, getId());
+        String baseDescription = String.format("Extracting template: %s", templateId);
+
+        Long zoneId = getZoneId();
+        if (zoneId == null) {
+            return baseDescription;
+        }
+
+        return String.format("%s from zone: %s", baseDescription, this._uuidMgr.getUuid(DataCenter.class, zoneId));
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Template;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Template;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 
@@ -133,14 +128,15 @@ public class ExtractTemplateCmd extends BaseAsyncCmd {
             CallContext.current().setEventDetails(getEventDescription());
             String uploadUrl = _templateService.extract(this);
             if (uploadUrl != null) {
-                ExtractResponse response = _responseGenerator.createExtractResponse(id, zoneId, getEntityOwnerId(), mode, uploadUrl);
+                ExtractResponse response = _responseGenerator.createImageExtractResponse(id, zoneId, getEntityOwnerId(), mode, uploadUrl);
                 response.setResponseName(getCommandName());
+                response.setObjectName("template");
                 this.setResponseObject(response);
             } else {
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to extract template");
             }
         } catch (InternalErrorException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
         }
     }

@@ -34,6 +34,16 @@ public interface StorageStrategyFactory {
 
     SnapshotStrategy getSnapshotStrategy(Snapshot snapshot, SnapshotOperation op);
 
+    SnapshotStrategy getSnapshotStrategy(Snapshot snapshot, Long zoneId, SnapshotOperation op);
+
     VMSnapshotStrategy getVmSnapshotStrategy(VMSnapshot vmSnapshot);
 
+    /**
+     * Used only for KVM hypervisors when allocating a VM snapshot
+     * @param vmId the ID of the virtual machine
+     * @param rootPoolId volume pool ID
+     * @param snapshotMemory for VM snapshots with memory
+     * @return VMSnapshotStrategy
+     */
+    VMSnapshotStrategy getVmSnapshotStrategy(Long vmId, Long rootPoolId, boolean snapshotMemory);
 }

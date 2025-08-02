@@ -16,11 +16,13 @@
 // under the License.
 package com.cloud.vm.dao;
 
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.cloud.hypervisor.Hypervisor;
 import com.cloud.utils.Pair;
 import com.cloud.utils.db.GenericDao;
 import com.cloud.utils.fsm.StateDao;
@@ -80,7 +82,7 @@ public interface VMInstanceDao extends GenericDao<VMInstanceVO, Long>, StateDao<
 
     List<VMInstanceVO> listByHostAndState(long hostId, State... states);
 
-    List<VMInstanceVO> listByTypes(VirtualMachine.Type... types);
+    int countByTypes(VirtualMachine.Type... types);
 
     VMInstanceVO findByIdTypes(long id, VirtualMachine.Type... types);
 
@@ -116,7 +118,7 @@ public interface VMInstanceDao extends GenericDao<VMInstanceVO, Long>, StateDao<
 
     List<VMInstanceVO> listVmsMigratingFromHost(Long hostId);
 
-    List<VMInstanceVO> listByZoneWithBackups(Long zoneId, Long backupOfferingId);
+    List<VMInstanceVO> listByZoneAndBackupOffering(Long zoneId, Long backupOfferingId);
 
     public Long countActiveByHostId(long hostId);
 
@@ -132,6 +134,8 @@ public interface VMInstanceDao extends GenericDao<VMInstanceVO, Long>, StateDao<
 
     Long countByZoneAndState(long zoneId, State state);
 
+    Long countByZoneAndStateAndHostTag(long dcId, State state, String hostTag);
+
     List<VMInstanceVO> listNonRemovedVmsByTypeAndNetwork(long networkId, VirtualMachine.Type... types);
 
     /**
@@ -141,13 +145,20 @@ public interface VMInstanceDao extends GenericDao<VMInstanceVO, Long>, StateDao<
      */
     List<String> listDistinctHostNames(long networkId, VirtualMachine.Type... types);
 
+    List<VMInstanceVO> findByHostInStatesExcluding(Long hostId, Collection<Long> excludingIds, State... states);
+
     List<VMInstanceVO> findByHostInStates(Long hostId, State... states);
 
     List<VMInstanceVO> listStartingWithNoHostId();
 
     boolean updatePowerState(long instanceId, long powerHostId, VirtualMachine.PowerState powerState, Date wisdomEra);
 
+    Map<Long, VirtualMachine.PowerState> updatePowerState(Map<Long, VirtualMachine.PowerState> instancePowerStates,
+              long powerHostId, Date wisdomEra);
+
     void resetVmPowerStateTracking(long instanceId);
+
+    void resetVmPowerStateTracking(List<Long> instanceId);
 
     void resetHostPowerStateTracking(long hostId);
 
@@ -155,7 +166,26 @@ public interface VMInstanceDao extends GenericDao<VMInstanceVO, Long>, StateDao<
 
     VMInstanceVO findVMByHostNameInZone(String hostName, long zoneId);
 
-    boolean isPowerStateUpToDate(long instanceId);
+    boolean isPowerStateUpToDate(VMInstanceVO instance);
 
     List<VMInstanceVO> listNonMigratingVmsByHostEqualsLastHost(long hostId);
+
+    void updateSystemVmTemplateId(long templateId, Hypervisor.HypervisorType hypervisorType);
+
+    List<VMInstanceVO> listByHostOrLastHostOrHostPod(List<Long> hostIds, long podId);
+
+    List<VMInstanceVO> searchRemovedByRemoveDate(final Date startDate, final Date endDate, final Long batchSize,
+             List<Long> skippedVmIds);
+
+    Pair<List<VMInstanceVO>, Integer> listByVmsNotInClusterUsingPool(long clusterId, long poolId);
+
+    List<VMInstanceVO> listIdServiceOfferingForUpVmsByHostId(Long hostId);
+
+    List<VMInstanceVO> listIdServiceOfferingForVmsMigratingFromHost(Long hostId);
+
+    Map<String, Long> getNameIdMapForVmInstanceNames(Collection<String> names);
+
+    Map<String, Long> getNameIdMapForVmIds(Collection<Long> ids);
+
+    List<VMInstanceVO> listByIdsIncludingRemoved(List<Long> ids);
 }

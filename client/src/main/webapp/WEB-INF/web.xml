@@ -21,12 +21,15 @@
     version="2.5">
 
     <context-param>
-        <param-name>log4jConfigLocation</param-name>
+        <param-name>log4jConfiguration</param-name>
         <param-value>classpath:log4j-cloud.xml</param-value>
     </context-param>
 
     <listener>
         <listener-class>org.apache.cloudstack.spring.module.web.CloudStackContextLoaderListener</listener-class>
+    </listener>
+    <listener>
+        <listener-class>com.cloud.api.ApiSessionListener</listener-class>
     </listener>
     <context-param>
         <param-name>contextConfigLocation</param-name>

@@ -40,12 +40,13 @@ public class DiskTO {
     public static final String VMDK = "vmdk";
     public static final String EXPAND_DATASTORE = "expandDatastore";
     public static final String TEMPLATE_RESIGN = "templateResign";
+    public static final String SECRET_CONSUMER_DETAIL = "storageMigrateSecretConsumer";
 
     private DataTO data;
     private Long diskSeq;
     private String path;
     private Volume.Type type;
-    private Map<String, String> _details;
+    private Map<String, String> details;
 
     public DiskTO() {
 
@@ -91,10 +92,10 @@ public class DiskTO {
     }
 
     public void setDetails(Map<String, String> details) {
-        _details = details;
+        this.details = details;
     }
 
     public Map<String, String> getDetails() {
-        return _details;
+        return details;
     }
 }

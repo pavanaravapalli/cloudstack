@@ -16,18 +16,18 @@
 // under the License.
 
 <template>
-  <a-spin :spinning="loading || loading">
+  <a-spin :spinning="loading || loading" v-ctrl-enter="handleSubmit">
     <a-row :gutter="12">
       <a-col :md="24" :lg="24">
         <a-form-item :label="$t('label.templatesubject')">
-          <a-textarea v-model="formModel.templatesubject" />
+          <a-textarea v-model:value="formModel.templatesubject" />
         </a-form-item>
       </a-col>
     </a-row>
     <a-row :gutter="12">
       <a-col :md="24" :lg="24">
         <a-form-item :label="$t('label.templatebody')">
-          <a-textarea v-model="formModel.templatebody" />
+          <a-textarea v-model:value="formModel.templatebody" />
         </a-form-item>
       </a-col>
     </a-row>
@@ -45,6 +45,7 @@
           :disabled="!('quotaEmailTemplateUpdate' in $store.getters.apis)"
           :loading="loading"
           type="primary"
+          ref="submit"
           @click="handleSubmit">{{ $t('label.apply') }}</a-button>
         <a-button
           style="float: right;"
@@ -58,13 +59,10 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { postAPI } from '@/api'
 
 export default {
   name: 'EmailTemplateDetails',
-  beforeCreate () {
-    this.form = this.$form.createForm(this)
-  },
   data () {
     return {
       resource: {},
@@ -75,7 +73,7 @@ export default {
       loading: false
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   methods: {
@@ -84,7 +82,7 @@ export default {
       const params = {}
       params.templatetype = this.$route.params.id
 
-      api('quotaEmailTemplateList', params).then(json => {
+      postAPI('quotaEmailTemplateList', params).then(json => {
         const listTemplates = json.quotaemailtemplatelistresponse.quotaemailtemplate || []
         this.resource = listTemplates && listTemplates.length > 0 ? listTemplates[0] : {}
         this.preFillDataValues()
@@ -100,6 +98,7 @@ export default {
       this.formModel.templatebody = this.resource.templatebody || null
     },
     handleSubmit () {
+      if (this.loading) return
       const params = {}
       params.templatesubject = this.formModel.templatesubject
       params.templatebody = this.formModel.templatebody
@@ -107,7 +106,7 @@ export default {
 
       this.loading = true
 
-      api('quotaEmailTemplateUpdate', params).then(json => {
+      postAPI('quotaEmailTemplateUpdate', params).then(json => {
         this.$message.success(this.$t('label.quota.email.edit') + ' - ' + this.resource.templatetype)
         this.$router.go(-1)
       }).catch(e => {

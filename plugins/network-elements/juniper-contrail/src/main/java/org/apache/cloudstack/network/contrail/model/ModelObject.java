@@ -22,7 +22,8 @@ import java.io.Serializable;
 import java.lang.ref.WeakReference;
 import java.util.TreeSet;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import com.cloud.exception.InternalErrorException;
 
@@ -33,7 +34,7 @@ import com.cloud.exception.InternalErrorException;
  *
  * The object constructor should set the uuid and the internal id of the cloudstack objects.
  *
- * The build method reads the master database (typically cloudstack mysql) and derives the state that
+ * The build method reads the primary database (typically cloudstack mysql) and derives the state that
  * we wish to reflect in the contrail API. This method should not modify the Contrail API state.
  *
  * The verify method reads the API server state and compares with cached properties.
@@ -45,7 +46,7 @@ public interface ModelObject {
     public static class ModelReference implements Comparable<ModelReference>, Serializable {
 
         private static final long serialVersionUID = -2019113974956703526L;
-        private static final Logger s_logger = Logger.getLogger(ModelReference.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
         /*
          * WeakReference class is not serializable by definition. So, we cannot enforce its serialization unless we write the implementation of

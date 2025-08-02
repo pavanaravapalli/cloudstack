@@ -16,10 +16,9 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.securitygroup;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseListTaggedResourcesCmd;
 import org.apache.cloudstack.api.Parameter;
@@ -32,9 +31,7 @@ import com.cloud.network.security.SecurityGroup;
 @APICommand(name = "listSecurityGroups", description = "Lists security groups", responseObject = SecurityGroupResponse.class, entityType = {SecurityGroup.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListSecurityGroupsCmd extends BaseListTaggedResourcesCmd {
-    public static final Logger s_logger = Logger.getLogger(ListSecurityGroupsCmd.class.getName());
 
-    private static final String s_name = "listsecuritygroupsresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -72,11 +69,6 @@ public class ListSecurityGroupsCmd extends BaseListTaggedResourcesCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public void execute() {
         ListResponse<SecurityGroupResponse> response = _queryService.searchForSecurityGroups(this);
         response.setResponseName(getCommandName());
@@ -84,7 +76,7 @@ public class ListSecurityGroupsCmd extends BaseListTaggedResourcesCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.SecurityGroup;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.SecurityGroup;
     }
 }

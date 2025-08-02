@@ -22,15 +22,23 @@ package com.cloud.resource;
 import com.cloud.agent.IAgentControl;
 import com.cloud.agent.api.Answer;
 import com.cloud.agent.api.Command;
+import com.cloud.agent.api.PingAnswer;
 import com.cloud.agent.api.PingCommand;
 import com.cloud.agent.api.StartupCommand;
 import com.cloud.host.Host;
 import com.cloud.utils.component.Manager;
+import org.apache.cloudstack.utils.security.KeyStoreUtils;
 
 /**
  * ServerResource is a generic container to execute commands sent
  */
 public interface ServerResource extends Manager {
+
+    String[] systemVmPatchFiles = new String[] { "agent.zip", "cloud-scripts.tgz", "patch-sysvms.sh" };
+    String[] certificateFiles = new String[] {KeyStoreUtils.CERT_FILENAME, KeyStoreUtils.CACERT_FILENAME, KeyStoreUtils.PKEY_FILENAME};
+
+    String SSHKEYSPATH = "/root/.ssh";
+    String SSHPRVKEYPATH = SSHKEYSPATH +"/id_rsa.cloud";
 
     /**
      * @return Host.Type type of the computing server we have.
@@ -42,6 +50,10 @@ public interface ServerResource extends Manager {
      * @return StartupCommand ready to be sent to the management server.
      */
     StartupCommand[] initialize();
+
+    default StartupCommand[] initialize(boolean isTransferredConnection) {
+        return initialize();
+    }
 
     /**
      * @param id id of the server to put in the PingCommand
@@ -71,4 +83,13 @@ public interface ServerResource extends Manager {
 
     void setAgentControl(IAgentControl agentControl);
 
+    default boolean isExitOnFailures() {
+        return true;
+    }
+
+    default boolean isAppendAgentNameToLogs() {
+        return false;
+    }
+
+    default void processPingAnswer(PingAnswer answer) {};
 }

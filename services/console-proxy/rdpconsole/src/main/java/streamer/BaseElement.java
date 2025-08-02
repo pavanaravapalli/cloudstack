@@ -21,10 +21,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import streamer.debug.FakeSink;
 import streamer.debug.FakeSource;
 
 public class BaseElement implements Element {
+
+    protected Logger logger = LogManager.getLogger(getClass());
 
     protected String id;
 
@@ -52,7 +56,7 @@ public class BaseElement implements Element {
     /**
      * Recommended size for incoming buffer in pull mode.
      */
-    protected int incommingBufLength = -1;
+    protected int incomingBufLength = -1;
 
     protected Map<String, DataSource> inputPads = new HashMap<String, DataSource>();
     protected Map<String, DataSink> outputPads = new HashMap<String, DataSink>();
@@ -393,7 +397,7 @@ public class BaseElement implements Element {
             {
                 verbose = true;
                 numBuffers = 10;
-                incommingBufLength = 3;
+                incomingBufLength = 3;
                 delay = 100;
             }
         };

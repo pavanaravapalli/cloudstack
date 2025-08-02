@@ -19,13 +19,11 @@ package org.apache.cloudstack.api.command.admin.usage;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseListCmd;
 import org.apache.cloudstack.api.Parameter;
-import org.apache.cloudstack.api.command.user.offering.ListServiceOfferingsCmd;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.TrafficMonitorResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
@@ -35,8 +33,6 @@ import com.cloud.host.Host;
 @APICommand(name = "listTrafficMonitors", description = "List traffic monitor Hosts.", responseObject = TrafficMonitorResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListTrafficMonitorsCmd extends BaseListCmd {
-    public static final Logger s_logger = Logger.getLogger(ListServiceOfferingsCmd.class.getName());
-    private static final String s_name = "listtrafficmonitorsresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -56,11 +52,6 @@ public class ListTrafficMonitorsCmd extends BaseListCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public void execute() {

@@ -19,7 +19,6 @@ package org.apache.cloudstack.api.command.admin.zone;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -37,9 +36,7 @@ import com.cloud.user.Account;
 @APICommand(name = "updateZone", description = "Updates a Zone.", responseObject = ZoneResponse.class,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateZoneCmd extends BaseCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateZoneCmd.class.getName());
 
-    private static final String s_name = "updatezoneresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -175,11 +172,6 @@ public class UpdateZoneCmd extends BaseCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         return Account.ACCOUNT_ID_SYSTEM;
     }
@@ -189,7 +181,7 @@ public class UpdateZoneCmd extends BaseCmd {
         CallContext.current().setEventDetails("Zone Id: " + getId());
         DataCenter result = _configService.editZone(this);
         if (result != null) {
-            ZoneResponse response = _responseGenerator.createZoneResponse(ResponseView.Full, result, false);
+            ZoneResponse response = _responseGenerator.createZoneResponse(ResponseView.Full, result, false, false);
             response.setResponseName(getCommandName());
             setResponseObject(response);
         } else {

@@ -22,12 +22,12 @@ package com.cloud.hypervisor.xenserver.resource.wrapper.xenbase;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.log4j.Logger;
 
 import com.cloud.agent.api.Answer;
 import com.cloud.agent.api.ModifyStoragePoolAnswer;
 import com.cloud.agent.api.ModifyStoragePoolCommand;
 import com.cloud.agent.api.to.StorageFilerTO;
+import com.cloud.hypervisor.xenserver.resource.CitrixHelper;
 import com.cloud.hypervisor.xenserver.resource.CitrixResourceBase;
 import com.cloud.resource.CommandWrapper;
 import com.cloud.resource.ResourceWrapper;
@@ -40,7 +40,6 @@ import com.xensource.xenapi.Types.XenAPIException;
 @ResourceWrapper(handles =  ModifyStoragePoolCommand.class)
 public final class CitrixModifyStoragePoolCommandWrapper extends CommandWrapper<ModifyStoragePoolCommand, Answer, CitrixResourceBase> {
 
-    private static final Logger s_logger = Logger.getLogger(CitrixModifyStoragePoolCommandWrapper.class);
 
     @Override
     public Answer execute(final ModifyStoragePoolCommand command, final CitrixResourceBase citrixResourceBase) {
@@ -49,14 +48,17 @@ public final class CitrixModifyStoragePoolCommandWrapper extends CommandWrapper<
         final boolean add = command.getAdd();
         if (add) {
             try {
-                final String srName = command.getStoragePath() != null ? command.getStoragePath() : pool.getUuid();
+                String srName = command.getStoragePath();
+                if (srName == null) {
+                    srName = CitrixHelper.getSRNameLabel(pool.getUuid(), pool.getType(), pool.getPath());
+                }
                 final SR sr = citrixResourceBase.getStorageRepository(conn, srName);
                 citrixResourceBase.setupHeartbeatSr(conn, sr, false);
                 final long capacity = sr.getPhysicalSize(conn);
                 final long available = capacity - sr.getPhysicalUtilisation(conn);
                 if (capacity == -1) {
                     final String msg = "Pool capacity is -1! pool: " + pool.getHost() + pool.getPath();
-                    s_logger.warn(msg);
+                    logger.warn(msg);
                     return new Answer(command, false, msg);
                 }
                 final Map<String, TemplateProp> tInfo = new HashMap<String, TemplateProp>();
@@ -65,17 +67,18 @@ public final class CitrixModifyStoragePoolCommandWrapper extends CommandWrapper<
             } catch (final XenAPIException e) {
                 final String msg = "ModifyStoragePoolCommand add XenAPIException:" + e.toString() + " host:" + citrixResourceBase.getHost().getUuid() + " pool: " + pool.getHost()
                         + pool.getPath();
-                s_logger.warn(msg, e);
+                logger.warn(msg, e);
                 return new Answer(command, false, msg);
             } catch (final Exception e) {
                 final String msg = "ModifyStoragePoolCommand add XenAPIException:" + e.getMessage() + " host:" + citrixResourceBase.getHost().getUuid() + " pool: "
                         + pool.getHost() + pool.getPath();
-                s_logger.warn(msg, e);
+                logger.warn(msg, e);
                 return new Answer(command, false, msg);
             }
         } else {
             try {
-                final SR sr = citrixResourceBase.getStorageRepository(conn, pool.getUuid());
+                final SR sr = citrixResourceBase.getStorageRepository(conn,
+                        CitrixHelper.getSRNameLabel(pool.getUuid(), pool.getType(), pool.getPath()));
                 final String srUuid = sr.getUuid(conn);
                 final String result = citrixResourceBase.callHostPluginPremium(conn, "setup_heartbeat_file", "host", citrixResourceBase.getHost().getUuid(), "sr", srUuid, "add",
                         "false");
@@ -86,12 +89,12 @@ public final class CitrixModifyStoragePoolCommandWrapper extends CommandWrapper<
             } catch (final XenAPIException e) {
                 final String msg = "ModifyStoragePoolCommand remove XenAPIException:" + e.toString() + " host:" + citrixResourceBase.getHost().getUuid() + " pool: "
                         + pool.getHost() + pool.getPath();
-                s_logger.warn(msg, e);
+                logger.warn(msg, e);
                 return new Answer(command, false, msg);
             } catch (final Exception e) {
                 final String msg = "ModifyStoragePoolCommand remove XenAPIException:" + e.getMessage() + " host:" + citrixResourceBase.getHost().getUuid() + " pool: "
                         + pool.getHost() + pool.getPath();
-                s_logger.warn(msg, e);
+                logger.warn(msg, e);
                 return new Answer(command, false, msg);
             }
         }

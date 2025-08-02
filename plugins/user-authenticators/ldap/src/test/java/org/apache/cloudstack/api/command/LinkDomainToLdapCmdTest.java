@@ -18,6 +18,7 @@ package org.apache.cloudstack.api.command;
 
 import com.cloud.user.Account;
 import com.cloud.user.AccountService;
+import com.cloud.user.DomainService;
 import com.cloud.user.User;
 import com.cloud.user.UserAccountVO;
 import org.apache.cloudstack.acl.RoleType;
@@ -29,13 +30,13 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
-import static org.powermock.api.mockito.PowerMockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class LinkDomainToLdapCmdTest implements LdapConfigurationChanger
@@ -44,6 +45,8 @@ public class LinkDomainToLdapCmdTest implements LdapConfigurationChanger
     LdapManager ldapManager;
     @Mock
     AccountService accountService;
+    @Mock
+    DomainService domainService;
 
     LinkDomainToLdapCmd linkDomainToLdapCmd;
 
@@ -52,6 +55,7 @@ public class LinkDomainToLdapCmdTest implements LdapConfigurationChanger
         linkDomainToLdapCmd = new LinkDomainToLdapCmd();
         setHiddenField(linkDomainToLdapCmd, "_ldapManager", ldapManager);
         setHiddenField(linkDomainToLdapCmd, "_accountService", accountService);
+        setHiddenField(linkDomainToLdapCmd, "_domainService", domainService);
     }
 
     @After
@@ -60,20 +64,20 @@ public class LinkDomainToLdapCmdTest implements LdapConfigurationChanger
 
     @Test
     public void execute() throws Exception {
-//      test with valid params and with admin who doesnt exist in cloudstack
+//      test with valid params and with admin who doesn't exist in cloudstack
         Long domainId = 1L;
         String type = "GROUP";
         String ldapDomain = "CN=test,DC=ccp,DC=Citrix,DC=com";
-        short accountType = Account.ACCOUNT_TYPE_DOMAIN_ADMIN;
+        Account.Type accountType = Account.Type.DOMAIN_ADMIN;
         String username = "admin";
         long accountId = 24;
         setHiddenField(linkDomainToLdapCmd, "ldapDomain", ldapDomain);
         setHiddenField(linkDomainToLdapCmd, "admin", username);
         setHiddenField(linkDomainToLdapCmd, "type", type);
         setHiddenField(linkDomainToLdapCmd, "domainId", domainId);
-        setHiddenField(linkDomainToLdapCmd, "accountType", accountType);
+        setHiddenField(linkDomainToLdapCmd, "accountType", accountType.ordinal());
 
-        LinkDomainToLdapResponse response = new LinkDomainToLdapResponse(domainId.toString(), type, ldapDomain, (short)accountType);
+        LinkDomainToLdapResponse response = new LinkDomainToLdapResponse(domainId.toString(), type, ldapDomain, accountType.ordinal());
         when(ldapManager.linkDomainToLdap(linkDomainToLdapCmd)).thenReturn(response);
         when(ldapManager.getUser(username, type, ldapDomain, 1L)).thenReturn(new LdapUser(username, "admin@ccp.citrix.com", "Admin", "Admin", ldapDomain, "ccp", false, null));
 
@@ -81,7 +85,7 @@ public class LinkDomainToLdapCmdTest implements LdapConfigurationChanger
         UserAccountVO userAccount =  new UserAccountVO();
         userAccount.setAccountId(24);
         when(accountService.createUserAccount(eq(username), eq(""), eq("Admin"), eq("Admin"), eq("admin@ccp.citrix.com"), isNull(String.class),
-                eq(username), eq(Account.ACCOUNT_TYPE_DOMAIN_ADMIN), eq(RoleType.DomainAdmin.getId()), eq(domainId), isNull(String.class),
+                eq(username), eq(Account.Type.DOMAIN_ADMIN), eq(RoleType.DomainAdmin.getId()), eq(domainId), isNull(String.class),
                 (java.util.Map<String,String>)isNull(), anyString(), anyString(), eq(User.Source.LDAP))).thenReturn(userAccount);
 
 

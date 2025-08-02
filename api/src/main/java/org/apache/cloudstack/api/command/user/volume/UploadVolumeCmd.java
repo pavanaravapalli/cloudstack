@@ -16,10 +16,8 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.volume;
 
-import com.cloud.dc.DataCenter;
-import org.apache.log4j.Logger;
-
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -34,6 +32,7 @@ import org.apache.cloudstack.api.response.VolumeResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.cloudstack.context.CallContext;
 
+import com.cloud.dc.DataCenter;
 import com.cloud.event.EventTypes;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
@@ -45,7 +44,6 @@ import com.cloud.storage.Volume;
 @APICommand(name = "uploadVolume", description = "Uploads a data disk.", responseObject = VolumeResponse.class, responseView = ResponseView.Restricted, entityType = {Volume.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UploadVolumeCmd extends BaseAsyncCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(UploadVolumeCmd.class.getName());
     private static final String s_name = "uploadvolumeresponse";
 
     /////////////////////////////////////////////////////
@@ -78,7 +76,7 @@ public class UploadVolumeCmd extends BaseAsyncCmd implements UserCmd {
     @Parameter(name = ApiConstants.DOMAIN_ID,
                type = CommandType.UUID,
                entityType = DomainResponse.class,
-               description = "an optional domainId. If the account parameter is used, domainId must also be used.")
+               description = "an optional domainId. If the account parameter is used, domainId must also be used. If account is NOT provided then volume will be assigned to the caller account and domain.")
     private Long domainId;
 
     @Parameter(name = ApiConstants.ACCOUNT, type = CommandType.STRING, description = "an optional accountName. Must be used with domainId.")
@@ -179,4 +177,8 @@ public class UploadVolumeCmd extends BaseAsyncCmd implements UserCmd {
         return EventTypes.EVENT_VOLUME_UPLOAD;
     }
 
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Volume;
+    }
 }

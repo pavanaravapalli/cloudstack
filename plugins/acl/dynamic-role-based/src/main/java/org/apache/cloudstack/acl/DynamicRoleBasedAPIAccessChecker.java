@@ -16,6 +16,7 @@
 // under the License.
 package org.apache.cloudstack.acl;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,21 +26,21 @@ import java.util.Set;
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
 
-import org.apache.cloudstack.api.APICommand;
-import org.apache.log4j.Logger;
 import org.apache.cloudstack.acl.RolePermissionEntity.Permission;
+import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.utils.cache.LazyCache;
+import org.apache.commons.lang3.StringUtils;
 
 import com.cloud.exception.PermissionDeniedException;
 import com.cloud.exception.UnavailableCommandException;
 import com.cloud.user.Account;
 import com.cloud.user.AccountService;
 import com.cloud.user.User;
+import com.cloud.utils.Pair;
 import com.cloud.utils.component.AdapterBase;
 import com.cloud.utils.component.PluggableService;
-import com.google.common.base.Strings;
 
 public class DynamicRoleBasedAPIAccessChecker extends AdapterBase implements APIAclChecker {
-
     @Inject
     private AccountService accountService;
     @Inject
@@ -48,7 +49,9 @@ public class DynamicRoleBasedAPIAccessChecker extends AdapterBase implements API
     private List<PluggableService> services;
     private Map<RoleType, Set<String>> annotationRoleBasedApisMap = new HashMap<RoleType, Set<String>>();
 
-    private static final Logger logger = Logger.getLogger(DynamicRoleBasedAPIAccessChecker.class.getName());
+    private LazyCache<Long, Account> accountCache;
+    private LazyCache<Long, Pair<Role, List<RolePermission>>> rolePermissionsCache;
+    private int cachePeriod;
 
     protected DynamicRoleBasedAPIAccessChecker() {
         super();
@@ -57,57 +60,142 @@ public class DynamicRoleBasedAPIAccessChecker extends AdapterBase implements API
         }
     }
 
-    private void denyApiAccess(final String commandName) throws PermissionDeniedException {
-        throw new PermissionDeniedException("The API " + commandName + " is blacklisted for the account's role.");
+    @Override
+    public List<String> getApisAllowedToUser(Role role, User user, List<String> apiNames) throws PermissionDeniedException {
+        if (!isEnabled()) {
+            return apiNames;
+        }
+
+        List<RolePermission> allPermissions = roleService.findAllPermissionsBy(role.getId());
+        List<String> allowedApis = new ArrayList<>();
+        for (String api : apiNames) {
+            if (checkApiPermissionByRole(role, api, allPermissions)) {
+                allowedApis.add(api);
+            }
+        }
+        return allowedApis;
     }
 
-    public boolean isDisabled() {
-        return !roleService.isEnabled();
+    /**
+     * Checks if the given Role of an Account has the allowed permission for the given API.
+     *
+     * @param role to be used on the verification
+     * @param apiName to be verified
+     * @param allPermissions list of role permissions for the given role
+     * @return if the role has the permission for the API
+     */
+    public boolean checkApiPermissionByRole(Role role, String apiName, List<RolePermission> allPermissions) {
+        for (final RolePermission permission : allPermissions) {
+            if (!permission.getRule().matches(apiName)) {
+                continue;
+            }
+
+            if (!Permission.ALLOW.equals(permission.getPermission())) {
+                return false;
+            }
+
+            if (logger.isTraceEnabled()) {
+                logger.trace(String.format("The API [%s] is allowed for the role %s by the permission [%s].", apiName, role, permission.getRule().toString()));
+            }
+            return true;
+        }
+        return annotationRoleBasedApisMap.get(role.getRoleType()) != null &&
+                annotationRoleBasedApisMap.get(role.getRoleType()).contains(apiName);
+    }
+
+    protected Account getAccountFromId(long accountId) {
+        return accountService.getAccount(accountId);
+    }
+
+    protected Pair<Role, List<RolePermission>> getRolePermissions(long roleId) {
+        final Role accountRole = roleService.findRole(roleId);
+        if (accountRole == null || accountRole.getId() < 1L) {
+            return new Pair<>(null, null);
+        }
+
+        if (accountRole.getRoleType() == RoleType.Admin && accountRole.getId() == RoleType.Admin.getId()) {
+            return new Pair<>(accountRole, null);
+        }
+
+        return new Pair<>(accountRole, roleService.findAllPermissionsBy(accountRole.getId()));
+    }
+
+    protected Pair<Role, List<RolePermission>> getRolePermissionsUsingCache(long roleId) {
+        if (cachePeriod > 0) {
+            return rolePermissionsCache.get(roleId);
+        }
+        return getRolePermissions(roleId);
+    }
+
+    protected Account getAccountFromIdUsingCache(long accountId) {
+        if (cachePeriod > 0) {
+            return accountCache.get(accountId);
+        }
+        return getAccountFromId(accountId);
     }
 
     @Override
     public boolean checkAccess(User user, String commandName) throws PermissionDeniedException {
-        if (isDisabled()) {
+        if (!isEnabled()) {
             return true;
         }
-        Account account = accountService.getAccount(user.getAccountId());
+        Account account = getAccountFromIdUsingCache(user.getAccountId());
         if (account == null) {
-            throw new PermissionDeniedException("The account id=" + user.getAccountId() + "for user id=" + user.getId() + "is null");
+            throw new PermissionDeniedException(String.format("Account for user id [%s] cannot be found", user.getUuid()));
         }
-
-        final Role accountRole = roleService.findRole(account.getRoleId());
-        if (accountRole == null || accountRole.getId() < 1L) {
-            denyApiAccess(commandName);
+        Pair<Role, List<RolePermission>> roleAndPermissions = getRolePermissionsUsingCache(account.getRoleId());
+        final Role accountRole = roleAndPermissions.first();
+        if (accountRole == null) {
+            throw new PermissionDeniedException(String.format("Account role for user id [%s] cannot be found.", user.getUuid()));
         }
-
-        // Allow all APIs for root admins
         if (accountRole.getRoleType() == RoleType.Admin && accountRole.getId() == RoleType.Admin.getId()) {
+            logger.info("Account for user id {} is Root Admin or Domain Admin, all APIs are allowed.", user.getUuid());
             return true;
         }
+        List<RolePermission> allPermissions = roleAndPermissions.second();
+        if (checkApiPermissionByRole(accountRole, commandName, allPermissions)) {
+            return true;
+        }
+        throw new UnavailableCommandException(String.format("The API [%s] does not exist or is not available for the account for user id [%s].", commandName, user.getUuid()));
+    }
 
-        // Check against current list of permissions
-        for (final RolePermission permission : roleService.findAllPermissionsBy(accountRole.getId())) {
-            if (permission.getRule().matches(commandName)) {
-                if (Permission.ALLOW.equals(permission.getPermission())) {
-                    return true;
-                } else {
-                    denyApiAccess(commandName);
-                }
+    public boolean checkAccess(Account account, String commandName) {
+        Pair<Role, List<RolePermission>> roleAndPermissions = getRolePermissionsUsingCache(account.getRoleId());
+        final Role accountRole = roleAndPermissions.first();
+        if (accountRole == null) {
+            throw new PermissionDeniedException(String.format("The account [%s] has role null or unknown.", account));
+        }
+
+        if (accountRole.getRoleType() == RoleType.Admin && accountRole.getId() == RoleType.Admin.getId()) {
+            if (logger.isTraceEnabled()) {
+                logger.trace(String.format("Account [%s] is Root Admin or Domain Admin, all APIs are allowed.", account));
             }
-        }
-
-        // Check annotations
-        if (annotationRoleBasedApisMap.get(accountRole.getRoleType()) != null
-                && annotationRoleBasedApisMap.get(accountRole.getRoleType()).contains(commandName)) {
             return true;
         }
 
-        // Default deny all
-        throw new UnavailableCommandException("The API " + commandName + " does not exist or is not available for this account.");
+        List<RolePermission> allPermissions = roleService.findAllPermissionsBy(accountRole.getId());
+        if (checkApiPermissionByRole(accountRole, commandName, allPermissions)) {
+            return true;
+        }
+        throw new UnavailableCommandException(String.format("The API [%s] does not exist or is not available for the account %s.", commandName, account));
+    }
+
+    /**
+     * Only one strategy should be used between StaticRoleBasedAPIAccessChecker and DynamicRoleBasedAPIAccessChecker
+     * Default behavior is to use the Dynamic version. The StaticRoleBasedAPIAccessChecker is the legacy version.
+     * If roleService is enabled, then it uses the DynamicRoleBasedAPIAccessChecker, otherwise, it will use the
+     * StaticRoleBasedAPIAccessChecker.
+     */
+    @Override
+    public boolean isEnabled() {
+        if (!roleService.isEnabled()) {
+            logger.trace("RoleService is disabled. We will not use DynamicRoleBasedAPIAccessChecker.");
+        }
+        return roleService.isEnabled();
     }
 
     public void addApiToRoleBasedAnnotationsMap(final RoleType roleType, final String commandName) {
-        if (roleType == null || Strings.isNullOrEmpty(commandName)) {
+        if (roleType == null || StringUtils.isEmpty(commandName)) {
             return;
         }
         final Set<String> commands = annotationRoleBasedApisMap.get(roleType);
@@ -119,6 +207,9 @@ public class DynamicRoleBasedAPIAccessChecker extends AdapterBase implements API
     @Override
     public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
         super.configure(name, params);
+        cachePeriod = Math.max(0, RoleService.DynamicApiCheckerCachePeriod.value());
+        accountCache = new LazyCache<>(32, cachePeriod, this::getAccountFromId);
+        rolePermissionsCache = new LazyCache<>(32, cachePeriod, this::getRolePermissions);
         return true;
     }
 

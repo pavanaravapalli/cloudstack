@@ -20,7 +20,7 @@ import java.util.Date;
 import java.util.Map;
 
 import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.BaseResponse;
+import org.apache.cloudstack.api.BaseResponseWithAnnotations;
 import org.apache.cloudstack.api.EntityReference;
 
 import com.cloud.offering.ServiceOffering;
@@ -28,7 +28,7 @@ import com.cloud.serializer.Param;
 import com.google.gson.annotations.SerializedName;
 
 @EntityReference(value = ServiceOffering.class)
-public class ServiceOfferingResponse extends BaseResponse {
+public class ServiceOfferingResponse extends BaseResponseWithAnnotations {
     @SerializedName("id")
     @Param(description = "the id of the service offering")
     private String id;
@@ -36,6 +36,10 @@ public class ServiceOfferingResponse extends BaseResponse {
     @SerializedName("name")
     @Param(description = "the name of the service offering")
     private String name;
+
+    @SerializedName("state")
+    @Param(description = "state of the service offering")
+    private String state;
 
     @SerializedName("displaytext")
     @Param(description = "an alternate display text of the service offering.")
@@ -76,7 +80,7 @@ public class ServiceOfferingResponse extends BaseResponse {
     @Param(description = "true if the vm needs to be volatile, i.e., on every reboot of vm from API root disk is discarded and creates a new root disk")
     private Boolean isVolatile;
 
-    @SerializedName("tags")
+    @SerializedName(ApiConstants.STORAGE_TAGS)
     @Param(description = "the tags for the service offering")
     private String tags;
 
@@ -204,6 +208,84 @@ public class ServiceOfferingResponse extends BaseResponse {
     @Param(description = "Root disk size in GB", since = "4.15")
     private Long rootDiskSize;
 
+    @SerializedName(ApiConstants.DYNAMIC_SCALING_ENABLED)
+    @Param(description = "true if virtual machine needs to be dynamically scalable of cpu or memory", since = "4.16")
+    private Boolean dynamicScalingEnabled;
+
+    @SerializedName(ApiConstants.DISK_OFFERING_STRICTNESS)
+    @Param(description = "True/False to indicate the strictness of the disk offering association with the compute offering. " +
+            "When set to true, override of disk offering is not allowed when VM is deployed and " +
+            "change disk offering is not allowed for the ROOT disk after the VM is deployed", since = "4.17")
+    private Boolean diskOfferingStrictness;
+
+    @SerializedName(ApiConstants.DISK_OFFERING_ID)
+    @Param(description = "the ID of the disk offering to which service offering is linked", since = "4.17")
+    private String diskOfferingId;
+
+    @SerializedName("diskofferingname")
+    @Param(description = "name of the disk offering", since = "4.17")
+    private String diskOfferingName;
+
+    @SerializedName("diskofferingdisplaytext")
+    @Param(description = "the display text of the disk offering", since = "4.17")
+    private String diskOfferingDisplayText;
+
+    @SerializedName(ApiConstants.ENCRYPT_ROOT)
+    @Param(description = "true if virtual machine root disk will be encrypted on storage", since = "4.18")
+    private Boolean encryptRoot;
+
+    @SerializedName(ApiConstants.GPU_CARD_ID)
+    @Param(description = "the ID of the gpu card to which service offering is linked", since = "4.21")
+    private String gpuCardId;
+
+    @SerializedName(ApiConstants.GPU_CARD_NAME)
+    @Param(description = "the name of the gpu card to which service offering is linked", since = "4.21")
+    private String gpuCardName;
+
+    @SerializedName(ApiConstants.VGPU_PROFILE_ID)
+    @Param(description = "the ID of the vgpu profile to which service offering is linked", since = "4.21")
+    private String vgpuProfileId;
+
+    @SerializedName(ApiConstants.VGPU_PROFILE_NAME)
+    @Param(description = "the name of the vgpu profile to which service offering is linked", since = "4.21")
+    private String vgpuProfileName;
+
+    @SerializedName(ApiConstants.VIDEORAM)
+    @Param(description = "the video RAM size in MB")
+    private Long videoRam;
+
+    @SerializedName(ApiConstants.MAXHEADS)
+    @Param(description = "the maximum number of display heads")
+    private Long maxHeads;
+
+    @SerializedName(ApiConstants.MAXRESOLUTIONX)
+    @Param(description = "the maximum X resolution")
+    private Long maxResolutionX;
+
+    @SerializedName(ApiConstants.MAXRESOLUTIONY)
+    @Param(description = "the maximum Y resolution")
+    private Long maxResolutionY;
+
+    @SerializedName(ApiConstants.GPU_COUNT)
+    @Param(description = "the count of GPUs to attach ", since = "4.21")
+    private Integer gpuCount;
+
+    @SerializedName(ApiConstants.GPU_DISPLAY)
+    @Param(description = "whether GPU device is used for display or not ", since = "4.21")
+    private Boolean gpuDisplay;
+
+    @SerializedName(ApiConstants.PURGE_RESOURCES)
+    @Param(description = "Whether to cleanup VM and its associated resource upon expunge", since = "4.20")
+    private Boolean purgeResources;
+
+    @SerializedName(ApiConstants.INSTANCE_LEASE_DURATION)
+    @Param(description = "Instance lease duration (in days) for service offering", since = "4.21.0")
+    private Integer leaseDuration;
+
+    @SerializedName(ApiConstants.INSTANCE_LEASE_EXPIRY_ACTION)
+    @Param(description = "Action to be taken once lease is over", since = "4.21.0")
+    private String leaseExpiryAction;
+
     public ServiceOfferingResponse() {
     }
 
@@ -221,6 +303,14 @@ public class ServiceOfferingResponse extends BaseResponse {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
     }
 
     public Boolean getIsSystem() {
@@ -457,11 +547,26 @@ public class ServiceOfferingResponse extends BaseResponse {
 
     public void setIscutomized(boolean iscutomized) {
         this.isCustomized = iscutomized;
-
     }
 
     public void setCacheMode(String cacheMode) {
         this.cacheMode = cacheMode;
+    }
+
+    public Integer getLeaseDuration() {
+        return leaseDuration;
+    }
+
+    public void setLeaseDuration(Integer leaseDuration) {
+        this.leaseDuration = leaseDuration;
+    }
+
+    public String getLeaseExpiryAction() {
+        return leaseExpiryAction;
+    }
+
+    public void setLeaseExpiryAction(String leaseExpiryAction) {
+        this.leaseExpiryAction = leaseExpiryAction;
     }
 
     public String getVsphereStoragePolicy() {
@@ -474,5 +579,132 @@ public class ServiceOfferingResponse extends BaseResponse {
 
     public void setRootDiskSize(Long rootDiskSize) {
         this.rootDiskSize = rootDiskSize;
+    }
+
+    public Boolean getDynamicScalingEnabled() {
+        return dynamicScalingEnabled;
+    }
+
+    public void setDynamicScalingEnabled(Boolean dynamicScalingEnabled) {
+        this.dynamicScalingEnabled = dynamicScalingEnabled;
+    }
+
+
+    public Boolean getDiskOfferingStrictness() {
+        return diskOfferingStrictness;
+    }
+
+    public void setDiskOfferingStrictness(Boolean diskOfferingStrictness) {
+        this.diskOfferingStrictness = diskOfferingStrictness;
+    }
+
+    public void setDiskOfferingId(String diskOfferingId) {
+        this.diskOfferingId = diskOfferingId;
+    }
+
+    public void setDiskOfferingName(String diskOfferingName) {
+        this.diskOfferingName = diskOfferingName;
+    }
+
+    public void setDiskOfferingDisplayText(String diskOfferingDisplayText) {
+        this.diskOfferingDisplayText = diskOfferingDisplayText;
+    }
+
+    public String getDiskOfferingId() {
+        return diskOfferingId;
+    }
+
+    public String getDiskOfferingName() {
+        return diskOfferingName;
+    }
+
+    public String getDiskOfferingDisplayText() {
+        return diskOfferingDisplayText;
+    }
+
+    public void setEncryptRoot(Boolean encrypt) { this.encryptRoot = encrypt; }
+
+    public String getVgpuProfileName() {
+        return vgpuProfileName;
+    }
+
+    public void setVgpuProfileName(String vgpuProfileName) {
+        this.vgpuProfileName = vgpuProfileName;
+    }
+
+    public Long getVideoRam() {
+        return videoRam;
+    }
+
+    public void setVideoRam(Long videoRam) {
+        this.videoRam = videoRam;
+    }
+
+    public Long getMaxHeads() {
+        return maxHeads;
+    }
+
+    public void setMaxHeads(Long maxHeads) {
+        this.maxHeads = maxHeads;
+    }
+
+    public Long getMaxResolutionX() {
+        return maxResolutionX;
+    }
+
+    public void setMaxResolutionX(Long maxResolutionX) {
+        this.maxResolutionX = maxResolutionX;
+    }
+
+    public Long getMaxResolutionY() {
+        return maxResolutionY;
+    }
+
+    public void setMaxResolutionY(Long maxResolutionY) {
+        this.maxResolutionY = maxResolutionY;
+    }
+
+    public String getVgpuProfileId() {
+        return vgpuProfileId;
+    }
+
+    public void setVgpuProfileId(String vgpuProfileId) {
+        this.vgpuProfileId = vgpuProfileId;
+    }
+
+    public String getGpuCardName() {
+        return gpuCardName;
+    }
+
+    public void setGpuCardName(String gpuCardName) {
+        this.gpuCardName = gpuCardName;
+    }
+
+    public String getGpuCardId() {
+        return gpuCardId;
+    }
+
+    public void setGpuCardId(String gpuCardId) {
+        this.gpuCardId = gpuCardId;
+    }
+
+    public Integer getGpuCount() {
+        return gpuCount;
+    }
+
+    public void setGpuCount(Integer gpuCount) {
+        this.gpuCount = gpuCount;
+    }
+
+    public Boolean getGpuDisplay() {
+        return gpuDisplay;
+    }
+
+    public void setGpuDisplay(Boolean gpuDisplay) {
+        this.gpuDisplay = gpuDisplay;
+    }
+
+    public void setPurgeResources(Boolean purgeResources) {
+        this.purgeResources = purgeResources;
     }
 }

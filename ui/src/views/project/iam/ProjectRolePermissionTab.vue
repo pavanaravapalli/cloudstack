@@ -16,10 +16,10 @@
 // under the License.
 
 <template>
-  <a-icon v-if="loadingTable" type="loading" class="main-loading-spinner"></a-icon>
+  <loading-outlined v-if="loadingTable" class="main-loading-spinner"></loading-outlined>
   <div v-else>
     <div v-if="updateTable" class="loading-overlay">
-      <a-icon type="loading" />
+      <loading-outlined />
     </div>
     <div
       class="rules-list ant-list ant-list-bordered"
@@ -29,10 +29,10 @@
         <div class="rules-table__col rules-table__col--grab"></div>
         <div class="rules-table__col rules-table__col--rule rules-table__col--new">
           <a-auto-complete
-            :autoFocus="true"
+            v-focus="true"
             :filterOption="filterOption"
-            :dataSource="apis"
-            :value="newRule"
+            :options="apis"
+            v-model:value="newRule"
             @change="val => newRule = val"
             placeholder="Rule"
             :class="{'rule-dropdown-error' : newRuleSelectError}" />
@@ -40,25 +40,18 @@
         <div class="rules-table__col rules-table__col--permission">
           <permission-editable
             :defaultValue="newRulePermission"
-            @change="onPermissionChange(null, $event)" />
+            @onChange="onPermissionChange(null, $event)" />
         </div>
         <div class="rules-table__col rules-table__col--description">
-          <a-input v-model="newRuleDescription" placeholder="Description"></a-input>
+          <a-input v-model:value="newRuleDescription" placeholder="Description"></a-input>
         </div>
         <div class="rules-table__col rules-table__col--actions">
-          <a-tooltip
-            placement="bottom">
-            <template slot="title">
-              Save new Rule
-            </template>
-            <a-button
-              icon="plus"
-              type="primary"
-              shape="circle"
-              @click="onRuleSave"
-            >
-            </a-button>
-          </a-tooltip>
+          <tooltip-button
+            tooltipPlacement="bottom"
+            :tooltip="$t('label.save.new.rule')"
+            icon="plus-outlined"
+            type="primary"
+            @onClick="onRuleSave" />
         </div>
       </div>
 
@@ -67,55 +60,56 @@
         @change="changeOrder"
         handle=".drag-handle"
         animation="200"
-        ghostClass="drag-ghost">
-        <transition-group type="transition">
-          <div
-            v-for="(record, index) in rules"
-            :key="`item-${index}`"
-            class="rules-table-item ant-list-item">
+        ghostClass="drag-ghost"
+        :component-data="{type: 'transition'}"
+        item-key="id">
+        <template #item="{element}">
+          <div class="rules-table-item ant-list-item">
             <div class="rules-table__col rules-table__col--grab drag-handle">
-              <a-icon type="drag"></a-icon>
+              <drag-outlined />
             </div>
             <div class="rules-table__col rules-table__col--rule">
-              {{ record.rule }}
+              {{ element.rule }}
             </div>
             <div class="rules-table__col rules-table__col--permission">
               <permission-editable
-                :defaultValue="record.permission"
-                @change="onPermissionChange(record, $event)" />
+                :defaultValue="element.permission"
+                @onChange="onPermissionChange(element, $event)" />
             </div>
             <div class="rules-table__col rules-table__col--description">
-              <template v-if="record.description">
-                {{ record.description }}
+              <template v-if="element.description">
+                {{ element.description }}
               </template>
               <div v-else class="no-description">
-                No description entered.
+                {{ $t('message.no.description') }}
               </div>
             </div>
             <div class="rules-table__col rules-table__col--actions">
               <rule-delete
-                :record="record"
-                @delete="onRuleDelete(record.id)" />
+                :record="element"
+                @delete="onRuleDelete(element.id)" />
             </div>
           </div>
-        </transition-group>
+        </template>
       </draggable>
     </div>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
 import draggable from 'vuedraggable'
 import PermissionEditable from '@/views/iam/PermissionEditable'
 import RuleDelete from '@/views/iam/RuleDelete'
+import TooltipButton from '@/components/widgets/TooltipButton'
 
 export default {
   name: 'ProjectRolePermissionTab',
   components: {
     RuleDelete,
     PermissionEditable,
-    draggable
+    draggable,
+    TooltipButton
   },
   props: {
     resource: {
@@ -133,7 +127,7 @@ export default {
       updateTable: false,
       rules: null,
       newRule: '',
-      newRulePermission: 'allow',
+      newRulePermission: 'deny',
       newRuleDescription: '',
       newRuleSelectError: false,
       drag: false,
@@ -141,31 +135,36 @@ export default {
     }
   },
   mounted () {
-    this.apis = Object.keys(this.$store.getters.apis).sort((a, b) => a.localeCompare(b))
+    this.apis = Object.keys(this.$store.getters.apis)
+      .sort((a, b) => a.localeCompare(b))
+      .map(value => { return { value: value } })
     this.fetchData()
   },
   watch: {
-    resource: function () {
-      this.fetchData(() => {
-        this.resetNewFields()
-      })
+    resource: {
+      deep: true,
+      handler () {
+        this.fetchData(() => {
+          this.resetNewFields()
+        })
+      }
     }
   },
   methods: {
     filterOption (input, option) {
       return (
-        option.componentOptions.children[0].text.toUpperCase().indexOf(input.toUpperCase()) >= 0
+        option.value.toUpperCase().indexOf(input.toUpperCase()) >= 0
       )
     },
     resetNewFields () {
       this.newRule = ''
-      this.newRulePermission = 'allow'
+      this.newRulePermission = 'deny'
       this.newRuleDescription = ''
       this.newRuleSelectError = false
     },
     fetchData (callback = null) {
       if (!this.resource.id) return
-      api('listProjectRolePermissions', {
+      getAPI('listProjectRolePermissions', {
         projectid: this.resource.id,
         projectroleid: this.role.id
       }).then(response => {
@@ -179,7 +178,7 @@ export default {
       })
     },
     changeOrder () {
-      api('updateProjectRolePermission', {}, 'POST', {
+      postAPI('updateProjectRolePermission', {
         projectid: this.resource.id,
         projectroleid: this.role.id,
         ruleorder: this.rules.map(rule => rule.id)
@@ -191,7 +190,7 @@ export default {
     },
     onRuleDelete (key) {
       this.updateTable = true
-      api('deleteProjectRolePermission', {
+      postAPI('deleteProjectRolePermission', {
         id: key,
         projectid: this.resource.id
       }).catch(error => {
@@ -204,7 +203,7 @@ export default {
       this.newRulePermission = value
       if (!record) return
       this.updateTable = true
-      api('updateProjectRolePermission', {
+      postAPI('updateProjectRolePermission', {
         projectid: this.resource.id,
         projectroleid: this.role.id,
         projectrolepermissionid: record.id,
@@ -224,7 +223,7 @@ export default {
         return
       }
       this.updateTable = true
-      api('createProjectRolePermission', {
+      postAPI('createProjectRolePermission', {
         rule: this.newRule,
         permission: this.newRulePermission,
         description: this.newRuleDescription,

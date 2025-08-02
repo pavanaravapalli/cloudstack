@@ -26,15 +26,17 @@
       :pagination="false"
       :scroll="{ y: '55vh' }"
     >
-      <template slot="quota" slot-scope="text">
-        <span v-if="text!==undefined">{{ `${currency} ${text}` }}</span>
+      <template #bodyCell="{ column, text }">
+        <template v-if="column.key === 'quota'">
+          <span v-if="text!==undefined">{{ `${currency} ${text}` }}</span>
+        </template>
       </template>
     </a-table>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import moment from 'moment'
 
 export default {
@@ -63,35 +65,34 @@ export default {
     columns () {
       return [
         {
+          key: 'name',
           title: this.$t('label.quota.type.name'),
           dataIndex: 'name',
-          width: 'calc(100% / 3)',
-          scopedSlots: { customRender: 'name' }
+          width: 'calc(100% / 3)'
         },
         {
+          key: 'unit',
           title: this.$t('label.quota.type.unit'),
           dataIndex: 'unit',
-          width: 'calc(100% / 3)',
-          scopedSlots: { customRender: 'unit' }
+          width: 'calc(100% / 3)'
         },
         {
+          key: 'quota',
           title: this.$t('label.quota.usage'),
           dataIndex: 'quota',
-          width: 'calc(100% / 3)',
-          scopedSlots: { customRender: 'quota' }
+          width: 'calc(100% / 3)'
         }
       ]
     }
   },
   watch: {
-    tab (newTab, oldTab) {
-      this.tab = newTab
+    tab () {
       if (this.tab === 'quota.statement.quota') {
         this.fetchData()
       }
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   methods: {
@@ -128,7 +129,7 @@ export default {
         params.domainid = this.resource.domainid
         params.account = this.account
 
-        api('quotaBalance', params).then(json => {
+        getAPI('quotaBalance', params).then(json => {
           const quotaBalance = json.quotabalanceresponse.balance || {}
           resolve(quotaBalance)
         }).catch(error => {
@@ -144,7 +145,7 @@ export default {
         params.startdate = moment(this.resource.startdate).format(this.pattern)
         params.enddate = moment(resource.startdate).format(this.pattern)
 
-        api('quotaStatement', params).then(json => {
+        getAPI('quotaStatement', params).then(json => {
           const quotaStatement = json.quotastatementresponse.statement || {}
           resolve(quotaStatement)
         }).catch(error => {

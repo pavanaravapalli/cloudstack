@@ -23,11 +23,13 @@ import org.apache.cloudstack.api.command.admin.cluster.DeleteClusterCmd;
 import org.apache.cloudstack.api.command.admin.cluster.UpdateClusterCmd;
 import org.apache.cloudstack.api.command.admin.host.AddHostCmd;
 import org.apache.cloudstack.api.command.admin.host.AddSecondaryStorageCmd;
-import org.apache.cloudstack.api.command.admin.host.CancelMaintenanceCmd;
-import org.apache.cloudstack.api.command.admin.host.PrepareForMaintenanceCmd;
+import org.apache.cloudstack.api.command.admin.host.CancelHostMaintenanceCmd;
 import org.apache.cloudstack.api.command.admin.host.ReconnectHostCmd;
 import org.apache.cloudstack.api.command.admin.host.UpdateHostCmd;
 import org.apache.cloudstack.api.command.admin.host.UpdateHostPasswordCmd;
+import org.apache.cloudstack.api.command.admin.host.PrepareForHostMaintenanceCmd;
+import org.apache.cloudstack.api.command.admin.host.DeclareHostAsDegradedCmd;
+import org.apache.cloudstack.api.command.admin.host.CancelHostAsDegradedCmd;
 
 import com.cloud.dc.DataCenter;
 import com.cloud.exception.AgentUnavailableException;
@@ -47,7 +49,9 @@ public interface ResourceService {
      */
     Host updateHost(UpdateHostCmd cmd) throws NoTransitionException;
 
-    Host cancelMaintenance(CancelMaintenanceCmd cmd);
+    Host autoUpdateHostAllocationState(Long hostId, ResourceState.Event resourceEvent) throws NoTransitionException;
+
+    Host cancelMaintenance(CancelHostMaintenanceCmd cmd);
 
     Host reconnectHost(ReconnectHostCmd cmd) throws AgentUnavailableException;
 
@@ -65,7 +69,11 @@ public interface ResourceService {
 
     List<? extends Host> discoverHosts(AddSecondaryStorageCmd cmd) throws IllegalArgumentException, DiscoveryException, InvalidParameterValueException;
 
-    Host maintain(PrepareForMaintenanceCmd cmd);
+    Host maintain(PrepareForHostMaintenanceCmd cmd);
+
+    Host declareHostAsDegraded(DeclareHostAsDegradedCmd cmd) throws NoTransitionException;
+
+    Host cancelHostAsDegraded(CancelHostAsDegradedCmd cmd) throws NoTransitionException;
 
     /**
      * Deletes a host
@@ -87,4 +95,11 @@ public interface ResourceService {
 
     boolean releaseHostReservation(Long hostId);
 
+    void updatePodStorageAccessGroups(long podId, List<String> newStorageAccessGroups);
+
+    void updateZoneStorageAccessGroups(long zoneId, List<String> newStorageAccessGroups);
+
+    void updateClusterStorageAccessGroups(Long clusterId, List<String> newStorageAccessGroups);
+
+    void updateHostStorageAccessGroups(Long hostId, List<String> newStorageAccessGroups);
 }

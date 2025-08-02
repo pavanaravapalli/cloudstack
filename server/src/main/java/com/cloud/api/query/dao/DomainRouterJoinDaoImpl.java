@@ -21,7 +21,10 @@ import java.util.List;
 
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.annotation.AnnotationService;
+import org.apache.cloudstack.annotation.dao.AnnotationDao;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import org.apache.cloudstack.api.response.DomainRouterResponse;
@@ -34,6 +37,7 @@ import com.cloud.api.ApiDBUtils;
 import com.cloud.api.ApiResponseHelper;
 import com.cloud.api.query.vo.DomainRouterJoinVO;
 import com.cloud.dc.HostPodVO;
+import com.cloud.host.ControlState;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.network.router.VirtualRouter;
 import com.cloud.network.router.VirtualRouter.Role;
@@ -46,16 +50,18 @@ import com.cloud.utils.db.SearchCriteria;
 
 @Component
 public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, Long> implements DomainRouterJoinDao {
-    public static final Logger s_logger = Logger.getLogger(DomainRouterJoinDaoImpl.class);
 
     @Inject
     private ConfigurationDao _configDao;
     @Inject
     public AccountManager _accountMgr;
+    @Inject
+    private AnnotationDao annotationDao;
 
     private final SearchBuilder<DomainRouterJoinVO> vrSearch;
 
     private final SearchBuilder<DomainRouterJoinVO> vrIdSearch;
+    private final SearchBuilder<DomainRouterJoinVO> vrIdTrafficSearch;
 
     protected DomainRouterJoinDaoImpl() {
 
@@ -67,6 +73,11 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
         vrIdSearch.and("id", vrIdSearch.entity().getId(), SearchCriteria.Op.EQ);
         vrIdSearch.done();
 
+        vrIdTrafficSearch = createSearchBuilder();
+        vrIdTrafficSearch.and("id", vrIdTrafficSearch.entity().getId(), SearchCriteria.Op.EQ);
+        vrIdTrafficSearch.and("trafficType", vrIdTrafficSearch.entity().getTrafficType(), SearchCriteria.Op.IN);
+        vrIdTrafficSearch.done();
+
         _count = "select count(distinct id) from domain_router_view WHERE ";
     }
 
@@ -77,6 +88,7 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
         routerResponse.setZoneId(router.getDataCenterUuid());
         routerResponse.setName(router.getName());
         routerResponse.setTemplateId(router.getTemplateUuid());
+        routerResponse.setArch(router.getArch().getType());
         VMTemplateVO template = ApiDBUtils.findTemplateById(router.getTemplateId());
         if (template != null) {
             routerResponse.setTemplateName(template.getName());
@@ -85,24 +97,45 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
         routerResponse.setState(router.getState());
         routerResponse.setIsRedundantRouter(router.isRedundantRouter());
         routerResponse.setScriptsVersion(router.getScriptsVersion());
+        routerResponse.setSoftwareVersion(router.getSoftwareVersion());
         if (router.getRedundantState() != null) {
             routerResponse.setRedundantState(router.getRedundantState().toString());
         }
         if (router.getTemplateVersion() != null) {
             String routerVersion = CloudStackVersion.trimRouterVersion(router.getTemplateVersion());
             routerResponse.setVersion(routerVersion);
-            routerResponse.setRequiresUpgrade((CloudStackVersion.compare(routerVersion, NetworkOrchestrationService.MinVRVersion.valueIn(router.getDataCenterId())) < 0));
+            boolean isTempVersionLower = (CloudStackVersion.compare(routerVersion, NetworkOrchestrationService.MinVRVersion.valueIn(router.getDataCenterId())) < 0);
+            if (!isTempVersionLower) {
+                routerResponse.setRequiresUpgrade(false);
+            } else {
+                boolean requiresUpgrade = true;
+                String currentCodeVersion = this.getClass().getPackage().getImplementationVersion();
+                if (StringUtils.isNotEmpty(currentCodeVersion)) {
+                    currentCodeVersion = CloudStackVersion.parse(currentCodeVersion).toString();
+                    String routerSoftwareVersion = router.getSoftwareVersion();
+                    if (StringUtils.isNotEmpty(routerSoftwareVersion)) {
+                        requiresUpgrade = !(currentCodeVersion.equals(routerSoftwareVersion));
+                    }
+                }
+                routerResponse.setRequiresUpgrade(requiresUpgrade);
+            }
         } else {
             routerResponse.setVersion("UNKNOWN");
             routerResponse.setRequiresUpgrade(true);
         }
 
-        if (caller.getType() == Account.ACCOUNT_TYPE_RESOURCE_DOMAIN_ADMIN
+        if (router.getHypervisorType() != null) {
+            routerResponse.setHypervisor(router.getHypervisorType().getHypervisorDisplayName());
+        }
+        routerResponse.setHasAnnotation(annotationDao.hasAnnotations(router.getUuid(), AnnotationService.EntityType.VR.name(),
+                _accountMgr.isRootAdmin(CallContext.current().getCallingAccount().getId())));
+
+        if (caller.getType() == Account.Type.RESOURCE_DOMAIN_ADMIN
                 || _accountMgr.isRootAdmin(caller.getId())) {
             if (router.getHostId() != null) {
                 routerResponse.setHostId(router.getHostUuid());
                 routerResponse.setHostName(router.getHostName());
-                routerResponse.setHypervisor(router.getHypervisorType().toString());
+                routerResponse.setHostControlState(ControlState.getControlState(router.getHostStatus(), router.getHostResourceState()).toString());
             }
             routerResponse.setPodId(router.getPodUuid());
             HostPodVO pod = ApiDBUtils.findPodById(router.getPodId());
@@ -159,6 +192,9 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
                 if (router.getGuestType() != null) {
                     nicResponse.setType(router.getGuestType().toString());
                 }
+                if (router.getMtu() != null){
+                    nicResponse.setMtu(router.getMtu());
+                }
                 nicResponse.setIsDefault(router.isDefaultNic());
                 nicResponse.setObjectName("nic");
                 routerResponse.addNic(nicResponse);
@@ -173,6 +209,7 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
 
         routerResponse.setDomainId(router.getDomainUuid());
         routerResponse.setDomainName(router.getDomainName());
+        routerResponse.setDomainPath(router.getDomainPath());
 
         routerResponse.setZoneName(router.getDataCenterName());
         routerResponse.setDns1(router.getDns1());
@@ -252,6 +289,9 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
             if (vr.getGuestType() != null) {
                 nicResponse.setType(vr.getGuestType().toString());
             }
+            if (vr.getMtu() != null) {
+                nicResponse.setMtu(vr.getMtu());
+            }
             nicResponse.setIsDefault(vr.isDefaultNic());
             nicResponse.setObjectName("nic");
             vrData.addNic(nicResponse);
@@ -301,6 +341,14 @@ public class DomainRouterJoinDaoImpl extends GenericDaoBase<DomainRouterJoinVO, 
             }
         }
         return uvList;
+    }
+
+    @Override
+    public List<DomainRouterJoinVO> getRouterByIdAndTrafficType(Long id, TrafficType... trafficType) {
+        SearchCriteria<DomainRouterJoinVO> sc = vrIdTrafficSearch.create();
+        sc.setParameters("id", id);
+        sc.setParameters("trafficType", (Object[])trafficType);
+        return searchIncludingRemoved(sc, null, null, false);
     }
 
     @Override

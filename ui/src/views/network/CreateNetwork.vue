@@ -17,7 +17,7 @@
 
 <template>
   <a-spin :spinning="loading" class="form-layout">
-    <a-tabs defaultActiveKey="1" :animated="false" v-if="!loading">
+    <a-tabs v-model:activeKey="defaultNetworkTypeTabKey" :animated="false" v-if="!loading">
       <a-tab-pane :tab="$t('label.isolated')" key="1" v-if="isAdvancedZoneWithoutSGAvailable">
         <CreateIsolatedNetworkForm
           :loading="loading"
@@ -26,7 +26,7 @@
           @refresh-data="refreshParent"
           @refresh="handleRefresh"/>
       </a-tab-pane>
-      <a-tab-pane :tab="$t('label.l2')" key="2">
+      <a-tab-pane :tab="$t('label.l2')" key="3">
         <CreateL2NetworkForm
           :loading="loading"
           :resource="resource"
@@ -34,7 +34,7 @@
           @refresh-data="refreshParent"
           @refresh="handleRefresh"/>
       </a-tab-pane>
-      <a-tab-pane :tab="$t('label.shared')" key="3" v-if="this.isAdmin()">
+      <a-tab-pane :tab="$t('label.shared')" key="2">
         <CreateSharedNetworkForm
           :loading="loading"
           :resource="resource"
@@ -47,7 +47,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import CreateIsolatedNetworkForm from '@/views/network/CreateIsolatedNetworkForm'
 import CreateL2NetworkForm from '@/views/network/CreateL2NetworkForm'
 import CreateSharedNetworkForm from '@/views/network/CreateSharedNetworkForm'
@@ -67,7 +67,7 @@ export default {
   },
   data () {
     return {
-      isAdvancedZoneWithoutSGAvailable: true,
+      isAdvancedZoneWithoutSGAvailable: false,
       defaultNetworkTypeTabKey: '1',
       loading: false,
       actionZones: [],
@@ -75,37 +75,42 @@ export default {
     }
   },
   watch: {
-    resource (newItem, oldItem) {
-      this.fetchData()
+    resource: {
+      deep: true,
+      handler () {
+        this.fetchData()
+      }
     }
   },
   created () {
-    const promises = []
-    promises.push(this.fetchActionZoneData())
-    Promise.all(promises).then(() => {
-      for (const i in this.actionZones) {
-        const zone = this.actionZones[i]
-        if (zone.networktype === 'Advanced' && zone.securitygroupsenabled !== true) {
-          this.isAdvancedZoneWithoutSGAvailable = true
-          return
-        }
-      }
-      this.isAdvancedZoneWithoutSGAvailable = false
-    })
+    this.fetchData()
   },
   methods: {
-    isAdmin () {
-      return ['Admin'].includes(this.$store.getters.userInfo.roletype)
+    fetchData () {
+      const promises = []
+      promises.push(this.fetchActionZoneData())
+      Promise.all(promises).then(() => {
+        this.isAdvancedZoneWithoutSGAvailable = false
+        this.defaultNetworkTypeTabKey = '2'
+
+        for (const i in this.actionZones) {
+          const zone = this.actionZones[i]
+          if (zone.networktype === 'Advanced' && zone.securitygroupsenabled !== true) {
+            this.isAdvancedZoneWithoutSGAvailable = true
+            this.defaultNetworkTypeTabKey = '1'
+            return
+          }
+        }
+      })
     },
     fetchActionZoneData () {
       this.loading = true
       const params = {}
-      if (this.resource && this.resource.zoneid) {
+      if (this.$route.name === 'deployVirtualMachine' && this.resource.zoneid) {
         params.id = this.resource.zoneid
       }
-      params.listAll = true
-      this.actionZonesLoading = true
-      return api('listZones', params).then(json => {
+      this.actionZoneLoading = true
+      return getAPI('listZones', params).then(json => {
         this.actionZones = json.listzonesresponse.zone
       }).finally(() => {
         this.actionZoneLoading = false
@@ -113,7 +118,6 @@ export default {
       })
     },
     handleRefresh () {
-      this.fetchData()
     },
     refreshParent () {
       this.$emit('refresh-data')
@@ -130,14 +134,6 @@ export default {
     width: 80vw;
     @media (min-width: 700px) {
       width: 600px;
-    }
-  }
-
-  .action-button {
-    text-align: right;
-
-    button {
-      margin-right: 5px;
     }
   }
 </style>

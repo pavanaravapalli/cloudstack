@@ -19,20 +19,33 @@ package com.cloud.network;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.api.command.admin.address.ReleasePodIpCmdByAdmin;
 import org.apache.cloudstack.api.command.admin.network.DedicateGuestVlanRangeCmd;
 import org.apache.cloudstack.api.command.admin.network.ListDedicatedGuestVlanRangesCmd;
+import org.apache.cloudstack.api.command.admin.network.ListGuestVlansCmd;
 import org.apache.cloudstack.api.command.admin.usage.ListTrafficTypeImplementorsCmd;
+import org.apache.cloudstack.api.command.user.address.RemoveQuarantinedIpCmd;
+import org.apache.cloudstack.api.command.user.address.UpdateQuarantinedIpCmd;
 import org.apache.cloudstack.api.command.user.network.CreateNetworkCmd;
+import org.apache.cloudstack.api.command.user.network.CreateNetworkPermissionsCmd;
+import org.apache.cloudstack.api.command.user.network.ListNetworkPermissionsCmd;
 import org.apache.cloudstack.api.command.user.network.ListNetworksCmd;
+import org.apache.cloudstack.api.command.user.network.RemoveNetworkPermissionsCmd;
+import org.apache.cloudstack.api.command.user.network.ResetNetworkPermissionsCmd;
 import org.apache.cloudstack.api.command.user.network.RestartNetworkCmd;
 import org.apache.cloudstack.api.command.user.network.UpdateNetworkCmd;
 import org.apache.cloudstack.api.command.user.vm.ListNicsCmd;
 import org.apache.cloudstack.api.response.AcquirePodIpCmdResponse;
+import org.apache.cloudstack.framework.config.ConfigKey;
+import org.apache.cloudstack.network.element.InternalLoadBalancerElementService;
 
+import com.cloud.agent.api.to.NicTO;
+import com.cloud.dc.DataCenter;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientAddressCapacityException;
 import com.cloud.exception.InsufficientCapacityException;
+import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.network.Network.IpAddresses;
@@ -54,10 +67,33 @@ import com.cloud.vm.NicSecondaryIp;
  */
 public interface NetworkService {
 
+    public static final Integer DEFAULT_MTU = 1500;
+    public static final Integer MINIMUM_MTU = 68;
+    public static final String MESSAGE_ASSIGN_NIC_SECONDARY_IP_EVENT = "Message.AssignNicSecondaryIp.Event";
+    public static final String MESSAGE_RELEASE_NIC_SECONDARY_IP_EVENT = "Message.ReleaseNicSecondaryIp.Event";
+
+    public static final ConfigKey<Integer> VRPublicInterfaceMtu = new ConfigKey<>("VirtualRouter", Integer.class,
+            "vr.public.interface.max.mtu", "1500", "The maximum value the MTU can have on the VR's public interfaces",
+            true, ConfigKey.Scope.Zone);
+
+    public static final ConfigKey<Integer> VRPrivateInterfaceMtu = new ConfigKey<>("VirtualRouter", Integer.class,
+            "vr.private.interface.max.mtu", "1500", "The maximum value the MTU can have on the VR's private interfaces",
+            true, ConfigKey.Scope.Zone);
+
+    public static final ConfigKey<Boolean> AllowUsersToSpecifyVRMtu = new ConfigKey<>("Advanced", Boolean.class,
+            "allow.end.users.to.specify.vr.mtu", "false", "Allow end users to specify VR MTU",
+            true, ConfigKey.Scope.Zone);
+
     List<? extends Network> getIsolatedNetworksOwnedByAccountInZone(long zoneId, Account owner);
 
     IpAddress allocateIP(Account ipOwner, long zoneId, Long networkId, Boolean displayIp, String ipaddress) throws ResourceAllocationException, InsufficientAddressCapacityException,
         ConcurrentOperationException;
+
+    IpAddress reserveIpAddress(Account account, Boolean displayIp, Long ipAddressId) throws ResourceAllocationException;
+
+    IpAddress reserveIpAddressWithVlanDetail(Account account, DataCenter zone, Boolean displayIp, String vlanDetailKey) throws ResourceAllocationException;
+
+    boolean releaseReservedIpAddress(long ipAddressId) throws InsufficientAddressCapacityException;
 
     boolean releaseIpAddress(long ipAddressId) throws InsufficientAddressCapacityException;
 
@@ -68,11 +104,15 @@ public interface NetworkService {
 
     Network createGuestNetwork(CreateNetworkCmd cmd) throws InsufficientCapacityException, ConcurrentOperationException, ResourceAllocationException;
 
+    Network createGuestNetwork(long networkOfferingId, String name, String displayText, Account owner,
+           PhysicalNetwork physicalNetwork, long zoneId, ControlledEntity.ACLType aclType) throws
+            InsufficientCapacityException, ConcurrentOperationException, ResourceAllocationException;
+
     Pair<List<? extends Network>, Integer> searchForNetworks(ListNetworksCmd cmd);
 
     boolean deleteNetwork(long networkId, boolean forced);
 
-    boolean restartNetwork(Long networkId, boolean cleanup, boolean makeRedundant, User user) throws ConcurrentOperationException, ResourceUnavailableException, InsufficientCapacityException;
+    boolean restartNetwork(Long networkId, boolean cleanup, boolean makeRedundant, boolean livePatch, User user) throws ConcurrentOperationException, ResourceUnavailableException, InsufficientCapacityException;
 
     boolean restartNetwork(RestartNetworkCmd cmd) throws ConcurrentOperationException, ResourceUnavailableException, InsufficientCapacityException;
 
@@ -83,6 +123,8 @@ public interface NetworkService {
     Network getNetwork(String networkUuid);
 
     IpAddress getIp(long id);
+
+    IpAddress getIp(String ipAddress);
 
     Network updateGuestNetwork(final UpdateNetworkCmd cmd);
 
@@ -144,9 +186,9 @@ public interface NetworkService {
 
     boolean deletePhysicalNetworkTrafficType(Long id);
 
-    GuestVlan dedicateGuestVlanRange(DedicateGuestVlanRangeCmd cmd);
+    GuestVlanRange dedicateGuestVlanRange(DedicateGuestVlanRangeCmd cmd);
 
-    Pair<List<? extends GuestVlan>, Integer> listDedicatedGuestVlanRanges(ListDedicatedGuestVlanRangesCmd cmd);
+    Pair<List<? extends GuestVlanRange>, Integer> listDedicatedGuestVlanRanges(ListDedicatedGuestVlanRangesCmd cmd);
 
     boolean releaseDedicatedGuestVlanRange(Long dedicatedGuestVlanRangeId);
 
@@ -180,7 +222,7 @@ public interface NetworkService {
      * @throws ResourceAllocationException
      */
     Network createPrivateNetwork(String networkName, String displayText, long physicalNetworkId, String broadcastUri, String startIp, String endIP, String gateway,
-        String netmask, long networkOwnerId, Long vpcId, Boolean sourceNat, Long networkOfferingId, Boolean bypassVlanOverlapCheck) throws ResourceAllocationException, ConcurrentOperationException,
+        String netmask, long networkOwnerId, Long vpcId, Boolean sourceNat, Long networkOfferingId, Boolean bypassVlanOverlapCheck, Long associatedNetworkId) throws ResourceAllocationException, ConcurrentOperationException,
         InsufficientCapacityException;
 
     /**
@@ -206,4 +248,31 @@ public interface NetworkService {
     AcquirePodIpCmdResponse allocatePodIp(Account account, String zoneId, String podId) throws ResourceAllocationException, ConcurrentOperationException;
 
     boolean releasePodIp(ReleasePodIpCmdByAdmin ip) throws CloudRuntimeException;
+
+    Pair<List<? extends GuestVlan>, Integer> listGuestVlans(ListGuestVlansCmd cmd);
+
+    List<? extends NetworkPermission> listNetworkPermissions(ListNetworkPermissionsCmd listNetworkPermissionsCmd);
+
+    boolean createNetworkPermissions(CreateNetworkPermissionsCmd createNetworkPermissionsCmd);
+
+    boolean removeNetworkPermissions(RemoveNetworkPermissionsCmd removeNetworkPermissionsCmd);
+
+    boolean resetNetworkPermissions(ResetNetworkPermissionsCmd resetNetworkPermissionsCmd);
+
+    void validateIfServiceOfferingIsActiveAndSystemVmTypeIsDomainRouter(final Long serviceOfferingId) throws InvalidParameterValueException;
+
+    PublicIpQuarantine updatePublicIpAddressInQuarantine(UpdateQuarantinedIpCmd cmd);
+
+    void removePublicIpAddressFromQuarantine(RemoveQuarantinedIpCmd cmd);
+
+    InternalLoadBalancerElementService getInternalLoadBalancerElementByType(VirtualRouterProvider.Type type);
+    InternalLoadBalancerElementService getInternalLoadBalancerElementByNetworkServiceProviderId(long networkProviderId);
+    InternalLoadBalancerElementService getInternalLoadBalancerElementById(long providerId);
+    List<InternalLoadBalancerElementService> getInternalLoadBalancerElements();
+
+    boolean handleCksIsoOnNetworkVirtualRouter(Long virtualRouterId, boolean mount) throws ResourceUnavailableException;
+
+    IpAddresses getIpAddressesFromIps(String ipAddress, String ip6Address, String macAddress);
+
+    String getNicVlanValueForExternalVm(NicTO nic);
 }

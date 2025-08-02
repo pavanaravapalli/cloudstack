@@ -17,6 +17,12 @@
 package com.cloud.network.guru;
 
 
+import javax.inject.Inject;
+
+import org.apache.cloudstack.api.ApiCommandResourceType;
+import org.apache.cloudstack.context.CallContext;
+import org.springframework.stereotype.Component;
+
 import com.cloud.dc.DataCenter;
 import com.cloud.dc.DataCenter.NetworkType;
 import com.cloud.deploy.DeployDestination;
@@ -45,16 +51,9 @@ import com.cloud.user.Account;
 import com.cloud.vm.NicProfile;
 import com.cloud.vm.ReservationContext;
 import com.cloud.vm.VirtualMachineProfile;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
-import org.springframework.stereotype.Component;
-
-import javax.inject.Inject;
 
 @Component
 public class OvsGuestNetworkGuru extends GuestNetworkGuru {
-    private static final Logger s_logger = Logger
-        .getLogger(OvsGuestNetworkGuru.class);
 
     @Inject
     OvsTunnelManager _ovsTunnelMgr;
@@ -81,32 +80,39 @@ public class OvsGuestNetworkGuru extends GuestNetworkGuru {
             && _ntwkOfferingSrvcDao.areServicesSupportedByNetworkOffering(
                 offering.getId(), Service.Connectivity)) {
             return true;
+        } else if (networkType == NetworkType.Advanced
+            && offering.getGuestType() == GuestType.Shared
+            && _ntwkOfferingSrvcDao.isProviderForNetworkOffering(offering.getId(), Network.Provider.Ovs)
+            && physicalNetwork.getIsolationMethods().contains("GRE")) {
+            return true;
         } else {
-            s_logger.trace("We only take care of Guest networks of type   "
-                + GuestType.Isolated + " in zone of type "
-                + NetworkType.Advanced);
+            logger.trace(String.format("We only take care of Guest networks of type %s with Service %s or type with %s provider %s in %s zone",
+                    GuestType.Isolated, Service.Connectivity, GuestType.Shared, Network.Provider.Ovs, NetworkType.Advanced));
             return false;
         }
     }
 
     @Override
     public Network design(NetworkOffering offering, DeploymentPlan plan,
-        Network userSpecified, Account owner) {
+                          Network userSpecified, String name, Long vpcId, Account owner) {
 
         PhysicalNetworkVO physnet = _physicalNetworkDao.findById(plan
             .getPhysicalNetworkId());
         DataCenter dc = _dcDao.findById(plan.getDataCenterId());
         if (!canHandle(offering, dc.getNetworkType(), physnet)) {
-            s_logger.debug("Refusing to design this network");
+            logger.debug("Refusing to design this network");
             return null;
         }
         NetworkVO config = (NetworkVO)super.design(offering, plan,
-            userSpecified, owner);
+            userSpecified, name, vpcId, owner);
         if (config == null) {
             return null;
         }
 
         config.setBroadcastDomainType(BroadcastDomainType.Vswitch);
+        if (config.getBroadcastUri() != null) {
+            config.setBroadcastUri(BroadcastDomainType.Vswitch.toUri(config.getBroadcastUri().toString().replace("vlan://", "")));
+        }
 
         return config;
     }
@@ -132,7 +138,7 @@ public class OvsGuestNetworkGuru extends GuestNetworkGuru {
             .findById(physicalNetworkId);
 
         if (!canHandle(offering, nwType, physnet)) {
-            s_logger.debug("Refusing to implement this network");
+            logger.debug("Refusing to implement this network");
             return null;
         }
         NetworkVO implemented = (NetworkVO)super.implement(network, offering,
@@ -181,13 +187,12 @@ public class OvsGuestNetworkGuru extends GuestNetworkGuru {
         NetworkVO networkObject = _networkDao.findById(profile.getId());
         if (networkObject.getBroadcastDomainType() != BroadcastDomainType.Vswitch
             || networkObject.getBroadcastUri() == null) {
-            s_logger.warn("BroadcastUri is empty or incorrect for guestnetwork "
-                + networkObject.getDisplayText());
+            logger.warn(String.format("BroadcastUri is empty or incorrect for guest network %s", networkObject));
             return;
         }
 
         if (profile.getBroadcastDomainType() == BroadcastDomainType.Vswitch ) {
-            s_logger.debug("Releasing vnet for the network id=" + profile.getId());
+            logger.debug(String.format("Releasing vnet for the network %s", profile));
             _dcDao.releaseVnet(BroadcastDomainType.getValue(profile.getBroadcastUri()), profile.getDataCenterId(), profile.getPhysicalNetworkId(),
                     profile.getAccountId(), profile.getReservationId());
         }
@@ -221,7 +226,8 @@ public class OvsGuestNetworkGuru extends GuestNetworkGuru {
                 EventVO.LEVEL_INFO,
                 EventTypes.EVENT_ZONE_VLAN_ASSIGN,
                 "Assigned Zone Vlan: " + vnet + " Network Id: "
-                    + network.getId(), 0);
+                    + network.getId(),
+                network.getId(), ApiCommandResourceType.Network.toString(), 0);
         } else {
             implemented.setBroadcastUri(network.getBroadcastUri());
         }

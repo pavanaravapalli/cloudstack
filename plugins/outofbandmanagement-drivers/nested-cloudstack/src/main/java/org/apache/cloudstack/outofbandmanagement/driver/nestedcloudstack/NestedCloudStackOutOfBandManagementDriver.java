@@ -23,7 +23,7 @@ import br.com.autonomiccs.apacheCloudStack.exceptions.ApacheCloudStackClientRequ
 import com.cloud.utils.component.AdapterBase;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 import com.google.common.collect.ImmutableMap;
 import org.apache.cloudstack.outofbandmanagement.OutOfBandManagement;
 import org.apache.cloudstack.outofbandmanagement.OutOfBandManagementDriver;
@@ -31,14 +31,12 @@ import org.apache.cloudstack.outofbandmanagement.driver.OutOfBandManagementDrive
 import org.apache.cloudstack.outofbandmanagement.driver.OutOfBandManagementDriverCommand;
 import org.apache.cloudstack.outofbandmanagement.driver.OutOfBandManagementDriverPowerCommand;
 import org.apache.cloudstack.outofbandmanagement.driver.OutOfBandManagementDriverResponse;
-import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 public final class NestedCloudStackOutOfBandManagementDriver extends AdapterBase implements OutOfBandManagementDriver {
-    private static final Logger LOG = Logger.getLogger(NestedCloudStackOutOfBandManagementDriver.class);
 
     public OutOfBandManagementDriverResponse execute(final OutOfBandManagementDriverCommand cmd) {
         OutOfBandManagementDriverResponse response = new OutOfBandManagementDriverResponse(null, "Unsupported Command", false);
@@ -53,14 +51,14 @@ public final class NestedCloudStackOutOfBandManagementDriver extends AdapterBase
     }
 
     protected void ensureOptionExists(final ImmutableMap<OutOfBandManagement.Option, String> options, final OutOfBandManagement.Option option) {
-        if (options != null && option != null && options.containsKey(option) && !Strings.isNullOrEmpty(options.get(option))) {
+        if (options != null && option != null && options.containsKey(option) && StringUtils.isNotEmpty(options.get(option))) {
             return;
         }
         throw new CloudRuntimeException("Invalid out-of-band management configuration detected for the nested-cloudstack driver");
     }
 
     protected OutOfBandManagement.PowerState getNestedVMPowerState(final String jsonResponse) {
-        if (Strings.isNullOrEmpty(jsonResponse)) {
+        if (StringUtils.isEmpty(jsonResponse)) {
             return OutOfBandManagement.PowerState.Unknown;
         }
 
@@ -79,7 +77,7 @@ public final class NestedCloudStackOutOfBandManagementDriver extends AdapterBase
                 }
             }
         } catch (IOException e) {
-            LOG.warn("Exception caught while de-serializing and reading state of the nested-cloudstack VM from the response: " + jsonResponse + ", with exception:", e);
+            logger.warn("Exception caught while de-serializing and reading state of the nested-cloudstack VM from the response: " + jsonResponse + ", with exception:", e);
         }
         return OutOfBandManagement.PowerState.Unknown;
     }
@@ -130,7 +128,7 @@ public final class NestedCloudStackOutOfBandManagementDriver extends AdapterBase
         try {
             apiResponse = client.executeRequest(apacheCloudStackRequest);
         } catch (final ApacheCloudStackClientRequestRuntimeException e) {
-            LOG.error("Nested CloudStack oobm plugin failed due to API error: ", e);
+            logger.error("Nested CloudStack oobm plugin failed due to API error: ", e);
             final OutOfBandManagementDriverResponse failedResponse = new OutOfBandManagementDriverResponse(e.getResponse(), "HTTP error code: " + e.getStatusCode(), false);
             if (e.getStatusCode() == 401) {
                 failedResponse.setAuthFailure(true);

@@ -15,7 +15,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-import CsHelper
+from . import CsHelper
 import logging
 
 
@@ -85,6 +85,9 @@ class CsRoute:
         if not found and method == "add":
             logging.info("Add " + cmd)
             cmd = "ip route add " + cmd
+        elif not found and method == "change":
+            logging.info("Change " + cmd)
+            cmd = "ip route change " + cmd
         elif found and method == "delete":
             logging.info("Delete " + cmd)
             cmd = "ip route delete " + cmd
@@ -122,8 +125,76 @@ class CsRoute:
             logging.warn("No default route found!")
             return False
 
+    def add_or_change_defaultroute(self, gateway):
+        """  Add a default route if not found, or change the default route if found
+        :param str gateway
+        :return: bool
+        """
+        if not gateway:
+            raise Exception("Gateway cannot be None.")
+
+        cmd = "default via " + gateway
+        if self.defaultroute_exists():
+            logging.info("Changing default route")
+            self.set_route(cmd, method="change")
+            return True
+        else:
+            logging.info("Adding default route")
+            self.set_route(cmd)
+            return True
+
     def findRule(self, rule):
         for i in CsHelper.execute("ip rule show"):
             if rule in i.strip():
                 return True
         return False
+
+    def set_route_v6(self, cmd, method="add"):
+        """ Add a IPv6 route if it is not already defined """
+        found = False
+        search = cmd
+        for i in CsHelper.execute("ip -6 route show " + search):
+            found = True
+        if not found and method == "add":
+            logging.info("Add " + cmd)
+            cmd = "ip -6 route add " + cmd
+        elif found and method == "delete":
+            logging.info("Delete " + cmd)
+            cmd = "ip -6 route delete " + cmd
+        else:
+            return
+        CsHelper.execute(cmd)
+
+    def add_defaultroute_v6(self, gateway):
+        """  Add a default route
+        # for example, ip -6 route add default via fd80:20:20:20::1
+        :param str gateway
+        :return: bool
+        """
+        if not gateway:
+            raise Exception("Gateway cannot be None.")
+
+        logging.info("Checking if default ipv6 route is present")
+        route_found = CsHelper.execute("ip -6 route list default")
+        if len(route_found) > 0:
+            logging.info("Default IPv6 route found: " + route_found[0])
+            return False
+        else:
+            cmd = "default via " + gateway
+            logging.info("Adding default IPv6 route")
+            self.set_route_v6(cmd)
+            return True
+
+    def add_network_route_v6(self, dev, address):
+        """ Wrapper method that adds table name and device to route statement """
+        # ip -6 route add dev eth1 2021:10:10:10::1/64
+        logging.info("Adding IPv6  route: dev " + dev + " network: " + address + " if not present")
+        cmd = "%s dev %s proto kernel" % (address, dev)
+        self.set_route_v6(cmd)
+
+    def delete_network_route_v6(self, dev, address):
+        """ Wrapper method that deletes table name and device from route statement """
+        # ip -6 route del dev eth1 2021:10:10:10::1/64
+        logging.info("Deleting IPv6 route: dev " + dev + " network: " + address + " if present")
+        cmd = "%s dev %s" % (address, dev)
+        self.set_route_v6(cmd, method="delete")

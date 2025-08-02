@@ -47,7 +47,7 @@ public class FirewallRuleTO implements InternalIdentity {
     int[] srcPortRange;
     boolean revoked;
     boolean alreadyAdded;
-    private List<String> sourceCidrList;
+    protected List<String> sourceCidrList;
     private List<String> destCidrList;
     FirewallRule.Purpose purpose;
     private Integer icmpType;
@@ -155,6 +155,7 @@ public class FirewallRuleTO implements InternalIdentity {
             rule.getIcmpType(),
             rule.getIcmpCode());
         this.trafficType = trafficType;
+        this.destCidrList = rule.getDestinationCidrList();
     }
 
     public FirewallRuleTO(FirewallRule rule, String srcVlanTag, String srcIp, FirewallRule.Purpose purpose, FirewallRule.TrafficType trafficType,

@@ -17,6 +17,8 @@
 
 package org.apache.cloudstack.vm;
 
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
+
 import java.util.List;
 
 public class UnmanagedInstanceTO {
@@ -29,7 +31,13 @@ public class UnmanagedInstanceTO {
 
     private String name;
 
+    private String internalCSName;
+
+    private String path;
+
     private PowerState powerState;
+
+    private PowerState cloneSourcePowerState;
 
     private Integer cpuCores;
 
@@ -43,9 +51,18 @@ public class UnmanagedInstanceTO {
 
     private String operatingSystem;
 
+    private String clusterName;
+
+    private String hostName;
+
     private List<Disk> disks;
 
     private List<Nic> nics;
+
+    private String vncPassword;
+
+    private String bootType;
+    private String bootMode;
 
     public String getName() {
         return name;
@@ -55,12 +72,36 @@ public class UnmanagedInstanceTO {
         this.name = name;
     }
 
+    public String getInternalCSName() {
+        return internalCSName;
+    }
+
+    public void setInternalCSName(String internalCSName) {
+        this.internalCSName = internalCSName;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
+
     public PowerState getPowerState() {
         return powerState;
     }
 
     public void setPowerState(PowerState powerState) {
         this.powerState = powerState;
+    }
+
+    public PowerState getCloneSourcePowerState() {
+        return cloneSourcePowerState;
+    }
+
+    public void setCloneSourcePowerState(PowerState cloneSourcePowerState) {
+        this.cloneSourcePowerState = cloneSourcePowerState;
     }
 
     public Integer getCpuCores() {
@@ -111,6 +152,22 @@ public class UnmanagedInstanceTO {
         this.operatingSystem = operatingSystem;
     }
 
+    public String getClusterName() {
+        return clusterName;
+    }
+
+    public void setClusterName(String clusterName) {
+        this.clusterName = clusterName;
+    }
+
+    public String getHostName() {
+        return hostName;
+    }
+
+    public void setHostName(String hostName) {
+        this.hostName = hostName;
+    }
+
     public List<Disk> getDisks() {
         return disks;
     }
@@ -125,6 +182,37 @@ public class UnmanagedInstanceTO {
 
     public void setNics(List<Nic> nics) {
         this.nics = nics;
+    }
+
+    public String getVncPassword() {
+        return vncPassword;
+    }
+
+    public void setVncPassword(String vncPassword) {
+        this.vncPassword = vncPassword;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("UnmanagedInstanceTO %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "name", "internalCSName", "hostName", "clusterName"));
+    }
+
+    public String getBootType() {
+        return bootType;
+    }
+
+    public void setBootType(String bootType) {
+        this.bootType = bootType;
+    }
+
+    public String getBootMode() {
+        return bootMode;
+    }
+
+    public void setBootMode(String bootMode) {
+        this.bootMode = bootMode;
     }
 
     public static class Disk {
@@ -151,6 +239,8 @@ public class UnmanagedInstanceTO {
         private String datastoreHost;
 
         private String datastorePath;
+
+        private int datastorePort;
 
         private String datastoreType;
 
@@ -257,6 +347,21 @@ public class UnmanagedInstanceTO {
         public void setDatastoreType(String datastoreType) {
             this.datastoreType = datastoreType;
         }
+
+        public void setDatastorePort(int datastorePort) {
+            this.datastorePort = datastorePort;
+        }
+
+        public int getDatastorePort() {
+            return datastorePort;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Disk %s",
+                    ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                            this, "diskId", "internalCSName", "controller", "controllerUnit"));
+        }
     }
 
     public static class Nic {
@@ -348,6 +453,13 @@ public class UnmanagedInstanceTO {
 
         public void setPciSlot(String pciSlot) {
             this.pciSlot = pciSlot;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Nic %s",
+                    ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                            this, "nicId", "adapterType", "macAddress"));
         }
     }
 }

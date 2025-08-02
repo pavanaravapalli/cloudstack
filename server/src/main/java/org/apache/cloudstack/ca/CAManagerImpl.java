@@ -24,6 +24,7 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
+import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,7 +56,6 @@ import org.apache.cloudstack.poll.BackgroundPollManager;
 import org.apache.cloudstack.poll.BackgroundPollTask;
 import org.apache.cloudstack.utils.identity.ManagementServerNode;
 import org.apache.cloudstack.utils.security.CertUtils;
-import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
@@ -72,10 +72,9 @@ import com.cloud.host.Status;
 import com.cloud.host.dao.HostDao;
 import com.cloud.utils.component.ManagerBase;
 import com.cloud.utils.exception.CloudRuntimeException;
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
 public class CAManagerImpl extends ManagerBase implements CAManager {
-    public static final Logger LOG = Logger.getLogger(CAManagerImpl.class);
 
     @Inject
     private CrlDao crlDao;
@@ -107,7 +106,7 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
     }
 
     private CAProvider getCAProvider(final String provider) {
-        if (Strings.isNullOrEmpty(provider)) {
+        if (StringUtils.isEmpty(provider)) {
             return getConfiguredCaProvider();
         }
         final String caProviderName = provider.toLowerCase();
@@ -155,7 +154,7 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         if (validityDuration != null) {
             validity = validityDuration;
         }
-        if (Strings.isNullOrEmpty(csr)) {
+        if (StringUtils.isEmpty(csr)) {
             if (domainNames == null || domainNames.isEmpty()) {
                 throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "No domains or CSR provided");
             }
@@ -184,17 +183,20 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         }
         CallContext.current().setEventDetails("host id: " + host.getId());
         CallContext.current().putContextParameter(Host.class, host.getUuid());
-        final String csr;
+        String csr = null;
+
         try {
-            csr = generateKeyStoreAndCsr(host, null);
-            if (Strings.isNullOrEmpty(csr)) {
-                return false;
+            if (host.getType() != Host.Type.ConsoleProxy && host.getType() != Host.Type.SecondaryStorageVM) {
+                csr = generateKeyStoreAndCsr(host, null);
+                if (StringUtils.isEmpty(csr)) {
+                    return false;
+                }
             }
             final Certificate certificate = issueCertificate(csr, Arrays.asList(host.getName(), host.getPrivateIpAddress()), Arrays.asList(host.getPrivateIpAddress(), host.getPublicIpAddress(), host.getStorageIpAddress()), CAManager.CertValidityPeriod.value(), caProvider);
             return deployCertificate(host, certificate, reconnect, null);
         } catch (final AgentUnavailableException | OperationTimedoutException e) {
-            LOG.error("Host/agent is not available or operation timed out, failed to setup keystore and generate CSR for host/agent id=" + host.getId() + ", due to: ", e);
-            throw new CloudRuntimeException("Failed to generate keystore and get CSR from the host/agent id=" + host.getId());
+            logger.error("Host/agent is not available or operation timed out, failed to setup keystore and generate CSR for host/agent {}, due to: ", host, e);
+            throw new CloudRuntimeException(String.format("Failed to generate keystore and get CSR from the host/agent %s", host));
         }
     }
 
@@ -207,6 +209,11 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         CallContext.current().setEventDetails("generating keystore and CSR for host id: " + host.getId());
         final SetupKeystoreAnswer answer = (SetupKeystoreAnswer)agentManager.send(host.getId(), cmd);
         return answer.getCsr();
+    }
+
+    private boolean isValidSystemVMType(Host.Type type) {
+        return Host.Type.SecondaryStorageVM.equals(type) ||
+                Host.Type.ConsoleProxy.equals(type);
     }
 
     @Override
@@ -227,11 +234,11 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         if (answer.getResult()) {
             getActiveCertificatesMap().put(host.getPrivateIpAddress(), certificate.getClientCertificate());
             if (sshAccessDetails == null && reconnect != null && reconnect) {
-                LOG.info(String.format("Successfully setup certificate on host, reconnecting with agent with id=%d, name=%s, address=%s", host.getId(), host.getName(), host.getPublicIpAddress()));
+                logger.info("Successfully setup certificate on host, reconnecting with agent [{}] with address={}", host, host.getPublicIpAddress());
                 try {
                     agentManager.reconnect(host.getId());
                 } catch (AgentUnavailableException | CloudRuntimeException e) {
-                    LOG.debug("Error when reconnecting to host: " + host.getUuid(), e);
+                    logger.debug("Error when reconnecting to host: {}", host, e);
                 }
             }
             return true;
@@ -247,10 +254,10 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         final String privateAddress = host.getPrivateIpAddress();
         final String publicAddress = host.getPublicIpAddress();
         final Map<String, X509Certificate> activeCertsMap = getActiveCertificatesMap();
-        if (!Strings.isNullOrEmpty(privateAddress) && activeCertsMap.containsKey(privateAddress)) {
+        if (StringUtils.isNotEmpty(privateAddress) && activeCertsMap.containsKey(privateAddress)) {
             activeCertsMap.remove(privateAddress);
         }
-        if (!Strings.isNullOrEmpty(publicAddress) && activeCertsMap.containsKey(publicAddress)) {
+        if (StringUtils.isNotEmpty(publicAddress) && activeCertsMap.containsKey(publicAddress)) {
             activeCertsMap.remove(publicAddress);
         }
     }
@@ -268,7 +275,7 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         if (sslContext == null) {
             throw new CloudRuntimeException("SSLContext provided to create SSLEngine is null, aborting");
         }
-        if (Strings.isNullOrEmpty(remoteAddress)) {
+        if (StringUtils.isEmpty(remoteAddress)) {
             throw new CloudRuntimeException("Remote client address connecting to mgmt server cannot be empty/null");
         }
         return getConfiguredCaProvider().createSSLEngine(sslContext, remoteAddress, getActiveCertificatesMap());
@@ -300,8 +307,8 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
         @Override
         protected void runInContext() {
             try {
-                if (LOG.isTraceEnabled()) {
-                    LOG.trace("CA background task is running...");
+                if (logger.isTraceEnabled()) {
+                    logger.trace("CA background task is running...");
                 }
                 final DateTime now = DateTime.now(DateTimeZone.UTC);
                 final Map<String, X509Certificate> certsMap = caManager.getActiveCertificatesMap();
@@ -329,18 +336,18 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
                     try {
                         certificate.checkValidity(now.plusDays(CertExpiryAlertPeriod.valueIn(host.getClusterId())).toDate());
                     } catch (final CertificateExpiredException | CertificateNotYetValidException e) {
-                        LOG.warn("Certificate is going to expire for " + hostDescription, e);
+                        logger.warn("Certificate is going to expire for " + hostDescription, e);
                         if (AutomaticCertRenewal.valueIn(host.getClusterId())) {
                             try {
-                                LOG.debug("Attempting certificate auto-renewal for " + hostDescription, e);
+                                logger.debug("Attempting certificate auto-renewal for " + hostDescription, e);
                                 boolean result = caManager.provisionCertificate(host, false, null);
                                 if (result) {
-                                    LOG.debug("Succeeded in auto-renewing certificate for " + hostDescription, e);
+                                    logger.debug("Succeeded in auto-renewing certificate for " + hostDescription, e);
                                 } else {
-                                    LOG.debug("Failed in auto-renewing certificate for " + hostDescription, e);
+                                    logger.debug("Failed in auto-renewing certificate for " + hostDescription, e);
                                 }
                             } catch (final Throwable ex) {
-                                LOG.warn("Failed to auto-renew certificate for " + hostDescription + ", with error=", ex);
+                                logger.warn("Failed to auto-renew certificate for " + hostDescription + ", with error=", ex);
                                 caManager.sendAlert(host, "Certificate auto-renewal failed for " + hostDescription,
                                         String.format("Certificate is going to expire for %s. Auto-renewal failed to renew the certificate, please renew it manually. It is not valid after %s.",
                                                 hostDescription, certificate.getNotAfter()));
@@ -359,7 +366,7 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
                     }
                 }
             } catch (final Throwable t) {
-                LOG.error("Error trying to run CA background task", t);
+                logger.error("Error trying to run CA background task", t);
             }
         }
 
@@ -390,7 +397,7 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
             configuredCaProvider = caProviderMap.get(CAProviderPlugin.value());
         }
         if (configuredCaProvider == null) {
-            LOG.error("Failed to find valid configured CA provider, please check!");
+            logger.error("Failed to find valid configured CA provider, please check!");
             return false;
         }
         return true;
@@ -424,6 +431,14 @@ public class CAManagerImpl extends ManagerBase implements CAManager {
 
     @Override
     public ConfigKey<?>[] getConfigKeys() {
-        return new ConfigKey<?>[] {CAProviderPlugin, CertKeySize, CertSignatureAlgorithm, CertValidityPeriod, AutomaticCertRenewal, CABackgroundJobDelay, CertExpiryAlertPeriod};
+        return new ConfigKey<?>[] {CAProviderPlugin, CertKeySize, CertSignatureAlgorithm, CertValidityPeriod,
+                AutomaticCertRenewal, AllowHostIPInSysVMAgentCert, CABackgroundJobDelay, CertExpiryAlertPeriod,
+                CertManagementCustomSubjectAlternativeName
+        };
+    }
+
+    @Override
+    public boolean isManagementCertificate(java.security.cert.Certificate certificate) throws CertificateParsingException {
+        return getConfiguredCaProvider().isManagementCertificate(certificate);
     }
 }

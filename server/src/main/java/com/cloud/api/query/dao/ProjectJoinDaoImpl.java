@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
 import org.springframework.stereotype.Component;
 
 import org.apache.cloudstack.api.ApiConstants.DomainDetails;
@@ -52,7 +51,6 @@ import com.cloud.utils.db.SearchCriteria;
 
 @Component
 public class ProjectJoinDaoImpl extends GenericDaoBase<ProjectJoinVO, Long> implements ProjectJoinDao {
-    public static final Logger s_logger = Logger.getLogger(ProjectJoinDaoImpl.class);
 
     @Inject
     private ConfigurationDao _configDao;
@@ -110,6 +108,7 @@ public class ProjectJoinDaoImpl extends GenericDaoBase<ProjectJoinVO, Long> impl
             ownersList.add(ownerDetails);
         }
         response.setOwners(ownersList);
+        response.setCreated(proj.getCreated());
 
         // update tag information
         List<ResourceTagJoinVO> tags = ApiDBUtils.listResourceTagViewByResourceUUID(proj.getUuid(), ResourceObjectType.Project);

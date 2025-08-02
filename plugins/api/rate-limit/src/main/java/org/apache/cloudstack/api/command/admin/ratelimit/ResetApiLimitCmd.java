@@ -18,7 +18,6 @@ package org.apache.cloudstack.api.command.admin.ratelimit;
 
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
@@ -28,7 +27,6 @@ import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.AccountResponse;
-import org.apache.cloudstack.api.response.ApiLimitResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
@@ -37,12 +35,10 @@ import org.apache.cloudstack.ratelimit.ApiRateLimitService;
 import com.cloud.configuration.Config;
 import com.cloud.user.Account;
 
-@APICommand(name = "resetApiLimit", responseObject = ApiLimitResponse.class, description = "Reset api count",
+@APICommand(name = "resetApiLimit", responseObject = SuccessResponse.class, description = "Reset api count",
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ResetApiLimitCmd extends BaseCmd {
-    private static final Logger s_logger = Logger.getLogger(ResetApiLimitCmd.class.getName());
 
-    private static final String s_name = "resetapilimitresponse";
 
     @Inject
     ApiRateLimitService _apiLimitService;
@@ -55,7 +51,7 @@ public class ResetApiLimitCmd extends BaseCmd {
     /////////////////////////////////////////////////////
 
     @ACL
-    @Parameter(name = ApiConstants.ACCOUNT, type = CommandType.UUID, entityType = AccountResponse.class, description = "the ID of the acount whose limit to be reset")
+    @Parameter(name = ApiConstants.ACCOUNT, type = CommandType.UUID, entityType = AccountResponse.class, description = "the ID of the account whose limit to be reset")
     private Long accountId;
 
     /////////////////////////////////////////////////////
@@ -73,11 +69,6 @@ public class ResetApiLimitCmd extends BaseCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {

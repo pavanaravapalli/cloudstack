@@ -184,7 +184,7 @@ class TestSecStorageServices(cloudstackTestCase):
                     hypervisors[cluster.hypervisor] = "self"
 
         for zid in self.zones:
-            for k, v in hypervisors.items():
+            for k, v in list(hypervisors.items()):
                 self.debug("Checking BUILTIN templates in zone: %s" %zid)
                 list_template_response = list_templates(
                                         self.apiclient,
@@ -340,7 +340,7 @@ class TestSecStorageServices(cloudstackTestCase):
         # 1. Try complete migration from a storage with more (or equal) free space - migration should be refused
 
         storages = self.list_secondary_storages(self.apiclient)
-        if (len(storages)) < 2:
+        if (len(storages)) < 2 or (storages[0]['zoneid'] != storages[1]['zoneid']):
             self.skipTest(
                 "This test requires more than one secondary storage")
 

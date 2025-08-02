@@ -16,10 +16,9 @@
 // under the License.
 package org.apache.cloudstack.api.command.admin.guest;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -36,8 +35,6 @@ import com.cloud.user.Account;
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class RemoveGuestOsCmd extends BaseAsyncCmd {
 
-    public static final Logger s_logger = Logger.getLogger(RemoveGuestOsCmd.class.getName());
-    private static final String s_name = "removeguestosresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -57,11 +54,6 @@ public class RemoveGuestOsCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -91,8 +83,8 @@ public class RemoveGuestOsCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.GuestOs;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.GuestOs;
     }
 
 }

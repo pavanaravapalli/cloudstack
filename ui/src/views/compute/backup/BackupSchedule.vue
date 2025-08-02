@@ -21,66 +21,78 @@
       size="small"
       :columns="columns"
       :dataSource="dataSchedules"
-      :rowKey="record => record.virtualmachineid"
+      :rowKey="record => record.intervaltype"
       :pagination="false"
       :loading="loading">
-      <div slot="icon" slot-scope="text, record">
-        <label class="interval-icon">
-          <span v-if="record.intervaltype==='HOURLY'">
-            <a-icon type="clock-circle" />
+      <template #bodyCell="{ column, text, record }">
+        <template v-if="column.key === 'icon'" :name="text">
+          <label class="interval-icon">
+            <span v-if="record.intervaltype==='HOURLY'">
+              <clock-circle-outlined />
+            </span>
+            <span class="custom-icon icon-daily" v-else-if="record.intervaltype==='DAILY'">
+              <calendar-outlined />
+            </span>
+            <span class="custom-icon icon-weekly" v-else-if="record.intervaltype==='WEEKLY'">
+              <calendar-outlined />
+            </span>
+            <span class="custom-icon icon-monthly" v-else-if="record.intervaltype==='MONTHLY'">
+              <calendar-outlined />
+            </span>
+          </label>
+        </template>
+        <template v-if="column.key === 'intervaltype'" :name="text">
+          <label>{{ record.intervaltype }}</label>
+        </template>
+        <template v-if="column.key === 'time'" :name="text">
+          <label class="interval-content">
+            <span v-if="record.intervaltype==='HOURLY'">{{ record.schedule + ' ' + $t('label.min.past.hour') }}</span>
+            <span v-else>{{ record.schedule.split(':')[1] + ':' + record.schedule.split(':')[0] }}</span>
+          </label>
+        </template>
+        <template v-if="column.key === 'interval'" :name="text">
+          <span v-if="record.intervaltype==='WEEKLY'">
+            {{ `${$t('label.every')} ${$t(listDayOfWeek[record.schedule.split(':')[2] - 1])}` }}
           </span>
-          <span class="custom-icon icon-daily" v-else-if="record.intervaltype==='DAILY'">
-            <a-icon type="calendar" />
+          <span v-else-if="record.intervaltype==='MONTHLY'">
+            {{ `${$t('label.day')} ${record.schedule.split(':')[2]} ${$t('label.of.month')}` }}
           </span>
-          <span class="custom-icon icon-weekly" v-else-if="record.intervaltype==='WEEKLY'">
-            <a-icon type="calendar" />
-          </span>
-          <span class="custom-icon icon-monthly" v-else-if="record.intervaltype==='MONTHLY'">
-            <a-icon type="calendar" />
-          </span>
-        </label>
-      </div>
-      <div slot="time" slot-scope="text, record">
-        <label class="interval-content">
-          <span v-if="record.intervaltype==='HOURLY'">{{ record.schedule + ' ' + $t('label.min.past.hour') }}</span>
-          <span v-else>{{ record.schedule.split(':')[1] + ':' + record.schedule.split(':')[0] }}</span>
-        </label>
-      </div>
-      <div slot="interval" slot-scope="text, record">
-        <span v-if="record.intervaltype==='WEEKLY'">
-          {{ `${$t('label.every')} ${$t(listDayOfWeek[record.schedule.split(':')[2] - 1])}` }}
-        </span>
-        <span v-else-if="record.intervaltype==='MONTHLY'">
-          {{ `${$t('label.day')} ${record.schedule.split(':')[2]} ${$t('label.of.month')}` }}
-        </span>
-      </div>
-      <div slot="timezone" slot-scope="text, record">
-        <label>{{ getTimeZone(record.timezone) }}</label>
-      </div>
-      <div slot="action" class="account-button-action" slot-scope="text, record">
-        <a-tooltip placement="top">
-          <template slot="title">
-            {{ $t('label.delete') }}
-          </template>
-          <a-button
-            type="danger"
-            shape="circle"
-            icon="close"
+        </template>
+        <template v-if="column.key === 'quiescevm'" :name="text">
+          <label>
+            <check-outlined v-if="record.quiescevm" />
+            <close-outlined v-else />
+          </label>
+        </template>
+        <template v-if="column.key === 'timezone'" :name="text">
+          <label>{{ getTimeZone(record.timezone) }}</label>
+        </template>
+        <template v-if="column.key === 'actions'" class="account-button-action" :name="text">
+          <tooltip-button
+            tooltipPlacement="top"
+            :tooltip="$t('label.delete')"
+            type="primary"
+            :danger="true"
+            icon="close-outlined"
             size="small"
             :loading="actionLoading"
-            @click="handleClickDelete(record)"/>
-        </a-tooltip>
-      </div>
+            @onClick="handleClickDelete(record)"/>
+        </template>
+      </template>
     </a-table>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { postAPI } from '@/api'
 import { timeZoneName } from '@/utils/timezone'
+import TooltipButton from '@/components/widgets/TooltipButton'
 
 export default {
   name: 'BackupSchedule',
+  components: {
+    TooltipButton
+  },
   props: {
     loading: {
       type: Boolean,
@@ -104,58 +116,77 @@ export default {
   },
   computed: {
     columns () {
-      return [
+      const cols = [
         {
+          key: 'icon',
           title: '',
           dataIndex: 'icon',
-          width: 30,
-          scopedSlots: { customRender: 'icon' }
+          width: 30
+        },
+        {
+          title: this.$t('label.intervaltype'),
+          dataIndex: 'intervaltype'
         },
         {
           title: this.$t('label.time'),
-          dataIndex: 'schedule',
-          scopedSlots: { customRender: 'time' }
+          dataIndex: 'schedule'
         },
         {
+          key: 'interval',
           title: '',
-          dataIndex: 'interval',
-          scopedSlots: { customRender: 'interval' }
+          dataIndex: 'interval'
         },
         {
-          title: this.$t('label.timezone'),
-          dataIndex: 'timezone',
-          scopedSlots: { customRender: 'timezone' }
-        },
-        {
-          title: this.$t('label.action'),
-          dataIndex: 'action',
-          width: 50,
-          scopedSlots: { customRender: 'action' }
+          key: 'keep',
+          title: this.$t('label.keep'),
+          dataIndex: 'maxbackups'
         }
       ]
+      const hasQuiesce = this.dataSource.some(item => 'quiescevm' in item)
+      if (hasQuiesce) {
+        cols.push({
+          key: 'quiescevm',
+          title: this.$t('label.quiescevm'),
+          dataIndex: 'quiescevm'
+        })
+      }
+      cols.push(
+        {
+          key: 'timezone',
+          title: this.$t('label.timezone'),
+          dataIndex: 'timezone'
+        },
+        {
+          key: 'actions',
+          title: this.$t('label.actions'),
+          dataIndex: 'actions',
+          width: 80
+        }
+      )
+      return cols
     }
   },
   mounted () {
     this.dataSchedules = []
     if (this.dataSource && Object.keys(this.dataSource).length > 0) {
-      this.dataSchedules.push(this.dataSource)
+      this.dataSchedules = this.dataSource
     }
   },
   inject: ['refreshSchedule'],
   watch: {
-    dataSource (newData, oldData) {
-      this.dataSchedules = []
-      if (newData && Object.keys(newData).length > 0) {
-        this.dataSchedules.push(newData)
+    dataSource: {
+      deep: true,
+      handler (newData) {
+        this.dataSchedules = newData
       }
     }
   },
   methods: {
     handleClickDelete (record) {
       const params = {}
-      params.virtualmachineid = record.virtualmachineid
+      params.id = record.id
       this.actionLoading = true
-      api('deleteBackupSchedule', params).then(json => {
+      postAPI('deleteBackupSchedule', params).then(json => {
         if (json.deletebackupscheduleresponse.success) {
           this.$notification.success({
             message: this.$t('label.scheduled.backups'),
@@ -211,7 +242,7 @@ export default {
   }
 }
 
-/deep/.ant-btn > .anticon {
+:deep(.ant-btn) > .anticon {
   line-height: 1.8;
 }
 </style>

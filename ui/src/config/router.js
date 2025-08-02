@@ -16,10 +16,13 @@
 // under the License.
 
 // eslint-disable-next-line
-import { UserLayout, BasicLayout, RouteView, BlankLayout, PageView } from '@/layouts'
+import { UserLayout, BasicLayout, RouteView } from '@/layouts'
 import AutogenView from '@/views/AutogenView.vue'
 import IFramePlugin from '@/views/plugins/IFramePlugin.vue'
-import Vue from 'vue'
+import ApiDocsPlugin from '@/views/plugins/ApiDocsPlugin.vue'
+
+import { shallowRef } from 'vue'
+import { vueProps } from '@/vue-app'
 
 import compute from '@/config/section/compute'
 import storage from '@/config/section/storage'
@@ -32,8 +35,12 @@ import account from '@/config/section/account'
 import domain from '@/config/section/domain'
 import role from '@/config/section/role'
 import infra from '@/config/section/infra'
+import zone from '@/config/section/zone'
 import offering from '@/config/section/offering'
 import config from '@/config/section/config'
+import extension from '@/config/section/extension'
+import customaction from '@/config/section/extension/customaction'
+import tools from '@/config/section/tools'
 import quota from '@/config/section/plugin/quota'
 import cloudian from '@/config/section/plugin/cloudian'
 
@@ -41,20 +48,25 @@ function generateRouterMap (section) {
   var map = {
     name: section.name,
     path: '/' + section.name,
-    hidden: section.hidden,
-    meta: { title: section.title, icon: section.icon, docHelp: section.docHelp, searchFilters: section.searchFilters },
-    component: RouteView
+    hidden: 'show' in section ? !section.show() : section.hidden,
+    meta: {
+      title: section.title,
+      icon: section.icon,
+      docHelp: vueProps.$applyDocHelpMappings(section.docHelp),
+      searchFilters: section.searchFilters,
+      related: section.related,
+      section: true
+    },
+    component: shallowRef(RouteView)
   }
 
   if (section.children && section.children.length > 0) {
-    map.redirect = '/' + section.children[0].name
-    map.meta.permission = section.children[0].permission
     map.children = []
     for (const child of section.children) {
       if ('show' in child && !child.show()) {
         continue
       }
-      var component = child.component ? child.component : AutogenView
+      var component = child.component ? child.component : shallowRef(AutogenView)
       var route = {
         name: child.name,
         path: '/' + child.name,
@@ -63,7 +75,7 @@ function generateRouterMap (section) {
           title: child.title,
           name: child.name,
           icon: child.icon,
-          docHelp: child.docHelp,
+          docHelp: vueProps.$applyDocHelpMappings(child.docHelp),
           permission: child.permission,
           resourceType: child.resourceType,
           filters: child.filters,
@@ -73,7 +85,8 @@ function generateRouterMap (section) {
           searchFilters: child.searchFilters,
           related: child.related,
           actions: child.actions,
-          tabs: child.tabs
+          tabs: child.tabs,
+          customParamHandler: child.customParamHandler
         },
         component: component,
         hideChildrenInMenu: true,
@@ -85,7 +98,7 @@ function generateRouterMap (section) {
               title: child.title,
               name: child.name,
               icon: child.icon,
-              docHelp: child.docHelp,
+              docHelp: vueProps.$applyDocHelpMappings(child.docHelp),
               permission: child.permission,
               resourceType: child.resourceType,
               params: child.params ? child.params : {},
@@ -121,7 +134,7 @@ function generateRouterMap (section) {
       map.children.push(route)
     }
   } else {
-    map.component = section.component ? section.component : AutogenView
+    map.component = section.component ? section.component : shallowRef(AutogenView)
     map.hideChildrenInMenu = true
 
     map.meta.name = section.name
@@ -131,7 +144,7 @@ function generateRouterMap (section) {
     map.meta.actions = section.actions
     map.meta.filters = section.filters
     map.meta.treeView = section.treeView ? section.treeView : false
-    map.meta.tabs = section.treeView ? section.tabs : {}
+    map.meta.tabs = section.tabs
 
     map.children = [{
       path: '/' + section.name + '/:id',
@@ -140,7 +153,7 @@ function generateRouterMap (section) {
         title: section.title,
         name: section.name,
         icon: section.icon,
-        docHelp: section.docHelp,
+        docHelp: vueProps.$applyDocHelpMappings(section.docHelp),
         hidden: section.hidden,
         permission: section.permission,
         resourceType: section.resourceType,
@@ -151,7 +164,7 @@ function generateRouterMap (section) {
         tabs: section.tabs,
         actions: section.actions ? section.actions : []
       },
-      component: section.component ? section.component : AutogenView
+      component: section.component ? section.component : shallowRef(AutogenView)
     }]
   }
 
@@ -171,6 +184,10 @@ function generateRouterMap (section) {
     map.meta.actions = section.actions
   }
 
+  if (section.params) {
+    map.meta.params = section.params
+  }
+
   return map
 }
 
@@ -178,8 +195,8 @@ export function asyncRouterMap () {
   const routerMap = [{
     path: '/',
     name: 'index',
-    component: BasicLayout,
-    meta: { icon: 'home' },
+    component: shallowRef(BasicLayout),
+    meta: { icon: 'HomeOutlined' },
     redirect: '/dashboard',
     children: [
       {
@@ -187,26 +204,7 @@ export function asyncRouterMap () {
         name: 'dashboard',
         meta: {
           title: 'label.dashboard',
-          icon: 'dashboard',
-          tabs: [
-            {
-              name: 'dashboard',
-              component: () => import('@/views/dashboard/UsageDashboardChart')
-            },
-            {
-              name: 'accounts',
-              show: (record, route, user) => { return record.account === user.account || ['Admin', 'DomainAdmin'].includes(user.roletype) },
-              component: () => import('@/views/project/AccountsTab')
-            },
-            {
-              name: 'limits',
-              params: {
-                projectid: 'id'
-              },
-              show: (record, route, user) => { return ['Admin'].includes(user.roletype) },
-              component: () => import('@/components/view/ResourceLimitTab.vue')
-            }
-          ]
+          icon: 'DashboardOutlined'
         },
         component: () => import('@/views/dashboard/Dashboard')
       },
@@ -222,15 +220,18 @@ export function asyncRouterMap () {
       generateRouterMap(account),
       generateRouterMap(domain),
       generateRouterMap(infra),
+      generateRouterMap(zone),
       generateRouterMap(offering),
       generateRouterMap(config),
+      generateRouterMap(extension),
+      generateRouterMap(customaction),
+      generateRouterMap(tools),
       generateRouterMap(quota),
       generateRouterMap(cloudian),
-
       {
         path: '/exception',
         name: 'exception',
-        component: RouteView,
+        component: shallowRef(RouteView),
         hidden: true,
         redirect: '/exception/404',
         meta: { title: 'Exception', icon: 'warning' },
@@ -261,18 +262,30 @@ export function asyncRouterMap () {
     ]
   },
   {
-    path: '*', redirect: '/exception/404', hidden: true
+    path: '/:catchAll(.*)', redirect: '/exception/404', hidden: true
   }]
 
-  const plugins = Vue.prototype.$config.plugins
+  const plugins = vueProps.$config.plugins
   if (plugins && plugins.length > 0) {
     plugins.map(plugin => {
-      routerMap[0].children.push({
-        path: '/plugins/' + plugin.name,
-        name: plugin.name,
-        component: IFramePlugin,
-        meta: { title: plugin.name, icon: plugin.icon, path: plugin.path }
-      })
+      if (!plugin.isExternalLink && plugin.path) {
+        routerMap[0].children.push({
+          path: '/plugins/' + plugin.name,
+          name: plugin.name,
+          component: IFramePlugin,
+          meta: { title: plugin.name, icon: plugin.icon, path: plugin.path }
+        })
+      }
+    })
+  }
+
+  const apidocs = vueProps.$config.apidocs
+  if (apidocs !== false) {
+    routerMap[0].children.push({
+      path: '/apidocs/',
+      name: 'apidocs',
+      component: shallowRef(ApiDocsPlugin),
+      meta: { title: 'label.api.docs', icon: 'read-outlined' }
     })
   }
 
@@ -290,8 +303,45 @@ export const constantRouterMap = [
         path: 'login',
         name: 'login',
         component: () => import(/* webpackChunkName: "auth" */ '@/views/auth/Login')
+      },
+      {
+        path: 'forgotPassword',
+        name: 'forgotPassword',
+        component: () => import(/* webpackChunkName: "auth" */ '@/views/auth/ForgotPassword')
+      },
+      {
+        path: 'resetPassword',
+        name: 'resetPassword',
+        component: () => import(/* webpackChunkName: "auth" */ '@/views/auth/ResetPassword')
       }
     ]
+  },
+  {
+    path: '/verify2FA',
+    name: 'VerifyTwoFa',
+    meta: {
+      title: 'label.two.factor.authentication',
+      hidden: true
+    },
+    component: () => import('@/views/dashboard/VerifyTwoFa')
+  },
+  {
+    path: '/verifyOauth',
+    name: 'VerifyOauth',
+    meta: {
+      title: 'label.oauth.verification',
+      hidden: true
+    },
+    component: () => import('@/views/dashboard/VerifyOauth')
+  },
+  {
+    path: '/setup2FA',
+    name: 'SetupTwoFaAtLogin',
+    meta: {
+      title: 'label.two.factor.authentication',
+      hidden: true
+    },
+    component: () => import('@/views/dashboard/SetupTwoFaAtLogin')
   },
   {
     path: '/403',

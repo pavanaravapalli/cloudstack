@@ -18,7 +18,8 @@
 """
 # Import Local Modules
 from nose.plugins.attrib import attr
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.cloudstackAPI import listZones
 from marvin.lib.utils import (cleanup_resources)
 from marvin.lib.base import (Account,
@@ -333,7 +334,7 @@ class TestCreateTemplate(cloudstackTestCase):
         self.assertNotEqual(
             len(list_vm_response),
             0,
-            "Check VM avaliable in List Virtual Machines"
+            "Check VM available in List Virtual Machines"
         )
 
         template = Template.create_from_snapshot(

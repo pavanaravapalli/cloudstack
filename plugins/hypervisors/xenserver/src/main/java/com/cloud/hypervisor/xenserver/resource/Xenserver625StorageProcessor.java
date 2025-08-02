@@ -30,14 +30,14 @@ import java.util.UUID;
 import org.apache.cloudstack.storage.command.CheckDataStoreStoragePolicyComplainceCommand;
 import org.apache.cloudstack.storage.command.CopyCmdAnswer;
 import org.apache.cloudstack.storage.command.CopyCommand;
+import org.apache.cloudstack.storage.command.SyncVolumePathCommand;
 import org.apache.cloudstack.storage.to.PrimaryDataStoreTO;
 import org.apache.cloudstack.storage.to.SnapshotObjectTO;
 import org.apache.cloudstack.storage.to.TemplateObjectTO;
 import org.apache.cloudstack.storage.to.VolumeObjectTO;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.xmlrpc.XmlRpcException;
 
 import com.cloud.agent.api.Answer;
@@ -66,20 +66,19 @@ import com.xensource.xenapi.VDI;
 import static com.cloud.utils.NumbersUtil.toHumanReadableSize;
 
 public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
-    private static final Logger s_logger = Logger.getLogger(XenServerStorageProcessor.class);
 
     public Xenserver625StorageProcessor(final CitrixResourceBase resource) {
         super(resource);
     }
 
-    private void mountNfs(Connection conn, String remoteDir, String localDir) {
+    private void mountNfs(Connection conn, String remoteDir, String localDir, String nfsVersion) {
         if (localDir == null) {
             localDir = BASE_MOUNT_POINT_ON_REMOTE + UUID.nameUUIDFromBytes(remoteDir.getBytes());
         }
-        String result = hypervisorResource.callHostPluginAsync(conn, "cloud-plugin-storage", "mountNfsSecondaryStorage", 100 * 1000, "localDir", localDir, "remoteDir", remoteDir);
+        String result = hypervisorResource.callHostPluginAsync(conn, "cloud-plugin-storage", "mountNfsSecondaryStorage", 100 * 1000, "localDir", localDir, "remoteDir", remoteDir, "nfsVersion", nfsVersion);
         if (StringUtils.isBlank(result)) {
             String errMsg = "Could not mount secondary storage " + remoteDir + " on host " + localDir;
-            s_logger.warn(errMsg);
+            logger.warn(errMsg);
             throw new CloudRuntimeException(errMsg);
         }
     }
@@ -117,7 +116,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
      */
     protected SR createNewFileSr(Connection conn, String srPath) {
         String hostUuid = hypervisorResource.getHost().getUuid();
-        s_logger.debug(String.format("Creating file SR for path [%s] on host [%s]", srPath, this.hypervisorResource._host.getUuid()));
+        logger.debug(String.format("Creating file SR for path [%s] on host [%s]", srPath, this.hypervisorResource._host.getUuid()));
         SR sr = null;
         PBD pbd = null;
         try {
@@ -142,14 +141,14 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
                 Types.InternalError internalErrorException = (Types.InternalError)e;
                 if (StringUtils.contains(internalErrorException.message, expectedDuplicatedFileSrErrorMessage)) {
-                    s_logger.debug(String.format(
+                    logger.debug(String.format(
                             "It seems that we have hit a race condition case here while creating file SR for [%s]. Instead of creating one, we will reuse the one that already exist in the XenServer pool.",
                             srPath));
                     return retrieveAlreadyConfiguredSrWithoutException(conn, srPath);
                 }
             }
             removeSrAndPbdIfPossible(conn, sr, pbd);
-            s_logger.debug(String.format("Could not create file SR [%s] on host [%s].", srPath, hostUuid), e);
+            logger.debug(String.format("Could not create file SR [%s] on host [%s].", srPath, hostUuid), e);
             return null;
         }
     }
@@ -186,7 +185,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
     protected SR retrieveAlreadyConfiguredSr(Connection conn, String path) throws XenAPIException, XmlRpcException {
         Set<SR> srs = SR.getByNameLabel(conn, path);
         if (CollectionUtils.isEmpty(srs)) {
-            s_logger.debug("No file SR found for path: " + path);
+            logger.debug("No file SR found for path: " + path);
             return null;
         }
         if (srs.size() > 1) {
@@ -194,19 +193,19 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
         }
         SR sr = srs.iterator().next();
         String srUuid = sr.getUuid(conn);
-        s_logger.debug(String.format("SR [%s] was already introduced in XenServer. Checking if we can reuse it.", srUuid));
+        logger.debug(String.format("SR [%s] was already introduced in XenServer. Checking if we can reuse it.", srUuid));
         Map<String, StorageOperations> currentOperations = sr.getCurrentOperations(conn);
         if (MapUtils.isEmpty(currentOperations)) {
-            s_logger.debug(String.format("There are no current operation in SR [%s]. It looks like an unusual condition. We will check if it is usable before returning it.", srUuid));
+            logger.debug(String.format("There are no current operation in SR [%s]. It looks like an unusual condition. We will check if it is usable before returning it.", srUuid));
         }
         try {
             sr.scan(conn);
         } catch (XenAPIException | XmlRpcException e) {
-            s_logger.debug(String.format("Problems while checking if cached temporary SR [%s] is working properly (we executed sr-scan). We will not reuse it.", srUuid));
+            logger.debug(String.format("Problems while checking if cached temporary SR [%s] is working properly (we executed sr-scan). We will not reuse it.", srUuid));
             forgetSr(conn, sr);
             return null;
         }
-        s_logger.debug(String.format("Cached temporary SR [%s] is working properly. We will reuse it.", srUuid));
+        logger.debug(String.format("Cached temporary SR [%s] is working properly. We will reuse it.", srUuid));
         return sr;
     }
 
@@ -220,10 +219,10 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             srUuid = sr.getUuid(conn);
             Set<PBD> pbDs = sr.getPBDs(conn);
             for (PBD pbd : pbDs) {
-                s_logger.debug(String.format("Unpluging PBD [%s] of SR [%s] as it is not working properly.", pbd.getUuid(conn), srUuid));
+                logger.debug(String.format("Unpluging PBD [%s] of SR [%s] as it is not working properly.", pbd.getUuid(conn), srUuid));
                 unplugPbd(conn, pbd);
             }
-            s_logger.debug(String.format("Forgetting SR [%s] as it is not working properly.", srUuid));
+            logger.debug(String.format("Forgetting SR [%s] as it is not working properly.", srUuid));
             sr.forget(conn);
         } catch (XenAPIException | XmlRpcException e) {
             throw new CloudRuntimeException("Exception while forgeting SR: " + srUuid, e);
@@ -243,9 +242,9 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
         }
     }
 
-    protected SR createFileSr(Connection conn, String remotePath, String dir) {
+    protected SR createFileSr(Connection conn, String remotePath, String dir, String nfsVersion) {
         String localDir = BASE_MOUNT_POINT_ON_REMOTE + UUID.nameUUIDFromBytes(remotePath.getBytes());
-        mountNfs(conn, remotePath, localDir);
+        mountNfs(conn, remotePath, localDir, nfsVersion);
         return createFileSR(conn, localDir + "/" + dir);
     }
 
@@ -268,6 +267,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 final String storeUrl = srcImageStore.getUrl();
                 final URI uri = new URI(storeUrl);
                 String volumePath = srcData.getPath();
+                String nfsVersion = srcImageStore.getNfsVersion();
 
                 volumePath = StringUtils.stripEnd(volumePath, "/");
 
@@ -281,7 +281,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                     volumeDirectory = volumePath.substring(0, index);
                 }
 
-                srcSr = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), volumeDirectory);
+                srcSr = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), volumeDirectory, nfsVersion);
 
                 final Set<VDI> setVdis = srcSr.getVDIs(conn);
 
@@ -328,13 +328,13 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
                     destSr = hypervisorResource.prepareManagedSr(conn, details);
                 } else {
-                    final String srName = destStore.getUuid();
+                    final String srName = CitrixHelper.getSRNameLabel(destStore.getUuid(), destStore.getPoolType(), destStore.getPath());
                     final Set<SR> srs = SR.getByNameLabel(conn, srName);
 
                     if (srs.size() != 1) {
                         final String msg = "There are " + srs.size() + " SRs with same name: " + srName;
 
-                        s_logger.warn(msg);
+                        logger.warn(msg);
 
                         return new CopyCmdAnswer(msg);
                     } else {
@@ -390,7 +390,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
         } catch (final Exception e) {
             final String msg = "Catch Exception " + e.getClass().getName() + " for template due to " + e.toString();
 
-            s_logger.warn(msg, e);
+            logger.warn(msg, e);
 
             return new CopyCmdAnswer(msg);
         } finally {
@@ -398,7 +398,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 try {
                     task.destroy(conn);
                 } catch (final Exception e) {
-                    s_logger.debug("unable to destroy task (" + task.toWireString() + ") due to " + e.toString());
+                    logger.debug("unable to destroy task (" + task.toWireString() + ") due to " + e.toString());
                 }
             }
 
@@ -415,7 +415,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
     }
 
     protected String backupSnapshot(final Connection conn, final String primaryStorageSRUuid, final String localMountPoint, final String path, final String secondaryStorageMountPath,
-            final String snapshotUuid, String prevBackupUuid, final String prevSnapshotUuid, final Boolean isISCSI, int wait) {
+            final String snapshotUuid, String prevBackupUuid, final String prevSnapshotUuid, final Boolean isISCSI, int wait, String nfsVersion) {
         boolean filesrcreated = false;
         // boolean copied = false;
 
@@ -426,7 +426,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
         final String remoteDir = secondaryStorageMountPath;
         try {
-            ssSR = createFileSr(conn, remoteDir, path);
+            ssSR = createFileSr(conn, remoteDir, path, nfsVersion);
             filesrcreated = true;
 
             final VDI snapshotvdi = VDI.getByUuid(conn, snapshotUuid);
@@ -452,7 +452,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                     try {
                         task.destroy(conn);
                     } catch (final Exception e) {
-                        s_logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
+                        logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
                     }
                 }
             }
@@ -460,7 +460,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             return result;
         } catch (final Exception e) {
             final String msg = "Exception in backupsnapshot stage due to " + e.toString();
-            s_logger.debug(msg);
+            logger.debug(msg);
             throw new CloudRuntimeException(msg, e);
         } finally {
             try {
@@ -468,7 +468,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                     hypervisorResource.removeSR(conn, ssSR);
                 }
             } catch (final Exception e) {
-                s_logger.debug("Exception in backupsnapshot cleanup stage due to " + e.toString());
+                logger.debug("Exception in backupsnapshot cleanup stage due to " + e.toString());
             }
         }
     }
@@ -479,7 +479,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 isISCSI.toString());
 
         if (parentUuid == null || parentUuid.isEmpty() || parentUuid.equalsIgnoreCase("None")) {
-            s_logger.debug("Unable to get parent of VHD " + snapshotUuid + " in SR " + primaryStorageSRUuid);
+            logger.debug("Unable to get parent of VHD " + snapshotUuid + " in SR " + primaryStorageSRUuid);
             // errString is already logged.
             return null;
         }
@@ -494,7 +494,8 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
         final DataTO destData = cmd.getDestTO();
         final int wait = cmd.getWait();
         final PrimaryDataStoreTO primaryStore = (PrimaryDataStoreTO)srcData.getDataStore();
-        final String primaryStorageNameLabel = primaryStore.getUuid();
+        final String primaryStorageNameLabel = CitrixHelper.getSRNameLabel(primaryStore.getUuid(),
+                primaryStore.getPoolType(), primaryStore.getPath());
         String secondaryStorageUrl = null;
         NfsTO cacheStore = null;
         String destPath = null;
@@ -507,6 +508,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             secondaryStorageUrl = cacheStore.getUrl();
             destPath = destData.getPath();
         }
+        String nfsVersion = cacheStore != null ? cacheStore.getNfsVersion() : null;
 
         final SnapshotObjectTO snapshotTO = (SnapshotObjectTO)srcData;
         final SnapshotObjectTO snapshotOnImage = (SnapshotObjectTO)destData;
@@ -567,15 +569,15 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 Task task = null;
                 try {
                     final String localDir = BASE_MOUNT_POINT_ON_REMOTE + UUID.nameUUIDFromBytes(secondaryStorageMountPath.getBytes());
-                    mountNfs(conn, secondaryStorageMountPath, localDir);
+                    mountNfs(conn, secondaryStorageMountPath, localDir, nfsVersion);
                     final boolean result = makeDirectory(conn, localDir + "/" + folder);
                     if (!result) {
                         details = " Failed to create folder " + folder + " in secondary storage";
-                        s_logger.warn(details);
+                        logger.warn(details);
                         return new CopyCmdAnswer(details);
                     }
 
-                    snapshotSr = createFileSr(conn, secondaryStorageMountPath, folder);
+                    snapshotSr = createFileSr(conn, secondaryStorageMountPath, folder, nfsVersion);
 
                     task = snapshotVdi.copyAsync(conn, snapshotSr, null, null);
                     // poll every 1 seconds ,
@@ -596,7 +598,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                             try {
                                 deleteSnapshotBackup(conn, localMountPoint, folder, secondaryStorageMountPath, snapshotBackupUuid);
                             } catch (final Exception e) {
-                                s_logger.debug("Failed to delete snapshot on cache storages", e);
+                                logger.debug("Failed to delete snapshot on cache storages", e);
                             }
                         }
 
@@ -610,7 +612,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                             try {
                                 deleteSnapshotBackup(conn, localMountPoint, folder, secondaryStorageMountPath, snapshotBackupUuid);
                             } catch (final Exception e) {
-                                s_logger.debug("Failed to delete snapshot on cache storages", e);
+                                logger.debug("Failed to delete snapshot on cache storages", e);
                             }
                         }
                         // finalPath = folder + File.separator +
@@ -624,7 +626,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                         try {
                             task.destroy(conn);
                         } catch (final Exception e) {
-                            s_logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
+                            logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
                         }
                     }
                     if (snapshotSr != null) {
@@ -647,7 +649,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                         throw new CloudRuntimeException("S3 upload of snapshots " + snapshotPaUuid + " failed");
                     }
                 } else {
-                    final String result = backupSnapshot(conn, primaryStorageSRUuid, localMountPoint, folder, secondaryStorageMountPath, snapshotUuid, prevBackupUuid, prevSnapshotUuid, isISCSI, wait);
+                    final String result = backupSnapshot(conn, primaryStorageSRUuid, localMountPoint, folder, secondaryStorageMountPath, snapshotUuid, prevBackupUuid, prevSnapshotUuid, isISCSI, wait, nfsVersion);
                     final String[] tmp = result.split("#");
                     snapshotBackupUuid = tmp[0];
                     physicalSize = Long.parseLong(tmp[1]);
@@ -667,14 +669,14 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             } else {
                 newSnapshot.setParentSnapshotPath(prevBackupUuid);
             }
-            s_logger.info("New snapshot details: " + newSnapshot.toString());
-            s_logger.info("New snapshot physical utilization: " + toHumanReadableSize(physicalSize));
+            logger.info("New snapshot details: " + newSnapshot.toString());
+            logger.info("New snapshot physical utilization: " + toHumanReadableSize(physicalSize));
 
             return new CopyCmdAnswer(newSnapshot);
         } catch (final Exception e) {
             final String reason = e instanceof Types.XenAPIException ? e.toString() : e.getMessage();
             details = "BackupSnapshot Failed due to " + reason;
-            s_logger.warn(details, e);
+            logger.warn(details, e);
 
             // remove last bad primary snapshot when exception happens
             destroySnapshotOnPrimaryStorage(conn, snapshotUuid);
@@ -693,6 +695,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
         final String secondaryStoragePoolURL = destStore.getUrl();
         final String volumeUUID = volume.getPath();
+        final String nfsVersion = destStore.getNfsVersion();
 
         final String userSpecifiedName = template.getName();
 
@@ -706,15 +709,15 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             final URI uri = new URI(secondaryStoragePoolURL);
             secondaryStorageMountPath = uri.getHost() + ":" + uri.getPath();
             installPath = template.getPath();
-            if (!hypervisorResource.createSecondaryStorageFolder(conn, secondaryStorageMountPath, installPath)) {
+            if (!hypervisorResource.createSecondaryStorageFolder(conn, secondaryStorageMountPath, installPath, nfsVersion)) {
                 details = " Filed to create folder " + installPath + " in secondary storage";
-                s_logger.warn(details);
+                logger.warn(details);
                 return new CopyCmdAnswer(details);
             }
 
             final VDI vol = getVDIbyUuid(conn, volumeUUID);
             // create template SR
-            tmpltSR = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), installPath);
+            tmpltSR = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), installPath, nfsVersion);
 
             // copy volume to template SR
             task = vol.copyAsync(conn, tmpltSR, null, null);
@@ -734,7 +737,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             final long physicalSize = tmpltVDI.getPhysicalUtilisation(conn);
             // create the template.properties file
             final String templatePath = secondaryStorageMountPath + "/" + installPath;
-            result = hypervisorResource.postCreatePrivateTemplate(conn, templatePath, tmpltFilename, tmpltUUID, userSpecifiedName, null, physicalSize, virtualSize, template.getId());
+            result = hypervisorResource.postCreatePrivateTemplate(conn, templatePath, tmpltFilename, tmpltUUID, userSpecifiedName, null, physicalSize, virtualSize, template.getId(), nfsVersion);
             if (!result) {
                 throw new CloudRuntimeException("Could not create the template.properties file on secondary storage dir");
             }
@@ -754,16 +757,16 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 hypervisorResource.removeSR(conn, tmpltSR);
             }
             if (secondaryStorageMountPath != null) {
-                hypervisorResource.deleteSecondaryStorageFolder(conn, secondaryStorageMountPath, installPath);
+                hypervisorResource.deleteSecondaryStorageFolder(conn, secondaryStorageMountPath, installPath, nfsVersion);
             }
             details = "Creating template from volume " + volumeUUID + " failed due to " + e.toString();
-            s_logger.error(details, e);
+            logger.error(details, e);
         } finally {
             if (task != null) {
                 try {
                     task.destroy(conn);
                 } catch (final Exception e) {
-                    s_logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
+                    logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
                 }
             }
         }
@@ -803,6 +806,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
         }
 
         final NfsTO nfsImageStore = (NfsTO)imageStore;
+        final String nfsVersion = nfsImageStore.getNfsVersion();
         final String primaryStorageNameLabel = pool.getUuid();
         final String secondaryStorageUrl = nfsImageStore.getUrl();
         final int wait = cmd.getWait();
@@ -849,7 +853,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             final String snapshotUuid = getSnapshotUuid(snapshotInstallPath);
 
             final URI uri = new URI(secondaryStorageUrl);
-            srcSr = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), snapshotDirectory);
+            srcSr = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), snapshotDirectory, nfsVersion);
 
             final String[] parents = snapshot.getParents();
             final List<VDI> snapshotChains = new ArrayList<VDI>();
@@ -883,10 +887,10 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             return new CopyCmdAnswer(newVol);
         } catch (final Types.XenAPIException e) {
             details += " due to " + e.toString();
-            s_logger.warn(details, e);
+            logger.warn(details, e);
         } catch (final Exception e) {
             details += " due to " + e.getMessage();
-            s_logger.warn(details, e);
+            logger.warn(details, e);
         } finally {
             if (srcSr != null) {
                 hypervisorResource.skipOrRemoveSR(conn, srcSr);
@@ -900,13 +904,13 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 try {
                     destVdi.destroy(conn);
                 } catch (final Exception e) {
-                    s_logger.debug("destroy dest vdi failed", e);
+                    logger.debug("destroy dest vdi failed", e);
                 }
             }
         }
         if (!result) {
             // Is this logged at a higher level?
-            s_logger.error(details);
+            logger.error(details);
         }
 
         // In all cases return something.
@@ -914,9 +918,15 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
     }
 
     @Override
-    public Answer CheckDataStoreStoragePolicyComplaince(CheckDataStoreStoragePolicyComplainceCommand cmd) {
-        s_logger.info("'CheckDataStoreStoragePolicyComplainceCommand' not applicable used for XenServerStorageProcessor");
+    public Answer checkDataStoreStoragePolicyCompliance(CheckDataStoreStoragePolicyComplainceCommand cmd) {
+        logger.info("'CheckDataStoreStoragePolicyComplainceCommand' not applicable used for XenServerStorageProcessor");
         return new Answer(cmd,false,"Not applicable used for XenServerStorageProcessor");
+    }
+
+    @Override
+    public Answer syncVolumePath(SyncVolumePathCommand cmd) {
+        logger.info("SyncVolumePathCommand not currently applicable for XenServerStorageProcessor");
+        return new Answer(cmd, false, "Not currently applicable for XenServerStorageProcessor");
     }
 
     @Override
@@ -932,14 +942,15 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             Task task = null;
             try {
                 final NfsTO nfsStore = (NfsTO)destStore;
+                final String nfsVersion = nfsStore.getNfsVersion();
                 final URI uri = new URI(nfsStore.getUrl());
                 // Create the volume folder
-                if (!hypervisorResource.createSecondaryStorageFolder(conn, uri.getHost() + ":" + uri.getPath(), destVolume.getPath())) {
+                if (!hypervisorResource.createSecondaryStorageFolder(conn, uri.getHost() + ":" + uri.getPath(), destVolume.getPath(), nfsVersion)) {
                     throw new InternalErrorException("Failed to create the volume folder.");
                 }
 
                 // Create a SR for the volume UUID folder
-                secondaryStorage = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), destVolume.getPath());
+                secondaryStorage = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), destVolume.getPath(), nfsVersion);
                 // Look up the volume on the source primary storage pool
                 final VDI srcVdi = getVDIbyUuid(conn, srcVolume.getPath());
                 // Copy the volume to secondary storage
@@ -955,14 +966,14 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 newVol.setSize(srcVolume.getSize());
                 return new CopyCmdAnswer(newVol);
             } catch (final Exception e) {
-                s_logger.debug("Failed to copy volume to secondary: " + e.toString());
+                logger.debug("Failed to copy volume to secondary: " + e.toString());
                 return new CopyCmdAnswer("Failed to copy volume to secondary: " + e.toString());
             } finally {
                 if (task != null) {
                     try {
                         task.destroy(conn);
                     } catch (final Exception e) {
-                        s_logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
+                        logger.warn("unable to destroy task(" + task.toWireString() + ") due to " + e.toString());
                     }
                 }
                 hypervisorResource.removeSR(conn, secondaryStorage);
@@ -984,6 +995,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
         if (srcStore instanceof NfsTO) {
             final NfsTO nfsStore = (NfsTO)srcStore;
+            final String nfsVersion = nfsStore.getNfsVersion();
             final String volumePath = srcVolume.getPath();
             int index = volumePath.lastIndexOf("/");
             final String volumeDirectory = volumePath.substring(0, index);
@@ -998,10 +1010,11 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             } catch (final Exception e) {
                 return new CopyCmdAnswer(e.toString());
             }
-            final SR srcSr = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), volumeDirectory);
+            final SR srcSr = createFileSr(conn, uri.getHost() + ":" + uri.getPath(), volumeDirectory, nfsVersion);
             Task task = null;
             try {
-                final SR primaryStoragePool = hypervisorResource.getStorageRepository(conn, primaryStore.getUuid());
+                final SR primaryStoragePool = hypervisorResource.getStorageRepository(conn,
+                        CitrixHelper.getSRNameLabel(primaryStore.getUuid(), primaryStore.getPoolType(), primaryStore.getPath()));
                 final VDI srcVdi = VDI.getByUuid(conn, volumeUuid);
                 task = srcVdi.copyAsync(conn, primaryStoragePool, null, null);
                 // poll every 1 seconds ,
@@ -1016,14 +1029,14 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                 return new CopyCmdAnswer(newVol);
             } catch (final Exception e) {
                 final String msg = "Catch Exception " + e.getClass().getName() + " due to " + e.toString();
-                s_logger.warn(msg, e);
+                logger.warn(msg, e);
                 return new CopyCmdAnswer(e.toString());
             } finally {
                 if (task != null) {
                     try {
                         task.destroy(conn);
                     } catch (final Exception e) {
-                        s_logger.warn("unable to destroy task(" + task.toString() + ") due to " + e.toString());
+                        logger.warn("unable to destroy task(" + task.toString() + ") due to " + e.toString());
                     }
                 }
                 if (srcSr != null) {
@@ -1032,7 +1045,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             }
         }
 
-        s_logger.debug("unsupported protocol");
+        logger.debug("unsupported protocol");
         return new CopyCmdAnswer("unsupported protocol");
     }
 
@@ -1062,7 +1075,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             srcUri = new URI(srcStore.getUrl());
             destUri = new URI(destStore.getUrl());
         } catch (final Exception e) {
-            s_logger.debug("incorrect url", e);
+            logger.debug("incorrect url", e);
 
             return new CopyCmdAnswer("incorrect url" + e.toString());
         }
@@ -1080,12 +1093,14 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
         boolean result = false;
 
         try {
-            srcSr = createFileSr(conn, srcUri.getHost() + ":" + srcUri.getPath(), srcDir);
+            String srcNfsVersion = srcStore.getNfsVersion();
+            srcSr = createFileSr(conn, srcUri.getHost() + ":" + srcUri.getPath(), srcDir, srcNfsVersion);
 
             final String destNfsPath = destUri.getHost() + ":" + destUri.getPath();
             final String localDir = BASE_MOUNT_POINT_ON_REMOTE + UUID.nameUUIDFromBytes(destNfsPath.getBytes());
 
-            mountNfs(conn, destUri.getHost() + ":" + destUri.getPath(), localDir);
+            String destNfsVersion = destStore.getNfsVersion();
+            mountNfs(conn, destUri.getHost() + ":" + destUri.getPath(), localDir, destNfsVersion);
             makeDirectory(conn, localDir + "/" + destDir);
 
             destSr = createFileSR(conn, localDir + "/" + destDir);
@@ -1139,7 +1154,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
             templatePath = templatePath.replaceAll("//", "/");
 
-            result = hypervisorResource.postCreatePrivateTemplate(conn, templatePath, templateFilename, templateUuid, nameLabel, null, physicalSize, virtualSize, destObj.getId());
+            result = hypervisorResource.postCreatePrivateTemplate(conn, templatePath, templateFilename, templateUuid, nameLabel, null, physicalSize, virtualSize, destObj.getId(), destNfsVersion);
 
             if (!result) {
                 throw new CloudRuntimeException("Could not create the template.properties file on secondary storage dir");
@@ -1157,7 +1172,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
             return new CopyCmdAnswer(newTemplate);
         } catch (final Exception e) {
-            s_logger.error("Failed create template from snapshot", e);
+            logger.error("Failed create template from snapshot", e);
 
             return new CopyCmdAnswer("Failed create template from snapshot " + e.toString());
         } finally {
@@ -1166,7 +1181,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                     try {
                         destVdi.destroy(conn);
                     } catch (final Exception e) {
-                        s_logger.debug("Clean up left over on dest storage failed: ", e);
+                        logger.debug("Clean up left over on dest storage failed: ", e);
                     }
                 }
             }
@@ -1198,7 +1213,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             destStore = (NfsTO)templateObjTO.getDataStore();
             destUri = new URI(destStore.getUrl());
         } catch (final Exception ex) {
-            s_logger.debug("Invalid URI", ex);
+            logger.debug("Invalid URI", ex);
 
             return new CopyCmdAnswer("Invalid URI: " + ex.toString());
         }
@@ -1227,7 +1242,8 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
             final String destNfsPath = destUri.getHost() + ":" + destUri.getPath();
             final String localDir = BASE_MOUNT_POINT_ON_REMOTE + UUID.nameUUIDFromBytes(destNfsPath.getBytes());
 
-            mountNfs(conn, destNfsPath, localDir);
+            String nfsVersion = destStore.getNfsVersion();
+            mountNfs(conn, destNfsPath, localDir, nfsVersion);
             makeDirectory(conn, localDir + "/" + destDir);
 
             destSr = createFileSR(conn, localDir + "/" + destDir);
@@ -1254,7 +1270,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
             templatePath = templatePath.replaceAll("//", "/");
 
-            result = hypervisorResource.postCreatePrivateTemplate(conn, templatePath, templateFilename, templateUuid, nameLabel, null, physicalSize, virtualSize, templateObjTO.getId());
+            result = hypervisorResource.postCreatePrivateTemplate(conn, templatePath, templateFilename, templateUuid, nameLabel, null, physicalSize, virtualSize, templateObjTO.getId(), nfsVersion);
 
             if (!result) {
                 throw new CloudRuntimeException("Could not create the template.properties file on secondary storage dir");
@@ -1273,15 +1289,15 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
 
             return new CopyCmdAnswer(newTemplate);
         } catch (final BadServerResponse e) {
-            s_logger.error("Failed to create a template from a snapshot due to incomprehensible server response", e);
+            logger.error("Failed to create a template from a snapshot due to incomprehensible server response", e);
 
             return new CopyCmdAnswer("Failed to create a template from a snapshot: " + e.toString());
         } catch (final XenAPIException e) {
-            s_logger.error("Failed to create a template from a snapshot due to xenapi error", e);
+            logger.error("Failed to create a template from a snapshot due to xenapi error", e);
 
             return new CopyCmdAnswer("Failed to create a template from a snapshot: " + e.toString());
         } catch (final XmlRpcException e) {
-            s_logger.error("Failed to create a template from a snapshot due to rpc error", e);
+            logger.error("Failed to create a template from a snapshot due to rpc error", e);
 
             return new CopyCmdAnswer("Failed to create a template from a snapshot: " + e.toString());
         } finally {
@@ -1290,7 +1306,7 @@ public class Xenserver625StorageProcessor extends XenServerStorageProcessor {
                     try {
                         destVdi.destroy(conn);
                     } catch (final Exception e) {
-                        s_logger.debug("Cleaned up leftover VDI on destination storage due to failure: ", e);
+                        logger.debug("Cleaned up leftover VDI on destination storage due to failure: ", e);
                     }
                 }
             }

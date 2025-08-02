@@ -16,11 +16,14 @@
 // under the License.
 package com.cloud.hypervisor.kvm.discoverer;
 
+import static com.cloud.configuration.ConfigurationManagerImpl.ADD_HOST_ON_SERVICE_RESTART_KVM;
+
 import java.net.InetAddress;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,8 +36,8 @@ import org.apache.cloudstack.ca.CAManager;
 import org.apache.cloudstack.ca.SetupCertificateCommand;
 import org.apache.cloudstack.direct.download.DirectDownloadManager;
 import org.apache.cloudstack.framework.ca.Certificate;
+import org.apache.cloudstack.utils.cache.LazyCache;
 import org.apache.cloudstack.utils.security.KeyStoreUtils;
-import org.apache.log4j.Logger;
 
 import com.cloud.agent.AgentManager;
 import com.cloud.agent.Listener;
@@ -52,6 +55,7 @@ import com.cloud.exception.DiscoveredWithErrorException;
 import com.cloud.exception.DiscoveryException;
 import com.cloud.exception.OperationTimedoutException;
 import com.cloud.host.Host;
+import com.cloud.host.HostInfo;
 import com.cloud.host.HostVO;
 import com.cloud.host.Status;
 import com.cloud.host.dao.HostDao;
@@ -69,11 +73,13 @@ import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.utils.ssh.SSHCmdHelper;
 import com.trilead.ssh2.Connection;
 
-import static com.cloud.configuration.ConfigurationManagerImpl.ADD_HOST_ON_SERVICE_RESTART_KVM;
 
 public abstract class LibvirtServerDiscoverer extends DiscovererBase implements Discoverer, Listener, ResourceStateAdapter {
-    private static final Logger s_logger = Logger.getLogger(LibvirtServerDiscoverer.class);
     private final int _waitTime = 5; /* wait for 5 minutes */
+
+    private final static HashSet<String> COMPATIBLE_HOST_OSES = new HashSet<>(Arrays.asList("Rocky", "Rocky Linux",
+            "Red", "Red Hat Enterprise Linux", "Oracle", "Oracle Linux Server", "AlmaLinux"));
+
     private String _kvmPrivateNic;
     private String _kvmPublicNic;
     private String _kvmGuestNic;
@@ -87,6 +93,16 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
     private IndirectAgentLB indirectAgentLB;
     @Inject
     private HostDao hostDao;
+
+    private LazyCache<Long, HostVO> clusterExistingHostCache;
+
+    private HostVO getExistingHostForCluster(long clusterId) {
+        HostVO existingHostInCluster = _hostDao.findAnyStateHypervisorHostInCluster(clusterId);
+        if (existingHostInCluster != null) {
+            _hostDao.loadDetails(existingHostInCluster);
+        }
+        return existingHostInCluster;
+    }
 
     @Override
     public abstract Hypervisor.HypervisorType getHypervisorType();
@@ -112,7 +128,7 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
     @Override
     public void processHostAdded(long hostId) {
         HostVO host = hostDao.findById(hostId);
-        if (host != null) {
+        if (host != null && getHypervisorType().equals(host.getHypervisorType())) {
             directDownloadManager.syncCertificatesToHost(hostId, host.getDataCenterId());
         }
     }
@@ -163,6 +179,7 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
             validityPeriod = 1;
         }
 
+        String keystorePassword = PasswordGenerator.generateRandomPassword(16);
         final SSHCmdHelper.SSHCmdResult keystoreSetupResult = SSHCmdHelper.sshExecuteCmdWithResult(sshConnection,
                 String.format("sudo /usr/share/cloudstack-common/scripts/util/%s " +
                                 "/etc/cloudstack/agent/agent.properties " +
@@ -171,7 +188,7 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
                                 "/etc/cloudstack/agent/%s",
                         KeyStoreUtils.KS_SETUP_SCRIPT,
                         KeyStoreUtils.KS_FILENAME,
-                        PasswordGenerator.generateRandomPassword(16),
+                        keystorePassword,
                         validityPeriod,
                         KeyStoreUtils.CSR_FILENAME));
 
@@ -186,40 +203,39 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
 
         final SetupCertificateCommand certificateCommand = new SetupCertificateCommand(certificate);
         final SSHCmdHelper.SSHCmdResult setupCertResult = SSHCmdHelper.sshExecuteCmdWithResult(sshConnection,
-                    String.format("sudo /usr/share/cloudstack-common/scripts/util/%s " +
-                                    "/etc/cloudstack/agent/agent.properties " +
-                                    "/etc/cloudstack/agent/%s %s " +
-                                    "/etc/cloudstack/agent/%s \"%s\" " +
-                                    "/etc/cloudstack/agent/%s \"%s\" " +
-                                    "/etc/cloudstack/agent/%s \"%s\"",
-                            KeyStoreUtils.KS_IMPORT_SCRIPT,
-                            KeyStoreUtils.KS_FILENAME,
-                            KeyStoreUtils.SSH_MODE,
-                            KeyStoreUtils.CERT_FILENAME,
-                            certificateCommand.getEncodedCertificate(),
-                            KeyStoreUtils.CACERT_FILENAME,
-                            certificateCommand.getEncodedCaCertificates(),
-                            KeyStoreUtils.PKEY_FILENAME,
-                            certificateCommand.getEncodedPrivateKey()));
+                String.format("sudo /usr/share/cloudstack-common/scripts/util/%s " +
+                                "/etc/cloudstack/agent/agent.properties %s " +
+                                "/etc/cloudstack/agent/%s %s " +
+                                "/etc/cloudstack/agent/%s \"%s\" " +
+                                "/etc/cloudstack/agent/%s \"%s\" " +
+                                "/etc/cloudstack/agent/%s \"%s\"",
+                        KeyStoreUtils.KS_IMPORT_SCRIPT,
+                        keystorePassword,
+                        KeyStoreUtils.KS_FILENAME,
+                        KeyStoreUtils.SSH_MODE,
+                        KeyStoreUtils.CERT_FILENAME,
+                        certificateCommand.getEncodedCertificate(),
+                        KeyStoreUtils.CACERT_FILENAME,
+                        certificateCommand.getEncodedCaCertificates(),
+                        KeyStoreUtils.PKEY_FILENAME,
+                        certificateCommand.getEncodedPrivateKey()));
 
         if (setupCertResult != null && !setupCertResult.isSuccess()) {
             throw new CloudRuntimeException("Failed to setup certificate in the KVM agent's keystore file, please see logs and configure manually!");
         }
 
-        if (s_logger.isDebugEnabled()) {
-            s_logger.debug("Succeeded to import certificate in the keystore for agent on the KVM host: " + agentIp + ". Agent secured and trusted.");
+        if (logger.isDebugEnabled()) {
+            logger.debug("Succeeded to import certificate in the keystore for agent on the KVM host: " + agentIp + ". Agent secured and trusted.");
         }
     }
 
     @Override
     public Map<? extends ServerResource, Map<String, String>>
         find(long dcId, Long podId, Long clusterId, URI uri, String username, String password, List<String> hostTags) throws DiscoveryException {
-        boolean isUefiSupported = false;
-
         ClusterVO cluster = _clusterDao.findById(clusterId);
         if (cluster == null || cluster.getHypervisorType() != getHypervisorType()) {
-            if (s_logger.isInfoEnabled())
-                s_logger.info("invalid cluster id or cluster is not for " + getHypervisorType() + " hypervisors");
+            if (logger.isInfoEnabled())
+                logger.info("invalid cluster id or cluster is not for " + getHypervisorType() + " hypervisors");
             return null;
         }
 
@@ -233,7 +249,7 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
         Map<String, String> details = new HashMap<String, String>();
         if (!uri.getScheme().equals("http")) {
             String msg = "urlString is not http so we're not taking care of the discovery for this: " + uri;
-            s_logger.debug(msg);
+            logger.debug(msg);
             return null;
         }
         Connection sshConnection = null;
@@ -250,7 +266,7 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
                 for (HostVO existingHost : existingHosts) {
                     if (existingHost.getGuid().toLowerCase().startsWith(guid.toLowerCase())) {
                         final String msg = "Skipping host " + agentIp + " because " + guid + " is already in the database for resource " + existingHost.getGuid() + " with ID " + existingHost.getUuid();
-                        s_logger.debug(msg);
+                        logger.debug(msg);
                         throw new CloudRuntimeException(msg);
                     }
                 }
@@ -259,19 +275,26 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
             sshConnection = new Connection(agentIp, 22);
 
             sshConnection.connect(null, 60000, 60000);
-            if (!sshConnection.authenticateWithPassword(username, password)) {
-                s_logger.debug("Failed to authenticate");
-                throw new DiscoveredWithErrorException("Authentication error");
+
+            final String privateKey = _configDao.getValue("ssh.privatekey");
+            if (!SSHCmdHelper.acquireAuthorizedConnectionWithPublicKey(sshConnection, username, privateKey)) {
+                if (org.apache.commons.lang3.StringUtils.isEmpty(password)) {
+                    logger.error("Failed to authenticate with ssh key");
+                    throw new DiscoveredWithErrorException("Authentication error with ssh private key");
+                }
+                logger.info("Failed to authenticate with ssh key, retrying with password");
+                if (!sshConnection.authenticateWithPassword(username, password)) {
+                    logger.error("Failed to authenticate with password");
+                    throw new DiscoveredWithErrorException("Authentication error with host password");
+                }
             }
 
             if (!SSHCmdHelper.sshExecuteCmd(sshConnection, "ls /dev/kvm")) {
-                s_logger.debug("It's not a KVM enabled machine");
-                return null;
-            }
-
-            if (SSHCmdHelper.sshExecuteCmd(sshConnection, "rpm -qa | grep -i ovmf", 3)) {
-                s_logger.debug("It's UEFI enabled KVM machine");
-                isUefiSupported = true;
+                String errorMsg = "This machine does not have KVM enabled.";
+                if (logger.isDebugEnabled()) {
+                    logger.debug(errorMsg);
+                }
+                throw new DiscoveredWithErrorException(errorMsg);
             }
 
             List<PhysicalNetworkSetupInfo> netInfos = _networkMgr.getPhysicalNetworkInfo(dcId, getHypervisorType());
@@ -327,9 +350,10 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
                 setupAgentCommand = "sudo cloudstack-setup-agent ";
             }
             if (!SSHCmdHelper.sshExecuteCmd(sshConnection, setupAgentCommand + parameters)) {
-                s_logger.info("cloudstack agent setup command failed: "
-                        + setupAgentCommand + parameters);
-                return null;
+                String errorMsg = String.format("CloudStack Agent setup through command [%s] with parameters [%s] failed.",
+                        setupAgentCommand, parameters);
+                logger.info(errorMsg);
+                throw new DiscoveredWithErrorException(errorMsg);
             }
 
             KvmDummyResourceBase kvmResource = new KvmDummyResourceBase();
@@ -356,21 +380,22 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
             Map<String, String> hostDetails = connectedHost.getDetails();
             hostDetails.put("password", password);
             hostDetails.put("username", username);
-            hostDetails.put(Host.HOST_UEFI_ENABLE, isUefiSupported == true ? Boolean.toString(true) : Boolean.toString(false));
             _hostDao.saveDetails(connectedHost);
             return resources;
         } catch (DiscoveredWithErrorException e) {
-            s_logger.error("DiscoveredWithErrorException caught and rethrowing, message: "+ e.getMessage());
+            logger.error("DiscoveredWithErrorException caught and rethrowing, message: "+ e.getMessage());
             throw e;
         } catch (Exception e) {
             String msg = " can't setup agent, due to " + e.toString() + " - " + e.getMessage();
-            s_logger.warn(msg);
+            logger.warn(msg);
+            if (logger.isDebugEnabled()) {
+                logger.debug(msg, e);
+            }
+            throw new DiscoveredWithErrorException(msg, e);
         } finally {
             if (sshConnection != null)
                 sshConnection.close();
         }
-
-        return null;
     }
 
     private HostVO waitForHostConnect(long dcId, long podId, long clusterId, String guid) {
@@ -384,10 +409,10 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
             try {
                 Thread.sleep(30000);
             } catch (InterruptedException e) {
-                s_logger.debug("Failed to sleep: " + e.toString());
+                logger.debug("Failed to sleep: " + e.toString());
             }
         }
-        s_logger.debug("Timeout, to wait for the host connecting to mgt svr, assuming it is failed");
+        logger.debug("Timeout, to wait for the host connecting to mgt svr, assuming it is failed");
         List<HostVO> hosts = _resourceMgr.findHostByGuid(dcId, guid);
         if (hosts.size() == 1) {
             return hosts.get(0);
@@ -414,6 +439,9 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
         if (_kvmGuestNic == null) {
             _kvmGuestNic = _kvmPrivateNic;
         }
+
+        clusterExistingHostCache = new LazyCache<>(32, 30,
+                this::getExistingHostForCluster);
 
         agentMgr.registerForHostEvents(this, true, false, false);
         _resourceMgr.registerResourceStateAdapter(this.getClass().getSimpleName(), this);
@@ -453,25 +481,38 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
         /* KVM requires host are the same in cluster */
         ClusterVO clusterVO = _clusterDao.findById(host.getClusterId());
         if (clusterVO == null) {
-            s_logger.debug("cannot find cluster: " + host.getClusterId());
+            logger.debug("cannot find cluster: " + host.getClusterId());
             throw new IllegalArgumentException("cannot add host, due to can't find cluster: " + host.getClusterId());
         }
 
-        List<HostVO> hostsInCluster = _resourceMgr.listAllHostsInCluster(clusterVO.getId());
-        if (!hostsInCluster.isEmpty()) {
-            HostVO oneHost = hostsInCluster.get(0);
-            _hostDao.loadDetails(oneHost);
-            String hostOsInCluster = oneHost.getDetail("Host.OS");
-            String hostOs = ssCmd.getHostDetails().get("Host.OS");
-            if (!hostOsInCluster.equalsIgnoreCase(hostOs)) {
-                throw new IllegalArgumentException("Can't add host: " + firstCmd.getPrivateIpAddress() + " with hostOS: " + hostOs + " into a cluster," +
-                    "in which there are " + hostOsInCluster + " hosts added");
+        HostVO existingHostInCluster = clusterExistingHostCache.get(clusterVO.getId());
+        if (existingHostInCluster != null) {
+            String hostOsInCluster = existingHostInCluster.getDetail(HostInfo.HOST_OS);
+            String hostOs = ssCmd.getHostDetails().get(HostInfo.HOST_OS);
+            if (!isHostOsCompatibleWithOtherHost(hostOsInCluster, hostOs)) {
+                String msg = String.format("host: %s with hostOS, \"%s\"into a cluster, in which there are \"%s\" hosts added", firstCmd.getPrivateIpAddress(), hostOs, hostOsInCluster);
+                if (hostOs != null && hostOs.startsWith(hostOsInCluster)) {
+                    logger.warn(String.format("Adding %s. This may or may not be ok!", msg));
+                } else {
+                    throw new IllegalArgumentException(String.format("Can't add %s.", msg));
+                }
             }
         }
 
         _hostDao.loadDetails(host);
 
         return _resourceMgr.fillRoutingHostVO(host, ssCmd, getHypervisorType(), host.getDetails(), null);
+    }
+
+    protected boolean isHostOsCompatibleWithOtherHost(String hostOsInCluster, String hostOs) {
+        if (hostOsInCluster.equalsIgnoreCase(hostOs)) {
+            return true;
+        }
+        if (COMPATIBLE_HOST_OSES.contains(hostOsInCluster) && COMPATIBLE_HOST_OSES.contains(hostOs)) {
+            logger.info(String.format("The host OS (%s) is compatible with the existing host OS (%s) in the cluster.", hostOs, hostOsInCluster));
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -491,9 +532,9 @@ public abstract class LibvirtServerDiscoverer extends DiscovererBase implements 
             ShutdownCommand cmd = new ShutdownCommand(ShutdownCommand.DeleteHost, null, !ADD_HOST_ON_SERVICE_RESTART_KVM.value());
             agentMgr.send(host.getId(), cmd);
         } catch (AgentUnavailableException e) {
-            s_logger.warn("Sending ShutdownCommand failed: ", e);
+            logger.warn("Sending ShutdownCommand failed: ", e);
         } catch (OperationTimedoutException e) {
-            s_logger.warn("Sending ShutdownCommand failed: ", e);
+            logger.warn("Sending ShutdownCommand failed: ", e);
         }
 
         return new DeleteHostAnswer(true);

@@ -19,10 +19,8 @@ package org.apache.cloudstack.api.command.admin.systemvm;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.log4j.Logger;
-
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseListCmd;
 import org.apache.cloudstack.api.Parameter;
@@ -32,16 +30,16 @@ import org.apache.cloudstack.api.response.PodResponse;
 import org.apache.cloudstack.api.response.StoragePoolResponse;
 import org.apache.cloudstack.api.response.SystemVmResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
+import org.apache.commons.lang3.StringUtils;
 
+import com.cloud.cpu.CPU;
 import com.cloud.utils.Pair;
 import com.cloud.vm.VirtualMachine;
 
 @APICommand(name = "listSystemVms", description = "List system virtual machines.", responseObject = SystemVmResponse.class, entityType = {VirtualMachine.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListSystemVMsCmd extends BaseListCmd {
-    public static final Logger s_logger = Logger.getLogger(ListSystemVMsCmd.class.getName());
 
-    private static final String s_name = "listsystemvmsresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -76,6 +74,11 @@ public class ListSystemVMsCmd extends BaseListCmd {
                description = "the storage ID where vm's volumes belong to",
                since = "3.0.1")
     private Long storageId;
+
+    @Parameter(name = ApiConstants.ARCH, type = CommandType.STRING,
+            description = "CPU arch of the system VM",
+            since = "4.20.1")
+    private String arch;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -113,18 +116,17 @@ public class ListSystemVMsCmd extends BaseListCmd {
         return storageId;
     }
 
+    public CPU.CPUArch getArch() {
+        return StringUtils.isBlank(arch) ? null : CPU.CPUArch.fromType(arch);
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.SystemVm;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.SystemVm;
     }
 
     @Override

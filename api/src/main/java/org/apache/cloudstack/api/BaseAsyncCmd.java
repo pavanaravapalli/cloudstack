@@ -17,7 +17,6 @@
 package org.apache.cloudstack.api;
 
 
-import org.apache.log4j.Logger;
 
 /**
  * queryAsyncJobResult API command.
@@ -30,7 +29,6 @@ public abstract class BaseAsyncCmd extends BaseCmd {
     public static final String migrationSyncObject = "migration";
     public static final String snapshotHostSyncObject = "snapshothost";
     public static final String gslbSyncObject = "globalserverloadbalancer";
-    private static final Logger s_logger = Logger.getLogger(BaseAsyncCmd.class.getName());
 
     private Object job;
 
@@ -72,21 +70,6 @@ public abstract class BaseAsyncCmd extends BaseCmd {
 
     public void setStartEventId(Long startEventId) {
         this.startEventId = startEventId;
-    }
-
-    /**
-     * Async commands that want to be tracked as part of the listXXX commands need to
-     * provide implementations of the two following methods, getInstanceId() and getInstanceType()
-     *
-     * getObjectId() should return the id of the object the async command is executing on
-     * getObjectType() should return a type from the AsyncJob.Type enumeration
-     */
-    public Long getInstanceId() {
-        return null;
-    }
-
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.None;
     }
 
     public String getSyncObjType() {

@@ -21,7 +21,7 @@ import java.util.Date;
 import com.google.gson.annotations.SerializedName;
 
 import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.BaseResponse;
+import org.apache.cloudstack.api.BaseResponseWithAnnotations;
 import org.apache.cloudstack.api.EntityReference;
 
 import com.cloud.serializer.Param;
@@ -29,7 +29,7 @@ import com.cloud.vm.InstanceGroup;
 
 @SuppressWarnings("unused")
 @EntityReference(value = InstanceGroup.class)
-public class InstanceGroupResponse extends BaseResponse implements ControlledViewEntityResponse {
+public class InstanceGroupResponse extends BaseResponseWithAnnotations implements ControlledViewEntityResponse {
 
     @SerializedName(ApiConstants.ID)
     @Param(description = "the ID of the instance group")
@@ -63,6 +63,10 @@ public class InstanceGroupResponse extends BaseResponse implements ControlledVie
     @Param(description = "the domain name of the instance group")
     private String domainName;
 
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "path of the Domain the instance group belongs to", since = "4.19.2.0")
+    private String domainPath;
+
     public void setId(String id) {
         this.id = id;
     }
@@ -88,6 +92,11 @@ public class InstanceGroupResponse extends BaseResponse implements ControlledVie
     @Override
     public void setDomainName(String domainName) {
         this.domainName = domainName;
+    }
+
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
     }
 
     @Override

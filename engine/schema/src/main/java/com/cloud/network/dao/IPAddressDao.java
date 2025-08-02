@@ -19,7 +19,9 @@ package com.cloud.network.dao;
 import java.util.List;
 
 import com.cloud.dc.Vlan.VlanType;
+import com.cloud.network.IpAddress.State;
 import com.cloud.utils.db.GenericDao;
+import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.net.Ip;
 
 public interface IPAddressDao extends GenericDao<IPAddressVO, Long> {
@@ -31,6 +33,8 @@ public interface IPAddressDao extends GenericDao<IPAddressVO, Long> {
     List<IPAddressVO> listByAccount(long accountId);
 
     List<IPAddressVO> listByVlanId(long vlanId);
+
+    List<IPAddressVO> listByVlanIdAndState(long vlanId, State state);
 
     List<IPAddressVO> listByDcIdIpAddress(long dcId, String ipAddress);
 
@@ -55,7 +59,7 @@ public interface IPAddressDao extends GenericDao<IPAddressVO, Long> {
     IPAddressVO findByAssociatedVmId(long vmId);
 
     // for vm secondary ips case mapping is  IP1--> vmIp1, IP2-->vmIp2, etc
-    // This method is used when one vm is mapped to muliple to public ips
+    // This method is used when one vm is mapped to multiple to public ips
     List<IPAddressVO> findAllByAssociatedVmId(long vmId);
 
     IPAddressVO findByIpAndSourceNetworkId(long networkId, String ipAddress);
@@ -64,13 +68,15 @@ public interface IPAddressDao extends GenericDao<IPAddressVO, Long> {
 
     List<IPAddressVO> listByPhysicalNetworkId(long physicalNetworkId);
 
+    IPAddressVO findByIpAndNetworkIdAndDcId(long networkId, long dcId, String ipAddress);
+
     List<IPAddressVO> listByAssociatedVpc(long vpcId, Boolean isSourceNat);
 
     long countFreePublicIPs();
 
     long countFreeIPsInNetwork(long networkId);
 
-    IPAddressVO findByVmIp(String vmIp);
+    IPAddressVO findByIp(String ipAddress);
 
     IPAddressVO findByAssociatedVmIdAndVmIp(long vmId, String vmIp);
 
@@ -89,4 +95,16 @@ public interface IPAddressDao extends GenericDao<IPAddressVO, Long> {
     List<IPAddressVO> listByAssociatedVmId(long vmId);
 
     IPAddressVO findByVmIdAndNetworkId(long networkId, long vmId);
+
+    IPAddressVO findByAccountIdAndZoneIdAndStateAndIpAddress(long accountId, long dcId, State state, String ipAddress);
+
+    List<IPAddressVO> listByDcIdAndAssociatedNetwork(long dcId);
+
+    List<IPAddressVO> listByNetworkId(long networkId);
+
+    void buildQuarantineSearchCriteria(SearchCriteria<IPAddressVO> sc);
+
+    IPAddressVO findBySourceNetworkIdAndDatacenterIdAndState(long sourceNetworkId, long dataCenterId, State state);
+
+    int expungeByVmList(List<Long> vmIds, Long batchSize);
 }

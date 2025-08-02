@@ -18,7 +18,7 @@
 from marvin.cloudstackAPI import *
 from marvin.cloudstackTestCase import cloudstackTestCase
 from marvin.cloudstackException import CloudstackAPIException
-from marvin.lib.base import Account, Role, RolePermission
+from marvin.lib.base import Account, Role, RolePermission, Configurations
 from marvin.lib.utils import cleanup_resources
 from nose.plugins.attrib import attr
 from random import shuffle
@@ -26,6 +26,7 @@ from random import shuffle
 import copy
 import random
 import re
+import time
 
 
 class TestData(object):
@@ -109,6 +110,14 @@ class TestDynamicRoles(cloudstackTestCase):
             self.testdata["account"],
             roleid=self.role.id
         )
+
+        cache_period_config = Configurations.list(
+            self.apiclient,
+            name='dynamic.apichecker.cache.period'
+        )[0]
+
+        self.cache_period = int(cache_period_config.value)
+
         self.cleanup = [
             self.account,
             self.rolepermission,
@@ -456,19 +465,19 @@ class TestDynamicRoles(cloudstackTestCase):
         # Move last item to the top
         rule = permissions.pop(len(permissions)-1)
         permissions = [rule] + permissions
-        rule.update(self.apiclient, ruleorder=",".join(map(lambda x: x.id, permissions)))
+        rule.update(self.apiclient, ruleorder=",".join([x.id for x in permissions]))
         self.validate_permissions_list(permissions, self.role.id)
 
         # Move to the bottom
         rule = permissions.pop(0)
         permissions = permissions + [rule]
-        rule.update(self.apiclient, ruleorder=",".join(map(lambda x: x.id, permissions)))
+        rule.update(self.apiclient, ruleorder=",".join([x.id for x in permissions]))
         self.validate_permissions_list(permissions, self.role.id)
 
         # Random shuffles
         for _ in range(3):
             shuffle(permissions)
-            rule.update(self.apiclient, ruleorder=",".join(map(lambda x: x.id, permissions)))
+            rule.update(self.apiclient, ruleorder=",".join([x.id for x in permissions]))
             self.validate_permissions_list(permissions, self.role.id)
 
     @attr(tags=['advanced', 'simulator', 'basic', 'sg'], required_hardware=False)
@@ -541,7 +550,7 @@ class TestDynamicRoles(cloudstackTestCase):
 
         shuffle(permissions)
         try:
-            permission.update(self.apiclient, ruleorder=",".join(map(lambda x: x.id, permissions)))
+            permission.update(self.apiclient, ruleorder=",".join([x.id for x in permissions]))
             self.fail("Reordering should fail in case of concurrent updates by other user")
         except CloudstackAPIException: pass
 
@@ -566,9 +575,9 @@ class TestDynamicRoles(cloudstackTestCase):
             Checks available APIs based on api map
         """
         response = userApiClient.listApis(listApis.listApisCmd())
-        allowedApis = map(lambda x: x.name, response)
+        allowedApis = [x.name for x in response]
         for api in allowedApis:
-            for rule, perm in apiConfig.items():
+            for rule, perm in list(apiConfig.items()):
                 if re.match(rule.replace('*', '.*'), api):
                     if perm.lower() == 'allow':
                         break
@@ -612,7 +621,7 @@ class TestDynamicRoles(cloudstackTestCase):
             Test to check role, role permissions and account life cycles
         """
         apiConfig = self.testdata['apiConfig']
-        for api, perm in apiConfig.items():
+        for api, perm in list(apiConfig.items()):
             testdata = self.testdata['rolepermission']
             testdata['roleid'] = self.role.id
             testdata['rule'] = api
@@ -622,6 +631,8 @@ class TestDynamicRoles(cloudstackTestCase):
                 self.apiclient,
                 testdata
             )
+
+        time.sleep(self.cache_period + 5)
 
         userApiClient = self.getUserApiClient(self.account.name, domain=self.account.domain, role_type=self.account.roletype)
 
@@ -641,9 +652,11 @@ class TestDynamicRoles(cloudstackTestCase):
         apiConfig = self.testdata["apiConfig"]
         roleId = self.dbclient.execute("select id from roles where uuid='%s'" % self.role.id)[0][0]
         sortOrder = 1
-        for rule, perm in apiConfig.items():
+        for rule, perm in list(apiConfig.items()):
             self.dbclient.execute("insert into role_permissions (uuid, role_id, rule, permission, sort_order) values (UUID(), %d, '%s', '%s', %d)" % (roleId, rule, perm.upper(), sortOrder))
             sortOrder += 1
+
+        time.sleep(self.cache_period + 5)
 
         userApiClient = self.getUserApiClient(self.account.name, domain=self.account.domain, role_type=self.account.roletype)
 

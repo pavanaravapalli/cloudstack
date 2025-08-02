@@ -18,18 +18,21 @@ package com.cloud.storage.snapshot;
 
 import java.util.List;
 
+import org.apache.cloudstack.api.command.user.snapshot.CopySnapshotCmd;
 import org.apache.cloudstack.api.command.user.snapshot.CreateSnapshotPolicyCmd;
 import org.apache.cloudstack.api.command.user.snapshot.DeleteSnapshotPoliciesCmd;
+import org.apache.cloudstack.api.command.user.snapshot.ExtractSnapshotCmd;
 import org.apache.cloudstack.api.command.user.snapshot.ListSnapshotPoliciesCmd;
 import org.apache.cloudstack.api.command.user.snapshot.ListSnapshotsCmd;
+import org.apache.cloudstack.api.command.user.snapshot.UpdateSnapshotPolicyCmd;
 
 import com.cloud.api.commands.ListRecurringSnapshotScheduleCmd;
 import com.cloud.exception.ResourceAllocationException;
+import com.cloud.exception.StorageUnavailableException;
 import com.cloud.storage.Snapshot;
 import com.cloud.storage.Volume;
 import com.cloud.user.Account;
 import com.cloud.utils.Pair;
-import org.apache.cloudstack.api.command.user.snapshot.UpdateSnapshotPolicyCmd;
 
 public interface SnapshotApiService {
 
@@ -50,7 +53,7 @@ public interface SnapshotApiService {
      * @param snapshotId
      *            TODO
      */
-    boolean deleteSnapshot(long snapshotId);
+    boolean deleteSnapshot(long snapshotId, Long zoneId);
 
     /**
      * Creates a policy with specified schedule. maxSnaps specifies the number of most recent snapshots that are to be
@@ -88,6 +91,10 @@ public interface SnapshotApiService {
 
     Snapshot allocSnapshot(Long volumeId, Long policyId, String snapshotName, Snapshot.LocationType locationType) throws ResourceAllocationException;
 
+    Snapshot allocSnapshot(Long volumeId, Long policyId, String snapshotName, Snapshot.LocationType locationType, Boolean isFromVmSnapshot, List<Long> zoneIds)
+            throws ResourceAllocationException;
+
+
     /**
      * Create a snapshot of a volume
      *
@@ -99,6 +106,16 @@ public interface SnapshotApiService {
      * @return the Snapshot that was created
      */
     Snapshot createSnapshot(Long volumeId, Long policyId, Long snapshotId, Account snapshotOwner);
+
+    /**
+     * Extracts the snapshot to a particular location.
+     *
+     * @param cmd
+     *            the command specifying url (where the snapshot needs to be extracted to), zoneId (zone where the snapshot exists) and
+     *            id (the id of the snapshot)
+     *
+     */
+    String extractSnapshot(ExtractSnapshotCmd cmd);
 
     /**
      * Archives a snapshot from primary storage to secondary storage.
@@ -118,4 +135,8 @@ public interface SnapshotApiService {
     Snapshot backupSnapshotFromVmSnapshot(Long snapshotId, Long vmId, Long volumeId, Long vmSnapshotId);
 
     SnapshotPolicy updateSnapshotPolicy(UpdateSnapshotPolicyCmd updateSnapshotPolicyCmd);
+
+    void markVolumeSnapshotsAsDestroyed(Volume volume);
+
+    Snapshot copySnapshot(CopySnapshotCmd cmd) throws StorageUnavailableException, ResourceAllocationException;
 }

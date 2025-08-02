@@ -17,6 +17,14 @@
 package com.cloud.network.guru;
 
 
+import java.util.List;
+
+import javax.inject.Inject;
+
+import org.apache.cloudstack.api.ApiCommandResourceType;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+
 import com.cloud.dc.DataCenter;
 import com.cloud.dc.DataCenter.NetworkType;
 import com.cloud.dc.dao.DataCenterDao;
@@ -49,6 +57,7 @@ import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
 import com.cloud.offering.NetworkOffering;
 import com.cloud.user.Account;
+import com.cloud.utils.Pair;
 import com.cloud.utils.db.DB;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.utils.net.Ip;
@@ -60,15 +69,8 @@ import com.cloud.vm.NicVO;
 import com.cloud.vm.ReservationContext;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VirtualMachineProfile;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
-import org.apache.log4j.Logger;
-
-import javax.inject.Inject;
-import java.util.List;
 
 public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
-    private static final Logger s_logger = Logger.getLogger(ExternalGuestNetworkGuru.class);
     @Inject
     NetworkOrchestrationService _networkMgr;
     @Inject
@@ -100,19 +102,19 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
                 && isMyIsolationMethod(physicalNetwork) && !offering.isSystemOnly()) {
             return true;
         } else {
-            s_logger.trace("We only take care of Guest networks of type   " + GuestType.Isolated + " in zone of type " + NetworkType.Advanced);
+            logger.trace("We only take care of Guest networks of type   " + GuestType.Isolated + " in zone of type " + NetworkType.Advanced);
             return false;
         }
     }
 
     @Override
-    public Network design(NetworkOffering offering, DeploymentPlan plan, Network userSpecified, Account owner) {
+    public Network design(NetworkOffering offering, DeploymentPlan plan, Network userSpecified, String name, Long vpcId, Account owner) {
 
         if (_networkModel.areServicesSupportedByNetworkOffering(offering.getId(), Network.Service.Connectivity)) {
             return null;
         }
 
-        NetworkVO config = (NetworkVO)super.design(offering, plan, userSpecified, owner);
+        NetworkVO config = (NetworkVO)super.design(offering, plan, userSpecified, name, vpcId, owner);
         if (config == null) {
             return null;
         } else if (_networkModel.networkIsConfiguredForExternalNetworking(plan.getDataCenterId(), config.getId())) {
@@ -120,7 +122,9 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
             config.setState(State.Allocated);
         }
 
-        return config;
+        getOrCreateIpv4SubnetForGuestNetwork(offering, config, userSpecified, owner);
+
+        return updateNetworkDesignForIPv6IfNeeded(config, userSpecified);
     }
 
     @Override
@@ -158,7 +162,7 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
 
             implemented.setBroadcastUri(BroadcastDomainType.Vlan.toUri(vlanTag));
             ActionEventUtils.onCompletedActionEvent(CallContext.current().getCallingUserId(), config.getAccountId(), EventVO.LEVEL_INFO,
-                EventTypes.EVENT_ZONE_VLAN_ASSIGN, "Assigned Zone Vlan: " + vnet + " Network Id: " + config.getId(), 0);
+                EventTypes.EVENT_ZONE_VLAN_ASSIGN, "Assigned Zone Vlan: " + vnet + " Network Id: " + config.getId(), config.getId(), ApiCommandResourceType.Network.toString(), 0);
         } else {
             vlanTag = Integer.parseInt(BroadcastDomainType.getValue(config.getBroadcastUri()));
             implemented.setBroadcastUri(config.getBroadcastUri());
@@ -221,7 +225,7 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
             }
         }
 
-        //Egress rules cidr is subset of guest nework cidr, we need to change
+        //Egress rules cidr is subset of guest network cidr, we need to change
         List <FirewallRuleVO> fwEgressRules = _fwRulesDao.listByNetworkPurposeTrafficType(config.getId(), FirewallRule.Purpose.Firewall, FirewallRule.TrafficType.Egress);
 
         for (FirewallRuleVO rule: fwEgressRules) {
@@ -265,12 +269,13 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
             profile.setIPv4Netmask(null);
         }
 
-        if (config.getVpcId() == null && vm.getType() == VirtualMachine.Type.DomainRouter) {
-            boolean isPublicNetwork = _networkModel.isProviderSupportServiceInNetwork(config.getId(), Service.SourceNat, Provider.VirtualRouter);
+        if (vm.getType() == VirtualMachine.Type.DomainRouter) {
+            boolean isPublicNetwork = _networkModel.isProviderSupportServiceInNetwork(config.getId(), Service.SourceNat, Provider.VirtualRouter)
+                    || _networkModel.isProviderSupportServiceInNetwork(config.getId(), Service.SourceNat, Provider.VPCVirtualRouter);
             if (!isPublicNetwork) {
                 Nic placeholderNic = _networkModel.getPlaceholderNicForRouter(config, null);
                 if (placeholderNic == null) {
-                    s_logger.debug("Saving placeholder nic with ip4 address " + profile.getIPv4Address() +
+                    logger.debug("Saving placeholder nic with ip4 address " + profile.getIPv4Address() +
                             " and ipv6 address " + profile.getIPv6Address() + " for the network " + config);
                     _networkMgr.savePlaceholderNic(config, profile.getIPv4Address(), profile.getIPv6Address(), VirtualMachine.Type.DomainRouter);
                 }
@@ -303,8 +308,9 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
         if (_networkModel.networkIsConfiguredForExternalNetworking(config.getDataCenterId(), config.getId())) {
             nic.setBroadcastUri(config.getBroadcastUri());
             nic.setIsolationUri(config.getBroadcastUri());
-            nic.setIPv4Dns1(dc.getDns1());
-            nic.setIPv4Dns2(dc.getDns2());
+            Pair<String, String> dns = _networkModel.getNetworkIp4Dns(config, dc);
+            nic.setIPv4Dns1(dns.first());
+            nic.setIPv4Dns2(dns.second());
             nic.setIPv4Netmask(NetUtils.cidr2Netmask(config.getCidr()));
             long cidrAddress = NetUtils.ip2Long(config.getCidr().split("/")[0]);
             int cidrSize = getGloballyConfiguredCidrSize();

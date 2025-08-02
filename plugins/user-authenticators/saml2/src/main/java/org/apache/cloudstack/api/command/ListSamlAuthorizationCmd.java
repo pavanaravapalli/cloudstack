@@ -29,7 +29,6 @@ import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.SamlAuthorizationResponse;
 import org.apache.cloudstack.api.response.UserResponse;
 import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
@@ -37,7 +36,6 @@ import java.util.List;
 
 @APICommand(name = "listSamlAuthorization", description = "Lists authorized users who can used SAML SSO", responseObject = SamlAuthorizationResponse.class, requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListSamlAuthorizationCmd extends BaseListCmd {
-    public static final Logger s_logger = Logger.getLogger(ListSamlAuthorizationCmd.class.getName());
     private static final String s_name = "listsamlauthorizationsresponse";
 
     @Inject
@@ -77,7 +75,7 @@ public class ListSamlAuthorizationCmd extends BaseListCmd {
                 _accountService.checkAccess(CallContext.current().getCallingAccount(), SecurityChecker.AccessType.ListEntry, true, account);
                 users.add(user);
             }
-        } else if (CallContext.current().getCallingAccount().getType() == Account.ACCOUNT_TYPE_ADMIN) {
+        } else if (CallContext.current().getCallingAccount().getType() == Account.Type.ADMIN) {
             users = _userDao.listAll();
         }
 

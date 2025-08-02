@@ -25,6 +25,8 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.security.InvalidKeyException;
@@ -42,12 +44,15 @@ import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -56,7 +61,10 @@ import javax.xml.stream.FactoryConfigurationError;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.response.LoginCmdResponse;
 import org.apache.cloudstack.utils.security.CertUtils;
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.utils.security.ParserUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.joda.time.DateTime;
 import org.opensaml.Configuration;
@@ -88,6 +96,7 @@ import org.opensaml.xml.io.MarshallingException;
 import org.opensaml.xml.io.Unmarshaller;
 import org.opensaml.xml.io.UnmarshallerFactory;
 import org.opensaml.xml.io.UnmarshallingException;
+import org.opensaml.xml.parse.BasicParserPool;
 import org.opensaml.xml.signature.SignatureConstants;
 import org.opensaml.xml.util.Base64;
 import org.opensaml.xml.util.XMLHelper;
@@ -95,13 +104,18 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
+import com.cloud.api.ApiServlet;
 import com.cloud.utils.HttpUtils;
+import com.cloud.utils.exception.CloudRuntimeException;
 
 public class SAMLUtils {
-    public static final Logger s_logger = Logger.getLogger(SAMLUtils.class);
+    protected static Logger LOGGER = LogManager.getLogger(SAMLUtils.class);
+
+    static final String charset = "abcdefghijklmnopqrstuvwxyz";
 
     public static String generateSecureRandomId() {
-        return new BigInteger(160, new SecureRandom()).toString(32);
+        return new BigInteger(160, new SecureRandom()).toString(32).replaceFirst("^[0-9]",
+                String.valueOf(charset.charAt(new SecureRandom().nextInt(charset.length()))));
     }
 
     public static String getValueFromAttributeStatements(final List<AttributeStatement> attributeStatements, final String attributeKey) {
@@ -115,7 +129,7 @@ public class SAMLUtils {
             for (Attribute attribute : attributeStatement.getAttributes()) {
                 if (attribute.getAttributeValues() != null && attribute.getAttributeValues().size() > 0) {
                     String value = attribute.getAttributeValues().get(0).getDOM().getTextContent();
-                    s_logger.debug("SAML attribute name: " + attribute.getName() + " friendly-name:" + attribute.getFriendlyName() + " value:" + value);
+                    LOGGER.debug("SAML attribute name: " + attribute.getName() + " friendly-name:" + attribute.getFriendlyName() + " value:" + value);
                     if (attributeKey.equals(attribute.getName()) || attributeKey.equals(attribute.getFriendlyName())) {
                         return value;
                     }
@@ -138,29 +152,53 @@ public class SAMLUtils {
         return null;
     }
 
-    public static String buildAuthnRequestUrl(final String authnId, final SAMLProviderMetadata spMetadata, final SAMLProviderMetadata idpMetadata, final String signatureAlgorithm) {
+    public static String buildAuthnRequestUrl(final String authnId, final SAMLProviderMetadata spMetadata, final SAMLProviderMetadata idpMetadata, final String signatureAlgorithm, boolean requirePasswordAuthentication) {
         String redirectUrl = "";
         try {
             DefaultBootstrap.bootstrap();
-            AuthnRequest authnRequest = SAMLUtils.buildAuthnRequestObject(authnId, spMetadata.getEntityId(), idpMetadata.getSsoUrl(), spMetadata.getSsoUrl());
+            AuthnRequest authnRequest = SAMLUtils.buildAuthnRequestObject(authnId, spMetadata.getEntityId(), idpMetadata.getSsoUrl(), spMetadata.getSsoUrl(), requirePasswordAuthentication);
             PrivateKey privateKey = null;
             if (spMetadata.getKeyPair() != null) {
                 privateKey = spMetadata.getKeyPair().getPrivate();
             }
-            redirectUrl = idpMetadata.getSsoUrl() + "?" + SAMLUtils.generateSAMLRequestSignature("SAMLRequest=" + SAMLUtils.encodeSAMLRequest(authnRequest), privateKey, signatureAlgorithm);
+            String appendOperator = idpMetadata.getSsoUrl().contains("?") ? "&" : "?";
+            redirectUrl = idpMetadata.getSsoUrl() + appendOperator + SAMLUtils.generateSAMLRequestSignature("SAMLRequest=" + SAMLUtils.encodeSAMLRequest(authnRequest), privateKey, signatureAlgorithm);
         } catch (ConfigurationException | FactoryConfigurationError | MarshallingException | IOException | NoSuchAlgorithmException | InvalidKeyException | java.security.SignatureException e) {
-            s_logger.error("SAML AuthnRequest message building error: " + e.getMessage());
+            LOGGER.error("SAML AuthnRequest message building error: " + e.getMessage());
         }
         return redirectUrl;
     }
 
-    public static AuthnRequest buildAuthnRequestObject(final String authnId, final String spId, final String idpUrl, final String consumerUrl) {
+    public static AuthnRequest buildAuthnRequestObject(final String authnId, final String spId, final String idpUrl, final String consumerUrl, boolean requirePasswordAuthentication) {
         // Issuer object
         IssuerBuilder issuerBuilder = new IssuerBuilder();
         Issuer issuer = issuerBuilder.buildObject();
         issuer.setValue(spId);
 
-        // AuthnContextClass
+        // Creation of AuthRequestObject
+        AuthnRequestBuilder authRequestBuilder = new AuthnRequestBuilder();
+        AuthnRequest authnRequest = authRequestBuilder.buildObject();
+
+        // AuthnContextClass.  When this is false, the authentication requirements are defered to the SAML IDP and its default or configured workflow
+        if (requirePasswordAuthentication) {
+            setRequestedAuthnContext(authnRequest, requirePasswordAuthentication);
+        }
+
+        authnRequest.setID(authnId);
+        authnRequest.setDestination(idpUrl);
+        authnRequest.setVersion(SAMLVersion.VERSION_20);
+        authnRequest.setForceAuthn(SAML2AuthManager.SAMLForceAuthn.value());
+        authnRequest.setIsPassive(false);
+        authnRequest.setIssueInstant(new DateTime());
+        authnRequest.setProtocolBinding(SAMLConstants.SAML2_POST_BINDING_URI);
+        authnRequest.setAssertionConsumerServiceURL(consumerUrl);
+        authnRequest.setProviderName(spId);
+        authnRequest.setIssuer(issuer);
+
+        return authnRequest;
+    }
+
+    public static void setRequestedAuthnContext(AuthnRequest authnRequest, boolean requirePasswordAuthentication) {
         AuthnContextClassRefBuilder authnContextClassRefBuilder = new AuthnContextClassRefBuilder();
         AuthnContextClassRef authnContextClassRef = authnContextClassRefBuilder.buildObject(
                 SAMLConstants.SAML20_NS,
@@ -172,23 +210,7 @@ public class SAMLUtils {
         RequestedAuthnContext requestedAuthnContext = requestedAuthnContextBuilder.buildObject();
         requestedAuthnContext.setComparison(AuthnContextComparisonTypeEnumeration.EXACT);
         requestedAuthnContext.getAuthnContextClassRefs().add(authnContextClassRef);
-
-        // Creation of AuthRequestObject
-        AuthnRequestBuilder authRequestBuilder = new AuthnRequestBuilder();
-        AuthnRequest authnRequest = authRequestBuilder.buildObject();
-        authnRequest.setID(authnId);
-        authnRequest.setDestination(idpUrl);
-        authnRequest.setVersion(SAMLVersion.VERSION_20);
-        authnRequest.setForceAuthn(false);
-        authnRequest.setIsPassive(false);
-        authnRequest.setIssueInstant(new DateTime());
-        authnRequest.setProtocolBinding(SAMLConstants.SAML2_POST_BINDING_URI);
-        authnRequest.setAssertionConsumerServiceURL(consumerUrl);
-        authnRequest.setProviderName(spId);
-        authnRequest.setIssuer(issuer);
         authnRequest.setRequestedAuthnContext(requestedAuthnContext);
-
-        return authnRequest;
     }
 
     public static LogoutRequest buildLogoutRequest(String logoutUrl, String spId, String nameIdString) {
@@ -227,7 +249,7 @@ public class SAMLUtils {
     public static Response decodeSAMLResponse(String responseMessage)
             throws ConfigurationException, ParserConfigurationException,
             SAXException, IOException, UnmarshallingException {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory documentBuilderFactory = ParserUtils.getSaferDocumentBuilderFactory();
         documentBuilderFactory.setNamespaceAware(true);
         DocumentBuilder docBuilder = documentBuilderFactory.newDocumentBuilder();
         byte[] base64DecodedResponse = Base64.decode(responseMessage);
@@ -270,17 +292,56 @@ public class SAMLUtils {
     }
 
     public static void setupSamlUserCookies(final LoginCmdResponse loginResponse, final HttpServletResponse resp) throws IOException {
-        resp.addCookie(new Cookie("userid", URLEncoder.encode(loginResponse.getUserId(), HttpUtils.UTF_8)));
-        resp.addCookie(new Cookie("domainid", URLEncoder.encode(loginResponse.getDomainId(), HttpUtils.UTF_8)));
-        resp.addCookie(new Cookie("role", URLEncoder.encode(loginResponse.getType(), HttpUtils.UTF_8)));
-        resp.addCookie(new Cookie("username", URLEncoder.encode(loginResponse.getUsername(), HttpUtils.UTF_8)));
-        resp.addCookie(new Cookie("account", URLEncoder.encode(loginResponse.getAccount(), HttpUtils.UTF_8)));
+        String redirectUrl = SAML2AuthManager.SAMLCloudStackRedirectionUrl.value();
+        String path = SAML2AuthManager.SAMLUserSessionKeyPathAttribute.value();
+        String domain = null;
+        try {
+            URI redirectUri = new URI(redirectUrl);
+            domain = redirectUri.getHost();
+            if (StringUtils.isBlank(path)) {
+                path = redirectUri.getPath();
+            }
+            if (StringUtils.isBlank(path)) {
+                path = "/";
+            }
+        } catch (URISyntaxException ex) {
+            throw new CloudRuntimeException("Invalid URI: " + redirectUrl);
+        }
+
+        addBaseCookies(loginResponse, resp, domain, path);
+
+        String providerFor2FA = loginResponse.getProviderFor2FA();
+        if (StringUtils.isNotEmpty(providerFor2FA)) {
+            resp.addCookie(newCookie(domain, path,"twoFaProvider", URLEncoder.encode(loginResponse.getProviderFor2FA(), HttpUtils.UTF_8)));
+        }
         String timezone = loginResponse.getTimeZone();
         if (timezone != null) {
-            resp.addCookie(new Cookie("timezone", URLEncoder.encode(timezone, HttpUtils.UTF_8)));
+            resp.addCookie(newCookie(domain, path,"timezone", URLEncoder.encode(timezone, HttpUtils.UTF_8)));
         }
-        resp.addCookie(new Cookie("userfullname", URLEncoder.encode(loginResponse.getFirstName() + " " + loginResponse.getLastName(), HttpUtils.UTF_8).replace("+", "%20")));
-        resp.addHeader("SET-COOKIE", String.format("%s=%s;HttpOnly", ApiConstants.SESSIONKEY, loginResponse.getSessionKey()));
+
+        String sameSite = ApiServlet.getApiSessionKeySameSite();
+        String sessionKeyCookie = String.format("%s=%s;Domain=%s;Path=%s;%s", ApiConstants.SESSIONKEY, loginResponse.getSessionKey(), domain, path, sameSite);
+        LOGGER.debug("Adding sessionkey cookie to response: " + sessionKeyCookie);
+        resp.addHeader("SET-COOKIE", sessionKeyCookie);
+        resp.addHeader("SET-COOKIE", String.format("%s=%s;HttpOnly;Path=/client/api;%s", ApiConstants.SESSIONKEY, loginResponse.getSessionKey(), sameSite));
+    }
+
+    private static void addBaseCookies(final LoginCmdResponse loginResponse, final HttpServletResponse resp, String domain, String path) throws IOException {
+        resp.addCookie(newCookie(domain, path, "userid", URLEncoder.encode(loginResponse.getUserId(), HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"domainid", URLEncoder.encode(loginResponse.getDomainId(), HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"role", URLEncoder.encode(loginResponse.getType(), HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"username", URLEncoder.encode(loginResponse.getUsername(), HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"account", URLEncoder.encode(loginResponse.getAccount(), HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"isSAML", URLEncoder.encode("true", HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"twoFaEnabled", URLEncoder.encode(loginResponse.is2FAenabled(), HttpUtils.UTF_8)));
+        resp.addCookie(newCookie(domain, path,"userfullname", URLEncoder.encode(loginResponse.getFirstName() + " " + loginResponse.getLastName(), HttpUtils.UTF_8).replace("+", "%20")));
+    }
+
+    private static Cookie newCookie(final String domain, final String path, final String name, final String value) {
+        Cookie cookie = new Cookie(name, value);
+        cookie.setDomain(domain);
+        cookie.setPath(path);
+        return cookie;
     }
 
     /**
@@ -295,7 +356,7 @@ public class SAMLUtils {
             X509EncodedKeySpec spec = keyFactory.getKeySpec(key, X509EncodedKeySpec.class);
             return new String(org.bouncycastle.util.encoders.Base64.encode(spec.getEncoded()), Charset.forName("UTF-8"));
         } catch (InvalidKeySpecException e) {
-            s_logger.error("Unable to get KeyFactory:" + e.getMessage());
+            LOGGER.error("Unable to get KeyFactory:" + e.getMessage());
         }
         return null;
     }
@@ -313,7 +374,7 @@ public class SAMLUtils {
                     PKCS8EncodedKeySpec.class);
             return new String(org.bouncycastle.util.encoders.Base64.encode(spec.getEncoded()), Charset.forName("UTF-8"));
         } catch (InvalidKeySpecException e) {
-            s_logger.error("Unable to get KeyFactory:" + e.getMessage());
+            LOGGER.error("Unable to get KeyFactory:" + e.getMessage());
         }
         return null;
     }
@@ -332,7 +393,7 @@ public class SAMLUtils {
         try {
             return keyFactory.generatePublic(x509KeySpec);
         } catch (InvalidKeySpecException e) {
-            s_logger.error("Unable to create PublicKey from PublicKey string:" + e.getMessage());
+            LOGGER.error("Unable to create PublicKey from PublicKey string:" + e.getMessage());
         }
         return null;
     }
@@ -351,7 +412,7 @@ public class SAMLUtils {
         try {
             return keyFactory.generatePrivate(pkscs8KeySpec);
         } catch (InvalidKeySpecException e) {
-            s_logger.error("Unable to create PrivateKey from privateKey string:" + e.getMessage());
+            LOGGER.error("Unable to create PrivateKey from privateKey string:" + e.getMessage());
         }
         return null;
     }
@@ -360,5 +421,20 @@ public class SAMLUtils {
         return CertUtils.generateV1Certificate(keyPair,
                 "CN=ApacheCloudStack", "CN=ApacheCloudStack",
                 3, "SHA256WithRSA");
+    }
+
+    public static BasicParserPool getSaferParserPool() {
+        final Map<String, Boolean> features = new HashMap<>();
+        features.put(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        features.put("http://apache.org/xml/features/disallow-doctype-decl", true);
+        features.put("http://xml.org/sax/features/external-general-entities", false);
+        features.put("http://xml.org/sax/features/external-parameter-entities", false);
+        features.put("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        final BasicParserPool parserPool = new BasicParserPool();
+        parserPool.setXincludeAware(false);
+        parserPool.setIgnoreComments(true);
+        parserPool.setExpandEntityReferences(false);
+        parserPool.setBuilderFeatures(features);
+        return parserPool;
     }
 }

@@ -19,11 +19,8 @@ package org.apache.cloudstack.api.command.user.template;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.cloud.dc.DataCenter;
-import org.apache.log4j.Logger;
-
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -35,6 +32,7 @@ import org.apache.cloudstack.api.response.TemplateResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.cloudstack.context.CallContext;
 
+import com.cloud.dc.DataCenter;
 import com.cloud.event.EventTypes;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.StorageUnavailableException;
@@ -44,7 +42,6 @@ import com.cloud.user.Account;
 @APICommand(name = "copyTemplate", description = "Copies a template from one zone to another.", responseObject = TemplateResponse.class, responseView = ResponseView.Restricted,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class CopyTemplateCmd extends BaseAsyncCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(CopyTemplateCmd.class.getName());
     private static final String s_name = "copytemplateresponse";
 
     /////////////////////////////////////////////////////
@@ -155,12 +152,12 @@ public class CopyTemplateCmd extends BaseAsyncCmd implements UserCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Template;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Template;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return getId();
     }
 
@@ -192,7 +189,7 @@ public class CopyTemplateCmd extends BaseAsyncCmd implements UserCmd {
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to copy template");
             }
         } catch (StorageUnavailableException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, ex.getMessage());
         }
     }

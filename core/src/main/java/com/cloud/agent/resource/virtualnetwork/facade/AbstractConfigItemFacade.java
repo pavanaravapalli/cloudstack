@@ -23,7 +23,7 @@ import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
-import org.apache.log4j.Logger;
+
 
 import com.cloud.agent.api.BumpUpPriorityCommand;
 import com.cloud.agent.api.SetupGuestNetworkCommand;
@@ -37,7 +37,9 @@ import com.cloud.agent.api.routing.LoadBalancerConfigCommand;
 import com.cloud.agent.api.routing.NetworkElementCommand;
 import com.cloud.agent.api.routing.RemoteAccessVpnCfgCommand;
 import com.cloud.agent.api.routing.SavePasswordCommand;
+import com.cloud.agent.api.routing.SetBgpPeersCommand;
 import com.cloud.agent.api.routing.SetFirewallRulesCommand;
+import com.cloud.agent.api.routing.SetIpv6FirewallRulesCommand;
 import com.cloud.agent.api.routing.SetMonitorServiceCommand;
 import com.cloud.agent.api.routing.SetNetworkACLCommand;
 import com.cloud.agent.api.routing.SetPortForwardingRulesCommand;
@@ -57,10 +59,12 @@ import com.cloud.utils.exception.CloudRuntimeException;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public abstract class AbstractConfigItemFacade {
 
-    private static final Logger s_logger = Logger.getLogger(AbstractConfigItemFacade.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     private final static Gson gson;
 
@@ -84,6 +88,7 @@ public abstract class AbstractConfigItemFacade {
         flyweight.put(DeleteIpAliasCommand.class, new DeleteIpAliasConfigItem());
         flyweight.put(VmDataCommand.class, new VmDataConfigItem());
         flyweight.put(SetFirewallRulesCommand.class, new SetFirewallRulesConfigItem());
+        flyweight.put(SetIpv6FirewallRulesCommand.class, new SetIpv6FirewallRulesConfigItem());
         flyweight.put(BumpUpPriorityCommand.class, new BumpUpPriorityConfigItem());
         flyweight.put(RemoteAccessVpnCfgCommand.class, new RemoteAccessVpnConfigItem());
         flyweight.put(VpnUsersCfgCommand.class, new VpnUsersConfigItem());
@@ -94,6 +99,7 @@ public abstract class AbstractConfigItemFacade {
         flyweight.put(SetSourceNatCommand.class, new SetSourceNatConfigItem());
         flyweight.put(IpAssocCommand.class, new IpAssociationConfigItem());
         flyweight.put(IpAssocVpcCommand.class, new IpAssociationConfigItem());
+        flyweight.put(SetBgpPeersCommand.class, new SetBgpPeersConfigItem());
     }
 
     protected String destinationFile;
@@ -120,8 +126,8 @@ public abstract class AbstractConfigItemFacade {
         final List<ConfigItem> cfg = new LinkedList<>();
 
         final String remoteFilename = appendUuidToJsonFiles(destinationFile);
-        if (s_logger.isDebugEnabled()) {
-            s_logger.debug("Transformed filename: " + destinationFile + " to: " + remoteFilename);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Transformed filename: " + destinationFile + " to: " + remoteFilename);
         }
 
         final ConfigItem configFile = new FileConfigItem(VRScripts.CONFIG_PERSIST_LOCATION, remoteFilename, gson.toJson(configuration));

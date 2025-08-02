@@ -17,71 +17,86 @@
 
 <template>
   <resource-layout>
-    <a-spin :spinning="loading" slot="left">
-      <a-card :bordered="false">
-        <a-input-search
-          size="default"
-          :placeholder="$t('label.search')"
-          v-model="searchQuery"
-          @search="onSearch"
-        >
-          <a-icon slot="prefix" type="search" />
-        </a-input-search>
-        <a-spin :spinning="loadingSearch">
-          <a-tree
-            showLine
-            v-if="treeViewData.length > 0"
-            class="list-tree-view"
-            :treeData="treeViewData"
-            :loadData="onLoadData"
-            :expandAction="false"
-            :showIcon="true"
-            :defaultSelectedKeys="defaultSelected"
-            :checkStrictly="true"
-            @select="onSelect"
-            @expand="onExpand"
-            :defaultExpandedKeys="arrExpand">
-            <a-icon slot="parent" type="folder" />
-            <a-icon slot="leaf" type="block" />
-          </a-tree>
-        </a-spin>
-      </a-card>
-    </a-spin>
-    <a-spin :spinning="detailLoading" slot="right">
-      <a-card
-        class="spin-content"
-        :bordered="true"
-        style="width:100%">
-        <a-tabs
-          style="width: 100%"
-          :animated="false"
-          :defaultActiveKey="tabs[0].name"
-          @change="onTabChange" >
-          <a-tab-pane
-            v-for="tab in tabs"
-            :tab="$t('label.' + tab.name)"
-            :key="tab.name"
-            v-if="checkShowTabDetail(tab)">
-            <component
-              :is="tab.component"
-              :resource="resource"
-              :items="items"
-              :tab="tabActive"
-              :loading="loading"
-              :bordered="false" />
-          </a-tab-pane>
-        </a-tabs>
-      </a-card>
-    </a-spin>
+    <template #left>
+      <a-spin :spinning="loading">
+        <a-card :bordered="false">
+          <a-input-search
+            size="default"
+            :placeholder="$t('label.search')"
+            v-model:value="searchQuery"
+            @search="onSearch"
+          >
+            <template #prefix><search-outlined /></template>
+          </a-input-search>
+          <a-spin :spinning="loadingSearch">
+            <a-tree
+              showLine
+              v-if="treeViewData.length > 0"
+              class="list-tree-view"
+              :treeData="treeViewData"
+              :loadData="onLoadData"
+              :expandAction="false"
+              :showIcon="true"
+              :selectedKeys="defaultSelected"
+              :checkStrictly="true"
+              @select="onSelect"
+              @expand="onExpand"
+              :expandedKeys="arrExpand">
+              <template #icon="{data}">
+                <block-outlined v-if="data.isLeaf" />
+              </template>
+            </a-tree>
+          </a-spin>
+        </a-card>
+      </a-spin>
+    </template>
+    <template #right>
+      <a-spin :spinning="detailLoading">
+        <a-card
+          class="spin-content"
+          :bordered="true"
+          style="width:100%">
+          <a-tabs
+            style="width: 100%"
+            :animated="false"
+            :defaultActiveKey="tabs[0].name"
+            @change="onTabChange" >
+            <template v-for="tab in tabs" :tab="$t('label.' + tab.name)" :key="tab.name">
+              <a-tab-pane :tab="$t('label.' + tab.name)" :key="tab.name" v-if="checkShowTabDetail(tab)">
+                <keep-alive>
+                  <component
+                    v-if="tab.resourceType"
+                    :is="tab.component"
+                    :resource="resource"
+                    :resourceType="tab.resourceType"
+                    :loading="loading"
+                    :tab="tabActive"
+                    :bordered="false" />
+                  <component
+                    v-else
+                    :is="tab.component"
+                    :resource="resource"
+                    :items="items"
+                    :tab="tabActive"
+                    :loading="loading"
+                    :bordered="false" />
+                </keep-alive>
+              </a-tab-pane>
+            </template>
+          </a-tabs>
+        </a-card>
+      </a-spin>
+    </template>
   </resource-layout>
 </template>
 
 <script>
 import store from '@/store'
-import { api } from '@/api'
+import { callAPI } from '@/api'
 import DetailsTab from '@/components/view/DetailsTab'
 import ResourceView from '@/components/view/ResourceView'
 import ResourceLayout from '@/layouts/ResourceLayout'
+import eventBus from '@/config/eventBus'
 
 export default {
   name: 'TreeView',
@@ -117,11 +132,21 @@ export default {
       type: Boolean,
       default: false
     },
-    actionData: {
-      type: Array,
+    treeStore: {
+      type: Object,
       default () {
-        return []
+        return {}
       }
+    },
+    treeDeletedKey: {
+      type: String,
+      default: null
+    }
+  },
+  provide: function () {
+    return {
+      parentFetchData: null,
+      parentToggleLoading: null
     }
   },
   data () {
@@ -153,37 +178,54 @@ export default {
     this.metaName = this.$route.meta.name
     this.apiList = this.$route.meta.permission[0] ? this.$route.meta.permission[0] : ''
     this.apiChildren = this.$route.meta.permission[1] ? this.$route.meta.permission[1] : ''
+    eventBus.on('refresh-domain-icon', () => {
+      this.getDetailResource(this.selectedTreeKey)
+    })
   },
   watch: {
     loading () {
       this.detailLoading = this.loading
-    },
-    treeData () {
-      if (this.oldTreeViewData.length === 0) {
-        this.treeViewData = this.treeData
-        this.treeVerticalData = this.treeData
-      }
+      this.treeViewData = []
+      this.arrExpand = []
+      if (!this.loading) {
+        this.treeViewData = this.treeData.slice()
+        this.treeVerticalData = this.treeData.slice()
 
-      if (this.treeViewData.length > 0) {
-        this.oldTreeViewData = this.treeViewData
-        this.rootKey = this.treeViewData[0].key
-      }
-
-      if (Object.keys(this.resource).length > 0) {
-        const resourceIndex = this.treeVerticalData.findIndex(item => item.id === this.resource.id)
-        if (resourceIndex === -1) {
-          this.$el.querySelector(`[title=${this.resource.parentdomainname}]`).click()
+        if (this.treeViewData.length > 0) {
+          this.oldTreeViewData = this.treeViewData.slice()
+          this.rootKey = this.treeViewData[0].key
         }
       }
     },
-    treeSelected () {
-      if (Object.keys(this.treeSelected).length === 0) {
-        return
-      }
+    treeSelected: {
+      deep: true,
+      handler () {
+        if (Object.keys(this.treeSelected).length === 0) {
+          return
+        }
 
-      if (Object.keys(this.resource).length > 0) {
-        this.selectedTreeKey = this.resource.key
-        this.$emit('change-resource', this.resource)
+        const resourceKeys = Object.keys(this.resource)
+        if (resourceKeys.length > 0) {
+          this.selectedTreeKey = this.resource.key
+          this.$emit('change-resource', this.resource)
+          if (resourceKeys.filter(x => x.endsWith('limit')).length === 0) {
+            setTimeout(() => { this.getDetailResource(this.resource.id) })
+          }
+
+          // set default expand
+          if (this.defaultSelected.length > 1) {
+            const arrSelected = this.defaultSelected
+            this.defaultSelected = []
+            this.defaultSelected.push(arrSelected[0])
+          }
+
+          return
+        }
+
+        this.resource = this.treeSelected
+        this.resource = this.createResourceData(this.resource)
+        this.selectedTreeKey = this.treeSelected.key
+        this.defaultSelected.push(this.selectedTreeKey)
 
         // set default expand
         if (this.defaultSelected.length > 1) {
@@ -191,28 +233,24 @@ export default {
           this.defaultSelected = []
           this.defaultSelected.push(arrSelected[0])
         }
-
-        return
-      }
-
-      this.resource = this.treeSelected
-      this.resource = this.createResourceData(this.resource)
-      this.selectedTreeKey = this.treeSelected.key
-      this.defaultSelected.push(this.selectedTreeKey)
-
-      // set default expand
-      if (this.defaultSelected.length > 1) {
-        const arrSelected = this.defaultSelected
-        this.defaultSelected = []
-        this.defaultSelected.push(arrSelected[0])
       }
     },
-    actionData (newData, oldData) {
-      if (!newData || newData.length === 0) {
-        return
+    treeVerticalData: {
+      deep: true,
+      handler () {
+        if (!this.treeStore.isExpand) {
+          return
+        }
+        if (this.treeStore.expands && this.treeStore.expands.length > 0) {
+          for (const expandKey of this.treeStore.expands) {
+            if (this.arrExpand.includes(expandKey)) {
+              continue
+            }
+            const keyVisible = this.treeVerticalData.findIndex(item => item.key === expandKey)
+            if (keyVisible > -1) this.arrExpand.push(expandKey)
+          }
+        }
       }
-
-      this.reloadTreeData(newData)
     }
   },
   methods: {
@@ -225,11 +263,12 @@ export default {
 
       const params = {
         listAll: true,
-        id: treeNode.eventKey
+        id: treeNode.eventKey,
+        showicon: true
       }
 
       return new Promise(resolve => {
-        api(this.apiChildren, params).then(json => {
+        callAPI(this.apiChildren, params).then(json => {
           const dataResponse = this.getResponseJsonData(json)
           const dataGenerate = this.generateTreeData(dataResponse)
           treeNode.dataRef.children = dataGenerate
@@ -251,20 +290,54 @@ export default {
                 if (item.id === dataGenerate[i].id) {
                   // replace all value of tree data
                   Object.keys(dataGenerate[i]).forEach((value, idx) => {
-                    this.$set(this.treeVerticalData[index], value, dataGenerate[i][value])
+                    this.treeVerticalData[index][value] = dataGenerate[i][value]
                   })
                 }
               })
             }
           }
 
+          this.handleSelectResource(treeNode.eventKey)
           resolve()
         })
       })
     },
-    onSelect (selectedKeys, event) {
+    async handleSelectResource (treeKey) {
+      if (this.treeDeletedKey && this.treeDeletedKey === this.treeStore?.treeSelected?.key) {
+        const treeSelectedKey = this.treeStore.treeSelected.parentdomainid
+        if (treeSelectedKey === this.rootKey) {
+          this.resource = this.treeVerticalData[0]
+
+          this.selectedTreeKey = treeSelectedKey
+          this.defaultSelected = [treeSelectedKey]
+          this.$emit('change-resource', this.resource)
+          await this.setTreeStore(false, false, this.resource)
+          return
+        }
+        const resourceIndex = await this.treeVerticalData.findIndex(item => item.id === treeSelectedKey)
+        if (resourceIndex > -1) {
+          const resource = await this.getDetailResource(treeSelectedKey)
+          this.resource = await this.createResourceData(resource)
+
+          this.selectedTreeKey = treeSelectedKey
+          this.defaultSelected = [treeSelectedKey]
+          this.$emit('change-resource', this.resource)
+          await this.setTreeStore(false, false, this.resource)
+          return
+        }
+      }
+      const treeSelectedKey = this.treeStore.treeSelected.key
+      const resourceIndex = await this.treeVerticalData.findIndex(item => item.id === treeSelectedKey)
+      if (resourceIndex > -1) {
+        this.selectedTreeKey = treeSelectedKey
+        this.defaultSelected = [treeSelectedKey]
+
+        this.resource = this.treeStore.treeSelected
+        this.$emit('change-resource', this.resource)
+      }
+    },
+    async onSelect (selectedKeys, event) {
       if (!event.selected) {
-        setTimeout(() => { event.node.$refs.selectHandle.click() })
         return
       }
 
@@ -273,10 +346,23 @@ export default {
         this.selectedTreeKey = selectedKeys[0]
       }
 
-      this.getDetailResource(this.selectedTreeKey)
+      this.defaultSelected = []
+      this.defaultSelected.push(this.selectedTreeKey)
+      const resource = await this.getDetailResource(this.selectedTreeKey)
+      this.resource = await this.createResourceData(resource)
+      const index = this.treeVerticalData.findIndex(item => item.key === this.selectedTreeKey)
+      this.treeVerticalData[index] = this.resource
+
+      this.$emit('change-resource', this.resource)
+      await this.setTreeStore(false, false, this.resource)
     },
     onExpand (treeExpand) {
+      const treeStore = this.treeStore
       this.arrExpand = treeExpand
+      treeStore.isExpand = true
+      treeStore.expands = this.arrExpand
+      treeStore.treeSelected = this.resource
+      this.$emit('change-tree-store', treeStore)
     },
     onSearch (value) {
       if (this.searchQuery === '' && this.oldSearchQuery === '') {
@@ -303,8 +389,8 @@ export default {
       this.arrExpand = []
       this.treeViewData = []
       this.loadingSearch = true
-
-      api(this.apiList, params).then(json => {
+      this.$emit('change-tree-store', {})
+      callAPI(this.apiList, params).then(json => {
         const listDomains = this.getResponseJsonData(json)
         this.treeVerticalData = this.treeVerticalData.concat(listDomains)
 
@@ -347,87 +433,35 @@ export default {
     onTabChange (key) {
       this.tabActive = key
     },
-    reloadTreeData (objData) {
-      if (objData && objData[0].isDel) {
-        this.treeVerticalData = this.treeVerticalData.filter(item => item.id !== objData[0].id)
-        this.treeVerticalData = this.treeVerticalData.filter(item => item.parentdomainid !== objData[0].id)
-      } else {
-        // data response from action
-        let jsonResponse = this.getResponseJsonData(objData[0])
-        jsonResponse = this.createResourceData(jsonResponse)
-
-        // resource for check create or edit
-        const resource = this.treeVerticalData.filter(item => item.id === jsonResponse.id)
-
-        // when edit
-        if (resource && resource[0]) {
-          this.treeVerticalData.filter((item, index) => {
-            if (item.id === jsonResponse.id) {
-              // replace all value of tree data
-              Object.keys(jsonResponse).forEach((value, idx) => {
-                this.$set(this.treeVerticalData[index], value, jsonResponse[value])
-              })
-            }
-          })
-        } else {
-          // when create
-          let resourceExists = true
-
-          // check is searching data
-          if (this.searchQuery !== '') {
-            resourceExists = jsonResponse.title.indexOf(this.searchQuery) > -1
-          }
-
-          // push new resource to tree data
-          if (this.resource.haschild && resourceExists) {
-            this.treeVerticalData.push(jsonResponse)
-          }
-
-          // set resource is currently active as a parent
-          this.treeVerticalData.filter((item, index) => {
-            if (item.id === this.resource.id) {
-              this.$set(this.treeVerticalData[index], 'isLeaf', false)
-              this.$set(this.treeVerticalData[index], 'haschild', true)
-            }
-          })
-        }
-      }
-      this.recursiveTreeData(this.treeVerticalData)
+    setTreeStore (arrExpand, isExpand, resource) {
+      const treeStore = this.treeStore
+      if (arrExpand) treeStore.expands = arrExpand
+      if (isExpand) treeStore.isExpand = true
+      if (resource) treeStore.treeSelected = resource
+      this.$emit('change-tree-store', treeStore)
     },
     getDetailResource (selectedKey) {
-      // set api name and parameter
-      const apiName = this.$route.meta.permission[0]
-      const params = {}
+      return new Promise(resolve => {
+        // set api name and parameter
+        const apiName = this.$route.meta.permission[0]
+        const params = {}
 
-      // set id to parameter
-      params.id = selectedKey
-      params.listAll = true
-      params.page = 1
-      params.pageSize = 1
+        // set id to parameter
+        params.id = selectedKey
+        params.listAll = true
+        params.showicon = true
+        params.page = 1
+        params.pageSize = 1
 
-      this.detailLoading = true
-
-      api(apiName, params).then(json => {
-        const jsonResponse = this.getResponseJsonData(json)
-
-        // check json response is empty
-        if (!jsonResponse || jsonResponse.length === 0) {
-          this.resource = []
-        } else {
-          this.resource = jsonResponse[0]
-          this.resource = this.createResourceData(this.resource)
-          // set all value of resource tree data
-          this.treeVerticalData.filter((item, index) => {
-            if (item.id === this.resource.id) {
-              this.treeVerticalData[index] = this.resource
-            }
-          })
-        }
-
-        // emit change resource to parent
-        this.$emit('change-resource', this.resource)
-      }).finally(() => {
-        this.detailLoading = false
+        this.detailLoading = true
+        callAPI(apiName, params).then(json => {
+          const jsonResponse = this.getResponseJsonData(json)
+          resolve(jsonResponse[0])
+        }).catch(() => {
+          resolve()
+        }).finally(() => {
+          this.detailLoading = false
+        })
       })
     },
     getResponseJsonData (json) {
@@ -497,20 +531,18 @@ export default {
 
       Object.keys(resource).forEach((value, idx) => {
         if (resource[value] === 'Unlimited') {
-          this.$set(resource, value, '-1')
+          resource.value = '-1'
         }
       })
-      this.$set(resource, 'title', resource.name)
-      this.$set(resource, 'key', resource.id)
-      resource.slots = {
-        icon: 'parent'
+      resource.title = resource.name
+      resource.key = resource.id
+      if (resource?.icon) {
+        resource.resourceIcon = resource.icon
+        delete resource.icon
       }
 
       if (!resource.haschild) {
-        this.$set(resource, 'isLeaf', true)
-        resource.slots = {
-          icon: 'leaf'
-        }
+        resource.isLeaf = true
       }
 
       return resource
@@ -564,10 +596,11 @@ export default {
 </script>
 
 <style lang="less" scoped>
-.list-tree-view {
+:deep(.ant-tree).list-tree-view {
   overflow-y: hidden;
+  margin-top: 10px;
 }
-/deep/.ant-tree.ant-tree-directory {
+:deep(.ant-tree).ant-tree-directory {
   li.ant-tree-treenode-selected {
     span.ant-tree-switcher {
       color: rgba(0, 0, 0, 0.65);
@@ -593,23 +626,49 @@ export default {
   }
 }
 
-/deep/.ant-tree li span.ant-tree-switcher.ant-tree-switcher-noop {
+:deep(.ant-tree-show-line) .ant-tree-switcher.ant-tree-switcher-noop {
+  display: none
+}
+
+:deep(.ant-tree-node-content-wrapper-open) > span:first-child,
+:deep(.ant-tree-node-content-wrapper-close) > span:first-child {
   display: none;
 }
 
-/deep/.ant-tree-node-content-wrapper-open > span:first-child,
-/deep/.ant-tree-node-content-wrapper-close > span:first-child {
-  display: none;
-}
-
-/deep/.ant-tree-icon__customize {
-  color: rgba(0, 0, 0, 0.45);
-  background: #fff;
+:deep(.ant-tree-icon__customize) {
   padding-right: 5px;
+  background: transparent;
 }
 
-/deep/.ant-tree li .ant-tree-node-content-wrapper {
-  padding-left: 0;
-  margin-left: 3px;
+:deep(.ant-tree) {
+  .ant-tree-treenode {
+    .ant-tree-node-content-wrapper {
+      margin-left: 0;
+      margin-bottom: 2px;
+
+      &:before {
+        border-left: 1px solid #d9d9d9;
+        content: " ";
+        height: 100%;
+        height: calc(100% - 15px);
+        left: 12px;
+        margin: 22px 0 0;
+        position: absolute;
+        width: 1px;
+        top: 0;
+      }
+    }
+
+    &.ant-tree-treenode-switcher-close, &.ant-tree-treenode-switcher-open, &.ant-tree-treenode-leaf-last {
+      .ant-tree-node-content-wrapper:before {
+        display: none;
+      }
+    }
+  }
+}
+
+:deep(.ant-tree-show-line) .ant-tree-indent-unit:before {
+  bottom: -2px;
+  top: -5px;
 }
 </style>

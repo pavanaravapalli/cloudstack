@@ -16,9 +16,9 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.template;
 
-import org.apache.log4j.Logger;
-
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiCommandResourceType;
+import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseUpdateTemplateOrIsoCmd;
 import org.apache.cloudstack.api.Parameter;
@@ -33,15 +33,23 @@ import com.cloud.user.Account;
 @APICommand(name = "updateTemplate", description = "Updates attributes of a template.", responseObject = TemplateResponse.class, responseView = ResponseView.Restricted,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateTemplateCmd extends BaseUpdateTemplateOrIsoCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateTemplateCmd.class.getName());
     private static final String s_name = "updatetemplateresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
     /////////////////////////////////////////////////////
 
-    @Parameter(name = "templatetype", type = CommandType.STRING, description = "the type of the template")
+    @Parameter(name = ApiConstants.TEMPLATE_TYPE, type = CommandType.STRING,
+            description = "the type of the template. Valid options are: USER/VNF (for all users) and SYSTEM/ROUTING/BUILTIN (for admins only).")
     private String templateType;
+
+    @Parameter(name = ApiConstants.TEMPLATE_TAG, type = CommandType.STRING, description = "the tag for this template.", since = "4.20.0")
+    private String templateTag;
+
+    @Parameter(name = ApiConstants.FOR_CKS, type = CommandType.BOOLEAN,
+    description = "indicates that the template can be used for deployment of CKS clusters",
+    since = "4.21.0")
+    private Boolean forCks;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -54,6 +62,14 @@ public class UpdateTemplateCmd extends BaseUpdateTemplateOrIsoCmd implements Use
 
     public String getTemplateType() {
         return templateType;
+    }
+
+    public String getTemplateTag() {
+        return templateTag;
+    }
+
+    public Boolean getForCks() {
+        return forCks;
     }
 
     /////////////////////////////////////////////////////
@@ -77,6 +93,16 @@ public class UpdateTemplateCmd extends BaseUpdateTemplateOrIsoCmd implements Use
         }
 
         return Account.ACCOUNT_ID_SYSTEM; // no account info given, parent this command to SYSTEM so ERROR events are tracked
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return getId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Template;
     }
 
     @Override

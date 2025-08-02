@@ -19,7 +19,10 @@ package com.cloud.api.query.dao;
 import java.util.List;
 
 
-import org.apache.log4j.Logger;
+import com.cloud.user.AccountManager;
+import org.apache.cloudstack.annotation.AnnotationService;
+import org.apache.cloudstack.annotation.dao.AnnotationDao;
+import org.apache.cloudstack.context.CallContext;
 import org.springframework.stereotype.Component;
 
 import org.apache.cloudstack.api.response.InstanceGroupResponse;
@@ -31,11 +34,17 @@ import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import com.cloud.vm.InstanceGroup;
 
+import javax.inject.Inject;
+
 @Component
 public class InstanceGroupJoinDaoImpl extends GenericDaoBase<InstanceGroupJoinVO, Long> implements InstanceGroupJoinDao {
-    public static final Logger s_logger = Logger.getLogger(InstanceGroupJoinDaoImpl.class);
 
     private SearchBuilder<InstanceGroupJoinVO> vrIdSearch;
+
+    @Inject
+    private AnnotationDao annotationDao;
+    @Inject
+    private AccountManager accountManager;
 
     protected InstanceGroupJoinDaoImpl() {
 
@@ -52,6 +61,8 @@ public class InstanceGroupJoinDaoImpl extends GenericDaoBase<InstanceGroupJoinVO
         groupResponse.setId(group.getUuid());
         groupResponse.setName(group.getName());
         groupResponse.setCreated(group.getCreated());
+        groupResponse.setHasAnnotation(annotationDao.hasAnnotations(group.getUuid(), AnnotationService.EntityType.INSTANCE_GROUP.name(),
+                accountManager.isRootAdmin(CallContext.current().getCallingAccount().getId())));
 
         ApiResponseHelper.populateOwner(groupResponse, group);
 

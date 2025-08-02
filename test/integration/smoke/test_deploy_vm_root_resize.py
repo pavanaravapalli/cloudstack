@@ -164,14 +164,7 @@ class TestDeployVmRootSize(cloudstackTestCase):
         return
 
     def tearDown(self):
-        try:
-            # Clean up, terminate the created instance, volumes and snapshots
-
-            cleanup_resources(self.apiclient, self.cleanup)
-            pass
-        except Exception as e:
-            raise Exception("Warning: Exception during cleanup : %s" % e)
-        return
+        super(TestDeployVmRootSize,self).tearDown()
 
     @classmethod
     def restartServer(cls):
@@ -393,7 +386,7 @@ class TestDeployVmRootSize(cloudstackTestCase):
                         rootdisksize=newrootsize
                 )
             except Exception as ex:
-                    if "rootdisksize override is smaller than template size" in str(ex):
+                    if "rootdisksize override (" + str(newrootsize) + " GB) is smaller than template size" in str(ex):
                         success = True
                     else:
                         self.debug("Virtual machine create did not fail appropriately. Error was actually : " + str(ex));
@@ -401,11 +394,3 @@ class TestDeployVmRootSize(cloudstackTestCase):
             self.assertEqual(success, True, "Check if passing rootdisksize < templatesize fails appropriately")
         else:
             self.debug("test 02 does not support hypervisor type " + self.hypervisor)
-
-    def tearDown(self):
-        try:
-            cleanup_resources(self.apiclient, self.cleanup)
-        except Exception as e:
-            self.debug("Warning! Exception in tearDown: %s" % e)
-
-

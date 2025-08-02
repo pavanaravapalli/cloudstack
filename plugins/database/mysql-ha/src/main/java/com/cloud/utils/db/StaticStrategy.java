@@ -23,7 +23,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import com.mysql.cj.jdbc.ConnectionImpl;
 import com.mysql.cj.jdbc.JdbcConnection;
@@ -32,7 +33,7 @@ import com.mysql.cj.jdbc.ha.BalanceStrategy;
 import com.mysql.cj.jdbc.ha.LoadBalancedConnectionProxy;
 
 public class StaticStrategy implements BalanceStrategy {
-    private static final Logger s_logger = Logger.getLogger(StaticStrategy.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     public StaticStrategy() {
     }
@@ -44,21 +45,21 @@ public class StaticStrategy implements BalanceStrategy {
 
         SQLException ex = null;
 
-        List<String> whiteList = new ArrayList<String>(numHosts);
-        whiteList.addAll(configuredHosts);
+        List<String> allowList = new ArrayList<String>(numHosts);
+        allowList.addAll(configuredHosts);
 
-        Map<String, Long> blackList = ((LoadBalancedConnectionProxy) proxy).getGlobalBlacklist();
+        Map<String, Long> denylist = ((LoadBalancedConnectionProxy) proxy).getGlobalBlacklist();
 
-        whiteList.removeAll(blackList.keySet());
+        allowList.removeAll(denylist.keySet());
 
-        Map<String, Integer> whiteListMap = this.getArrayIndexMap(whiteList);
+        Map<String, Integer> allowListMap = this.getArrayIndexMap(allowList);
 
         for (int attempts = 0; attempts < numRetries;) {
-            if (whiteList.size() == 0) {
+            if (allowList.size() == 0) {
                 throw SQLError.createSQLException("No hosts configured", null);
             }
 
-            String hostPortSpec = whiteList.get(0);     //Always take the first host
+            String hostPortSpec = allowList.get(0);     //Always take the first host
 
             ConnectionImpl conn = (ConnectionImpl) liveConnections.get(hostPortSpec);
 
@@ -70,30 +71,30 @@ public class StaticStrategy implements BalanceStrategy {
 
                     if (((LoadBalancedConnectionProxy) proxy).shouldExceptionTriggerFailover(sqlEx)) {
 
-                        Integer whiteListIndex = whiteListMap.get(hostPortSpec);
+                        Integer allowListIndex = allowListMap.get(hostPortSpec);
 
                         // exclude this host from being picked again
-                        if (whiteListIndex != null) {
-                            whiteList.remove(whiteListIndex.intValue());
-                            whiteListMap = this.getArrayIndexMap(whiteList);
+                        if (allowListIndex != null) {
+                            allowList.remove(allowListIndex.intValue());
+                            allowListMap = this.getArrayIndexMap(allowList);
                         }
                         ((LoadBalancedConnectionProxy) proxy).addToGlobalBlacklist(hostPortSpec);
 
-                        if (whiteList.size() == 0) {
+                        if (allowList.size() == 0) {
                             attempts++;
                             try {
                                 Thread.sleep(250);
                             } catch (InterruptedException e) {
-                                s_logger.debug("[ignored] interupted while fail over in progres.");
+                                logger.debug("[ignored] interrupted while fail over in progres.");
                             }
 
                             // start fresh
-                            whiteListMap = new HashMap<String, Integer>(numHosts);
-                            whiteList.addAll(configuredHosts);
-                            blackList = ((LoadBalancedConnectionProxy) proxy).getGlobalBlacklist();
+                            allowListMap = new HashMap<String, Integer>(numHosts);
+                            allowList.addAll(configuredHosts);
+                            denylist = ((LoadBalancedConnectionProxy) proxy).getGlobalBlacklist();
 
-                            whiteList.removeAll(blackList.keySet());
-                            whiteListMap = this.getArrayIndexMap(whiteList);
+                            allowList.removeAll(denylist.keySet());
+                            allowListMap = this.getArrayIndexMap(allowList);
                         }
 
                         continue;

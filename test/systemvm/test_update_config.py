@@ -71,7 +71,7 @@ class UpdateConfigTestCase(SystemVMTestCase):
             "allowed":False}
         ],
         "egress_rules":
-        [   
+        [
             {"type":"all",
             "cidr":"0.0.0.0/0",
             "allowed":False}
@@ -105,41 +105,41 @@ class UpdateConfigTestCase(SystemVMTestCase):
     basic_acl_rules = [
         # block range tcp
         {
-            "allowed": False, 
-            "cidr": "1.2.3.0/24", 
-            "first_port": 60, 
-            "last_port": 70, 
+            "allowed": False,
+            "cidr": "1.2.3.0/24",
+            "first_port": 60,
+            "last_port": 70,
             "type": "tcp"
         },
         # block range udp
         {
-            "allowed": False, 
-            "cidr": "1.2.3.0/24", 
-            "first_port": 60, 
-            "last_port": 70, 
+            "allowed": False,
+            "cidr": "1.2.3.0/24",
+            "first_port": 60,
+            "last_port": 70,
             "type": "udp"
         },
         # ipv6
         {
-            "allowed": True, 
-            "cidr": "1.2.3.0/24", 
-            "protocol": 41, 
+            "allowed": True,
+            "cidr": "1.2.3.0/24",
+            "protocol": 41,
             "type": "protocol"
-        }, 
+        },
         # Single port
         {
-            "allowed": True, 
-            "cidr": "1.2.3.0/24", 
-            "first_port": 30, 
-            "last_port": 30, 
+            "allowed": True,
+            "cidr": "1.2.3.0/24",
+            "first_port": 30,
+            "last_port": 30,
             "type": "tcp"
         },
         # Icmp
         {
-            "allowed": True, 
-            "cidr": "10.0.0.0/8", 
-            "icmp_code": -1, 
-            "icmp_type": -1, 
+            "allowed": True,
+            "cidr": "10.0.0.0/8",
+            "icmp_code": -1,
+            "icmp_type": -1,
             "type": "icmp"
         }
     ]
@@ -280,7 +280,7 @@ class UpdateConfigTestCase(SystemVMTestCase):
             unique["eth%s" % ips["nic_dev_id"]] = 1
 
         # If this is the first run, the drops will not be there yet
-        # this is so I can get get a true count of what is explicitly added
+        # this is so I can get a true count of what is explicitly added
         drops = len(unique)
         for dev in unique:
             drops -= ip.count_fw_rules('ACL_INBOUND_%s -j DROP' % dev)

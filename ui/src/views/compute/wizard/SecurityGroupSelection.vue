@@ -21,7 +21,7 @@
     <a-input-search
       style="width: 25vw; float: right; margin-bottom: 10px; z-index: 8;"
       :placeholder="$t('label.search')"
-      v-model="filter"
+      v-model:value="filter"
       @search="handleSearch" />
     <a-table
       :loading="loading || fetchLoading"
@@ -45,7 +45,7 @@
         @change="onChangePage"
         @showSizeChange="onChangePageSize"
         showSizeChanger>
-        <template slot="buildOptionText" slot-scope="props">
+        <template #buildOptionText="props">
           <span>{{ props.value }} / {{ $t('label.page') }}</span>
         </template>
       </a-pagination>
@@ -54,7 +54,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import _ from 'lodash'
 
 export default {
@@ -94,7 +94,7 @@ export default {
         }
       ],
       items: [],
-      selectedRowKeys: [],
+      selectedRowKeys: this?.preFillContent?.securitygroupids || [],
       page: 1,
       pageSize: 10,
       keyword: null,
@@ -140,8 +140,9 @@ export default {
   methods: {
     fetchData () {
       const params = {
-        domainid: this.$store.getters.userInfo.domainid,
-        account: this.$store.getters.userInfo.account,
+        projectid: this.$store.getters.project ? this.$store.getters.project.id : null,
+        domainid: this.$store.getters.project && this.$store.getters.project.id ? null : this.$store.getters.userInfo.domainid,
+        account: this.$store.getters.project && this.$store.getters.project.id ? null : this.$store.getters.userInfo.account,
         page: this.page,
         pageSize: this.pageSize
       }
@@ -153,7 +154,7 @@ export default {
       this.items = []
       this.fetchLoading = true
 
-      api('listSecurityGroups', params).then(json => {
+      getAPI('listSecurityGroups', params).then(json => {
         const items = json.listsecuritygroupsresponse.securitygroup || []
         this.rowCount = json.listsecuritygroupsresponse.count || 0
         if (items && items.length > 0) {

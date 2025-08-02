@@ -16,12 +16,11 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.firewall;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -40,8 +39,6 @@ import com.cloud.network.rules.FirewallRule;
 @APICommand(name = "deleteFirewallRule", description = "Deletes a firewall rule", responseObject = SuccessResponse.class, entityType = {FirewallRule.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class DeleteFirewallRuleCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(DeleteFirewallRuleCmd.class.getName());
-    private static final String s_name = "deletefirewallruleresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -65,11 +62,6 @@ public class DeleteFirewallRuleCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
     @Override
     public String getEventType() {
         return EventTypes.EVENT_FIREWALL_CLOSE;
@@ -120,7 +112,7 @@ public class DeleteFirewallRuleCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.FirewallRule;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.FirewallRule;
     }
 }

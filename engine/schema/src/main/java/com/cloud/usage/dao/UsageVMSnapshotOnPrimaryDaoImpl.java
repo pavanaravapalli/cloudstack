@@ -25,8 +25,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import com.cloud.usage.UsageSnapshotOnPrimaryVO;
@@ -36,11 +35,10 @@ import com.cloud.utils.db.TransactionLegacy;
 
 @Component
 public class UsageVMSnapshotOnPrimaryDaoImpl extends GenericDaoBase<UsageSnapshotOnPrimaryVO, Long> implements UsageVMSnapshotOnPrimaryDao {
-    public static final Logger s_logger = Logger.getLogger(UsageVMSnapshotOnPrimaryDaoImpl.class.getName());
-    protected static final String GET_USAGE_RECORDS_BY_ACCOUNT = "SELECT id, zone_id, account_id, domain_id, vm_id, name, type, physicalsize, virtualsize, created, deleted, vm_snapshot_id "
+    protected static final String GET_USAGE_RECORDS_BY_ACCOUNT = "SELECT volume_id, zone_id, account_id, domain_id, vm_id, name, type, physicalsize, virtualsize, created, deleted, vm_snapshot_id "
         + " FROM usage_snapshot_on_primary" + " WHERE account_id = ? " + " AND ( (created < ? AND deleted is NULL)"
         + "     OR ( deleted BETWEEN ? AND ?)) ORDER BY created asc";
-    protected static final String UPDATE_DELETED = "UPDATE usage_snapshot_on_primary SET deleted = ? WHERE account_id = ? AND id = ? and vm_id = ?  and created = ?";
+    protected static final String UPDATE_DELETED = "UPDATE usage_snapshot_on_primary SET deleted = ? WHERE account_id = ? AND volume_id = ? and vm_id = ?  and created = ?";
 
     @Override
     public void updateDeleted(UsageSnapshotOnPrimaryVO usage) {
@@ -51,14 +49,14 @@ public class UsageVMSnapshotOnPrimaryDaoImpl extends GenericDaoBase<UsageSnapsho
             pstmt = txn.prepareAutoCloseStatement(UPDATE_DELETED);
             pstmt.setString(1, DateUtil.getDateDisplayString(TimeZone.getTimeZone("GMT"), usage.getDeleted()));
             pstmt.setLong(2, usage.getAccountId());
-            pstmt.setLong(3, usage.getId());
+            pstmt.setLong(3, usage.getVolumeId());
             pstmt.setLong(4, usage.getVmId());
             pstmt.setString(5, DateUtil.getDateDisplayString(TimeZone.getTimeZone("GMT"), usage.getCreated()));
             pstmt.executeUpdate();
             txn.commit();
         } catch (Exception e) {
             txn.rollback();
-            s_logger.warn("Error updating UsageSnapshotOnPrimaryVO", e);
+            logger.warn("Error updating UsageSnapshotOnPrimaryVO", e);
         } finally {
             txn.close();
         }
@@ -79,7 +77,7 @@ public class UsageVMSnapshotOnPrimaryDaoImpl extends GenericDaoBase<UsageSnapsho
             pstmt.setString(i++, DateUtil.getDateDisplayString(TimeZone.getTimeZone("GMT"), endDate));
             pstmt.setString(i++, DateUtil.getDateDisplayString(TimeZone.getTimeZone("GMT"), startDate));
             pstmt.setString(i++, DateUtil.getDateDisplayString(TimeZone.getTimeZone("GMT"), endDate));
-            s_logger.debug("GET_USAGE_RECORDS_BY_ACCOUNT " + pstmt);
+            logger.debug("GET_USAGE_RECORDS_BY_ACCOUNT " + pstmt);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
                 //id, zone_id, account_id, domain_iVMSnapshotVOd, vm_id, disk_offering_id, size, created, deleted
@@ -111,7 +109,7 @@ public class UsageVMSnapshotOnPrimaryDaoImpl extends GenericDaoBase<UsageSnapsho
             }
         } catch (Exception e) {
             txn.rollback();
-            s_logger.warn("Error getting usage records", e);
+            logger.warn("Error getting usage records", e);
         } finally {
             txn.close();
         }

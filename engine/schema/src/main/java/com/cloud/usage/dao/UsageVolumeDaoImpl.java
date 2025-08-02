@@ -26,7 +26,6 @@ import java.util.TimeZone;
 
 
 import com.cloud.exception.CloudException;
-import org.apache.log4j.Logger;
 import org.springframework.stereotype.Component;
 
 import com.cloud.usage.UsageVolumeVO;
@@ -36,17 +35,16 @@ import com.cloud.utils.db.TransactionLegacy;
 
 @Component
 public class UsageVolumeDaoImpl extends GenericDaoBase<UsageVolumeVO, Long> implements UsageVolumeDao {
-    public static final Logger s_logger = Logger.getLogger(UsageVolumeDaoImpl.class.getName());
 
-    protected static final String REMOVE_BY_USERID_VOLID = "DELETE FROM usage_volume WHERE account_id = ? AND id = ?";
-    protected static final String UPDATE_DELETED = "UPDATE usage_volume SET deleted = ? WHERE account_id = ? AND id = ? and deleted IS NULL";
-    protected static final String GET_USAGE_RECORDS_BY_ACCOUNT = "SELECT id, zone_id, account_id, domain_id, disk_offering_id, template_id, size, created, deleted "
+    protected static final String REMOVE_BY_USERID_VOLID = "DELETE FROM usage_volume WHERE account_id = ? AND volume_id = ?";
+    protected static final String UPDATE_DELETED = "UPDATE usage_volume SET deleted = ? WHERE account_id = ? AND volume_id = ? and deleted IS NULL";
+    protected static final String GET_USAGE_RECORDS_BY_ACCOUNT = "SELECT volume_id, zone_id, account_id, domain_id, disk_offering_id, template_id, size, created, deleted "
         + "FROM usage_volume " + "WHERE account_id = ? AND ((deleted IS NULL) OR (created BETWEEN ? AND ?) OR "
         + "      (deleted BETWEEN ? AND ?) OR ((created <= ?) AND (deleted >= ?)))";
-    protected static final String GET_USAGE_RECORDS_BY_DOMAIN = "SELECT id, zone_id, account_id, domain_id, disk_offering_id, template_id, size, created, deleted "
+    protected static final String GET_USAGE_RECORDS_BY_DOMAIN = "SELECT volume_id, zone_id, account_id, domain_id, disk_offering_id, template_id, size, created, deleted "
         + "FROM usage_volume " + "WHERE domain_id = ? AND ((deleted IS NULL) OR (created BETWEEN ? AND ?) OR "
         + "      (deleted BETWEEN ? AND ?) OR ((created <= ?) AND (deleted >= ?)))";
-    protected static final String GET_ALL_USAGE_RECORDS = "SELECT id, zone_id, account_id, domain_id, disk_offering_id, template_id, size, created, deleted "
+    protected static final String GET_ALL_USAGE_RECORDS = "SELECT volume_id, zone_id, account_id, domain_id, disk_offering_id, template_id, size, created, deleted "
         + "FROM usage_volume " + "WHERE (deleted IS NULL) OR (created BETWEEN ? AND ?) OR " + "      (deleted BETWEEN ? AND ?) OR ((created <= ?) AND (deleted >= ?))";
 
     public UsageVolumeDaoImpl() {
@@ -69,7 +67,7 @@ public class UsageVolumeDaoImpl extends GenericDaoBase<UsageVolumeVO, Long> impl
             txn.commit();
         } catch (Exception e) {
             txn.rollback();
-            s_logger.warn("Error removing usageVolumeVO:"+e.getMessage(), e);
+            logger.warn("Error removing usageVolumeVO:"+e.getMessage(), e);
         } finally {
             txn.close();
         }
@@ -85,13 +83,13 @@ public class UsageVolumeDaoImpl extends GenericDaoBase<UsageVolumeVO, Long> impl
                 pstmt = txn.prepareAutoCloseStatement(UPDATE_DELETED);
                 pstmt.setString(1, DateUtil.getDateDisplayString(TimeZone.getTimeZone("GMT"), usage.getDeleted()));
                 pstmt.setLong(2, usage.getAccountId());
-                pstmt.setLong(3, usage.getId());
+                pstmt.setLong(3, usage.getVolumeId());
                 pstmt.executeUpdate();
             }
             txn.commit();
         } catch (Exception e) {
             txn.rollback();
-            s_logger.warn("Error updating UsageVolumeVO", e);
+            logger.warn("Error updating UsageVolumeVO", e);
         } finally {
             txn.close();
         }
@@ -169,7 +167,7 @@ public class UsageVolumeDaoImpl extends GenericDaoBase<UsageVolumeVO, Long> impl
             }
         } catch (Exception e) {
             txn.rollback();
-            s_logger.warn("Error getting usage records", e);
+            logger.warn("Error getting usage records", e);
         } finally {
             txn.close();
         }

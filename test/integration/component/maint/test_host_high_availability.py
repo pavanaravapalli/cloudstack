@@ -19,7 +19,8 @@
 """
 #Import Local Modules
 from nose.plugins.attrib import attr
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.cloudstackAPI import (migrateVirtualMachine,
                                   prepareHostForMaintenance,
                                   cancelHostMaintenance)
@@ -482,7 +483,7 @@ class TestHostHighAvailability(cloudstackTestCase):
         self.assertEqual(
             vm_response.id,
             vm.id,
-            "The virtual machine id and the the virtual machine from listVirtualMachines is not matching."
+            "The virtual machine id and the virtual machine from listVirtualMachines is not matching."
         )
 
         self.assertEqual(

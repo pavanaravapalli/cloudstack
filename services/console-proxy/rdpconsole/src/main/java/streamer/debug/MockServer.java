@@ -27,10 +27,11 @@ import java.util.Arrays;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 public class MockServer implements Runnable {
-    private static final Logger s_logger = Logger.getLogger(MockServer.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     private boolean shutdown = false;
     private ServerSocket serverSocket;
@@ -88,7 +89,7 @@ public class MockServer implements Runnable {
                             // Compare actual data with expected data
                             if (actualDataLength != packet.data.length) {
                                 throw new AssertionError("Actual length of client request for packet #" + (i + 1) + " (\"" + packet.id + "\")"
-                                        + " does not match length of expected client request. Actual length: " + actualDataLength + ", expected legnth: " + packet.data.length
+                                        + " does not match length of expected client request. Actual length: " + actualDataLength + ", expected length: " + packet.data.length
                                         + ".");
                             }
 
@@ -134,19 +135,19 @@ public class MockServer implements Runnable {
                 try {
                     is.close();
                 } catch (Throwable e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "in stream close failed: " + e.getLocalizedMessage());
                 }
                 try {
                     os.close();
                 } catch (Throwable e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "out stream close failed: " + e.getLocalizedMessage());
                 }
                 try {
                     serverSocket.close();
                 } catch (Throwable e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "server socket close failed: " + e.getLocalizedMessage());
                 }
             }
@@ -198,8 +199,8 @@ public class MockServer implements Runnable {
         return shutdowned;
     }
 
-    public void waitUntilShutdowned(long timeToWaitMiliseconds) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeToWaitMiliseconds;
+    public void waitUntilShutdowned(long timeToWaitMilliseconds) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeToWaitMilliseconds;
         while (!shutdowned && System.currentTimeMillis() < deadline) {
             Thread.sleep(10);
         }

@@ -15,13 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { shallowRef, defineAsyncComponent } from 'vue'
+import store from '@/store'
+
 export default {
   name: 'pod',
   title: 'label.pods',
-  icon: 'appstore',
+  icon: 'appstore-outlined',
+  docHelp: 'conceptsandterminology/concepts.html#about-pods',
   permission: ['listPods'],
+  searchFilters: ['name', 'zoneid'],
   columns: ['name', 'allocationstate', 'gateway', 'netmask', 'zonename'],
-  details: ['name', 'id', 'allocationstate', 'netmask', 'gateway', 'zonename'],
+  details: ['name', 'id', 'allocationstate', 'netmask', 'gateway', 'zonename', 'storageaccessgroups', 'zonestorageaccessgroups'],
   related: [{
     name: 'cluster',
     title: 'label.clusters',
@@ -31,33 +36,47 @@ export default {
     title: 'label.hosts',
     param: 'podid'
   }],
+  resourceType: 'Pod',
+  filters: () => {
+    const filters = ['enabled', 'disabled']
+    return filters
+  },
   tabs: [{
     name: 'details',
-    component: () => import('@/components/view/DetailsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
   }, {
     name: 'resources',
-    component: () => import('@/views/infra/Resources.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/Resources.vue')))
+  }, {
+    name: 'events',
+    resourceType: 'Pod',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+    show: () => { return 'listEvents' in store.getters.apis }
+  }, {
+    name: 'comments',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/AnnotationsTab.vue')))
   }],
   actions: [
     {
       api: 'createPod',
-      icon: 'plus',
+      icon: 'plus-outlined',
       label: 'label.add.pod',
       docHelp: 'installguide/configuration.html#adding-a-pod',
       listView: true,
       popup: true,
-      component: () => import('@/views/infra/PodAdd.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/PodAdd.vue')))
     },
     {
       api: 'updatePod',
-      icon: 'edit',
+      icon: 'edit-outlined',
       label: 'label.edit',
       dataView: true,
-      args: ['name', 'netmask', 'gateway']
+      popup: true,
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/PodUpdate.vue')))
     },
     {
       api: 'updatePod',
-      icon: 'play-circle',
+      icon: 'play-circle-outlined',
       label: 'label.action.enable.pod',
       message: 'message.action.enable.pod',
       docHelp: 'adminguide/hosts.html#disabling-and-enabling-zones-pods-and-clusters',
@@ -72,7 +91,7 @@ export default {
     },
     {
       api: 'updatePod',
-      icon: 'pause-circle',
+      icon: 'pause-circle-outlined',
       label: 'label.action.disable.pod',
       message: 'message.action.disable.pod',
       docHelp: 'adminguide/hosts.html#disabling-and-enabling-zones-pods-and-clusters',
@@ -87,7 +106,7 @@ export default {
     },
     {
       api: 'startRollingMaintenance',
-      icon: 'setting',
+      icon: 'setting-outlined',
       label: 'label.start.rolling.maintenance',
       message: 'label.start.rolling.maintenance',
       dataView: true,
@@ -100,7 +119,7 @@ export default {
     },
     {
       api: 'deletePod',
-      icon: 'delete',
+      icon: 'delete-outlined',
       label: 'label.action.delete.pod',
       message: 'message.action.delete.pod',
       dataView: true

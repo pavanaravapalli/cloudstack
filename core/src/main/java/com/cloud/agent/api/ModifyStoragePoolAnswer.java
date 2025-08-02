@@ -30,16 +30,24 @@ public class ModifyStoragePoolAnswer extends Answer {
     private Map<String, TemplateProp> templateInfo;
     private String localDatastoreName;
     private String poolType;
-    private List<ModifyStoragePoolAnswer> datastoreClusterChildren = new ArrayList<>();;
+    private List<ModifyStoragePoolAnswer> datastoreClusterChildren = new ArrayList<>();
 
     public ModifyStoragePoolAnswer(ModifyStoragePoolCommand cmd, long capacityBytes, long availableBytes, Map<String, TemplateProp> tInfo) {
+        this(cmd, capacityBytes, availableBytes, tInfo, null);
+    }
+
+    public ModifyStoragePoolAnswer(ModifyStoragePoolCommand cmd, long capacityBytes, long availableBytes, Map<String, TemplateProp> tInfo, Map<String, String> details) {
         super(cmd);
 
         result = true;
 
-        poolInfo = new StoragePoolInfo(null, cmd.getPool().getHost(), cmd.getPool().getPath(), cmd.getLocalPath(), cmd.getPool().getType(), capacityBytes, availableBytes);
+        poolInfo = new StoragePoolInfo(null, cmd.getPool().getHost(), cmd.getPool().getPath(), cmd.getLocalPath(), cmd.getPool().getType(), capacityBytes, availableBytes, details);
 
         templateInfo = tInfo;
+    }
+
+    public ModifyStoragePoolAnswer(ModifyStoragePoolCommand cmd, boolean success, String details) {
+        super(cmd, success, details);
     }
 
     public void setPoolInfo(StoragePoolInfo poolInfo) {

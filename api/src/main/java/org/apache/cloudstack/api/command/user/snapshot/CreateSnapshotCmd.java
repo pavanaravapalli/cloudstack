@@ -18,10 +18,11 @@ package org.apache.cloudstack.api.command.user.snapshot;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -32,8 +33,8 @@ import org.apache.cloudstack.api.response.DomainResponse;
 import org.apache.cloudstack.api.response.SnapshotPolicyResponse;
 import org.apache.cloudstack.api.response.SnapshotResponse;
 import org.apache.cloudstack.api.response.VolumeResponse;
+import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.commons.collections.MapUtils;
-import org.apache.log4j.Logger;
 
 import com.cloud.event.EventTypes;
 import com.cloud.exception.InvalidParameterValueException;
@@ -48,8 +49,6 @@ import com.cloud.utils.exception.CloudRuntimeException;
 @APICommand(name = "createSnapshot", description = "Creates an instant snapshot of a volume.", responseObject = SnapshotResponse.class, entityType = {Snapshot.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
-    public static final Logger s_logger = Logger.getLogger(CreateSnapshotCmd.class.getName());
-    private static final String s_name = "createsnapshotresponse";
 
     // ///////////////////////////////////////////////////
     // ////////////// API parameters /////////////////////
@@ -63,7 +62,7 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
     @Parameter(name = ApiConstants.DOMAIN_ID,
                type = CommandType.UUID,
                entityType = DomainResponse.class,
-            description = "The domain ID of the snapshot. If used with the account parameter, specifies a domain for the account associated with the disk volume.")
+            description = "The domain ID of the snapshot. If used with the account parameter, specifies a domain for the account associated with the disk volume. If account is NOT provided then snapshot will be assigned to the caller account and domain.")
     private Long domainId;
 
     @Parameter(name = ApiConstants.VOLUME_ID, type = CommandType.UUID, entityType = VolumeResponse.class, required = true, description = "The ID of the disk volume")
@@ -90,6 +89,15 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
 
     @Parameter(name = ApiConstants.TAGS, type = CommandType.MAP, description = "Map of tags (key/value pairs)")
     private Map tags;
+
+    @Parameter(name = ApiConstants.ZONE_ID_LIST,
+            type=CommandType.LIST,
+            collectionType = CommandType.UUID,
+            entityType = ZoneResponse.class,
+            description = "A comma-separated list of IDs of the zones in which the snapshot will be made available. " +
+                    "The snapshot will always be made available in the zone in which the volume is present.",
+            since = "4.19.0")
+    protected List<Long> zoneIds;
 
     private String syncObjectType = BaseAsyncCmd.snapshotHostSyncObject;
 
@@ -149,14 +157,13 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
         return _snapshotService.getHostIdForSnapshotOperation(volume);
     }
 
+    public List<Long> getZoneIds() {
+        return zoneIds;
+    }
+
     // ///////////////////////////////////////////////////
     // ///////////// API Implementation///////////////////
     // ///////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     public static String getResultObjectName() {
         return ApiConstants.SNAPSHOT;
@@ -172,13 +179,13 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
 
         Account account = _accountService.getAccount(volume.getAccountId());
         //Can create templates for enabled projects/accounts only
-        if (account.getType() == Account.ACCOUNT_TYPE_PROJECT) {
+        if (account.getType() == Account.Type.PROJECT) {
             Project project = _projectService.findByProjectAccountId(volume.getAccountId());
             if (project.getState() != Project.State.Active) {
                 throw new PermissionDeniedException("Can't add resources to the project id=" + project.getId() + " in state=" + project.getState() +
                     " as it's no longer active");
             }
-        } else if (account.getState() == Account.State.disabled) {
+        } else if (account.getState() == Account.State.DISABLED) {
             throw new PermissionDeniedException("The owner of template is disabled: " + account);
         }
 
@@ -196,13 +203,13 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Snapshot;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Snapshot;
     }
 
     @Override
     public void create() throws ResourceAllocationException {
-        Snapshot snapshot = _volumeService.allocSnapshot(getVolumeId(), getPolicyId(), getSnapshotName(), getLocationType());
+        Snapshot snapshot = _volumeService.allocSnapshot(getVolumeId(), getPolicyId(), getSnapshotName(), getLocationType(), getZoneIds());
         if (snapshot != null) {
             setEntityId(snapshot.getId());
             setEntityUuid(snapshot.getUuid());
@@ -216,17 +223,23 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
         Snapshot snapshot;
         try {
             snapshot =
-                _volumeService.takeSnapshot(getVolumeId(), getPolicyId(), getEntityId(), _accountService.getAccount(getEntityOwnerId()), getQuiescevm(), getLocationType(), getAsyncBackup(), getTags());
+                _volumeService.takeSnapshot(getVolumeId(), getPolicyId(), getEntityId(), _accountService.getAccount(getEntityOwnerId()), getQuiescevm(), getLocationType(), getAsyncBackup(), getTags(), getZoneIds());
 
             if (snapshot != null) {
                 SnapshotResponse response = _responseGenerator.createSnapshotResponse(snapshot);
                 response.setResponseName(getCommandName());
                 setResponseObject(response);
             } else {
-                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to create snapshot due to an internal error creating snapshot for volume " + getVolumeUuid());
+                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Snapshot from volume [%s] was not found in database.", getVolumeUuid()));
             }
         } catch (Exception e) {
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to create snapshot due to an internal error creating snapshot for volume " + getVolumeUuid());
+            if (e.getCause() instanceof UnsupportedOperationException) {
+                throw new ServerApiException(ApiErrorCode.UNSUPPORTED_ACTION_ERROR, String.format("Failed to create snapshot due to unsupported operation: %s", e.getCause().getMessage()));
+            }
+
+            String errorMessage = "Failed to create snapshot due to an internal error creating snapshot for volume " + getVolumeUuid();
+            logger.error(errorMessage, e);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, errorMessage);
         }
     }
 
@@ -242,7 +255,7 @@ public class CreateSnapshotCmd extends BaseAsyncCreateCmd {
         } catch (IllegalArgumentException e) {
             String errMesg = "Invalid locationType " + locationType + "Specified for volume " + getVolumeId()
                         + " Valid values are: primary,secondary ";
-            s_logger.warn(errMesg);
+            logger.warn(errMesg);
             throw  new CloudRuntimeException(errMesg);
         }
     }

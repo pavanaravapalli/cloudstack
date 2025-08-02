@@ -26,6 +26,7 @@ import org.apache.cloudstack.engine.subsystem.api.storage.PrimaryDataStore;
 import com.cloud.agent.api.to.DataStoreTO;
 import com.cloud.storage.DataStoreRole;
 import com.cloud.storage.Storage.StoragePoolType;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
 public class PrimaryDataStoreTO implements DataStoreTO {
     public static final String MANAGED = PrimaryDataStore.MANAGED;
@@ -52,7 +53,10 @@ public class PrimaryDataStoreTO implements DataStoreTO {
     private Map<String, String> details;
     private static final String pathSeparator = "/";
     private Boolean fullCloneFlag;
+    private Boolean diskProvisioningStrictnessFlag;
     private final boolean isManaged;
+
+    private final StoragePoolType parentPoolType;
 
     public PrimaryDataStoreTO(PrimaryDataStore dataStore) {
         this.uuid = dataStore.getUuid();
@@ -65,6 +69,7 @@ public class PrimaryDataStoreTO implements DataStoreTO {
         this.url = dataStore.getUri();
         this.details = dataStore.getDetails();
         this.isManaged = dataStore.isManaged();
+        this.parentPoolType = dataStore.getParentPoolType();
     }
 
     public long getId() {
@@ -141,15 +146,9 @@ public class PrimaryDataStoreTO implements DataStoreTO {
 
     @Override
     public String toString() {
-        return new StringBuilder("PrimaryDataStoreTO[uuid=").append(uuid)
-            .append("|name=")
-            .append(name)
-            .append("|id=")
-            .append(id)
-            .append("|pooltype=")
-            .append(poolType)
-            .append("]")
-            .toString();
+        return String.format("PrimaryDataStoreTO %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "id", "uuid", "name", "poolType"));
     }
 
     public Boolean isFullCloneFlag() {
@@ -162,5 +161,17 @@ public class PrimaryDataStoreTO implements DataStoreTO {
 
     public boolean isManaged() {
         return isManaged;
+    }
+
+    public Boolean getDiskProvisioningStrictnessFlag() {
+        return diskProvisioningStrictnessFlag;
+    }
+
+    public void setDiskProvisioningStrictnessFlag(Boolean diskProvisioningStrictnessFlag) {
+        this.diskProvisioningStrictnessFlag = diskProvisioningStrictnessFlag;
+    }
+
+    public StoragePoolType getParentPoolType() {
+        return parentPoolType;
     }
 }

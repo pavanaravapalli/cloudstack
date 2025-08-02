@@ -17,90 +17,80 @@
 
 <template>
   <span class="header-notice-opener">
-    <a-select
+    <infinite-scroll-select
+      v-if="!isDisabled"
+      v-model:value="selectedProjectId"
       class="project-select"
-      :defaultValue="$t('label.default.view')"
-      :loading="loading"
-      :value="($store.getters.project && 'id' in $store.getters.project) ? ($store.getters.project.displaytext || $store.getters.project.name) : $t('label.default.view')"
-      :disabled="isDisabled()"
-      :filterOption="filterProject"
-      @change="changeProject"
-      @focus="fetchData"
-      showSearch>
-
-      <a-tooltip placement="bottom" slot="suffixIcon">
-        <template slot="title">
-          <span>{{ $t('label.projects') }}</span>
-        </template>
-        <span style="font-size: 20px; color: #999; margin-top: -5px">
-          <a-icon v-if="!loading" type="project" />
-          <a-icon v-else type="loading" />
-        </span>
-      </a-tooltip>
-
-      <a-select-option v-for="(project, index) in projects" :key="index">
-        {{ project.displaytext || project.name }}
-      </a-select-option>
-    </a-select>
+      api="listProjects"
+      :apiParams="projectsApiParams"
+      resourceType="project"
+      :defaultOption="defaultOption"
+      defaultIcon="project-outlined"
+      :pageSize="100"
+      @change-option="changeProject" />
   </span>
 </template>
 
 <script>
-import store from '@/store'
-import { api } from '@/api'
-import _ from 'lodash'
+import InfiniteScrollSelect from '@/components/widgets/InfiniteScrollSelect'
+import eventBus from '@/config/eventBus'
 
 export default {
   name: 'ProjectMenu',
+  components: {
+    InfiniteScrollSelect
+  },
   data () {
     return {
-      projects: [],
-      loading: false
+      selectedProjectId: null,
+      loading: false,
+      timestamp: new Date().getTime()
+    }
+  },
+  created () {
+    this.selectedProjectId = this.$store.getters?.project?.id || this.defaultOption.id
+    this.$store.dispatch('ToggleTheme', this.selectedProjectId ? 'dark' : 'light')
+  },
+  computed: {
+    isDisabled () {
+      return !('listProjects' in this.$store.getters.apis)
+    },
+    defaultOption () {
+      return { id: 0, name: this.$t('label.default.view') }
+    },
+    projectsApiParams () {
+      return {
+        details: 'min',
+        listall: true,
+        timestamp: this.timestamp
+      }
     }
   },
   mounted () {
-    this.fetchData()
+    this.unwatchProject = this.$store.watch(
+      (state, getters) => getters.project?.id,
+      (newId) => {
+        this.selectedProjectId = newId
+      }
+    )
+    eventBus.on('projects-updated', (args) => {
+      this.timestamp = new Date().getTime()
+    })
+  },
+  beforeUnmount () {
+    if (this.unwatchProject) {
+      this.unwatchProject()
+    }
   },
   methods: {
-    fetchData () {
-      if (this.isDisabled()) {
-        return
-      }
-      var page = 1
-      const projects = []
-      const getNextPage = () => {
-        this.loading = true
-        api('listProjects', { listAll: true, details: 'min', page: page, pageSize: 500 }).then(json => {
-          if (json && json.listprojectsresponse && json.listprojectsresponse.project) {
-            projects.push(...json.listprojectsresponse.project)
-          }
-          if (projects.length < json.listprojectsresponse.count) {
-            page++
-            getNextPage()
-          }
-        }).finally(() => {
-          this.projects = _.orderBy(projects, ['displaytext'], ['asc'])
-          this.projects.unshift({ name: this.$t('label.default.view') })
-          this.loading = false
-        })
-      }
-      getNextPage()
-    },
-    isDisabled () {
-      return !Object.prototype.hasOwnProperty.call(store.getters.apis, 'listProjects')
-    },
-    changeProject (index) {
-      const project = this.projects[index]
+    changeProject (project) {
       this.$store.dispatch('ProjectView', project.id)
       this.$store.dispatch('SetProject', project)
-      this.$store.dispatch('ToggleTheme', project.id === undefined ? 'light' : 'dark')
+      this.$store.dispatch('ToggleTheme', project.id ? 'dark' : 'light')
       this.$message.success(`${this.$t('message.switch.to')} "${project.displaytext || project.name}"`)
       if (this.$route.name !== 'dashboard') {
         this.$router.push({ name: 'dashboard' })
       }
-    },
-    filterProject (input, option) {
-      return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
     }
   }
 }
@@ -109,7 +99,7 @@ export default {
 <style lang="less" scoped>
 .project {
   &-select {
-    width: 30vw;
+    width: 27vw;
   }
 
   &-icon {
@@ -118,5 +108,13 @@ export default {
     padding-top: 5px;
     padding-right: 5px;
   }
+}
+
+.custom-suffix-icon {
+  font-size: 20px;
+  position: absolute;
+  top: 0;
+  right: 1px;
+  margin-top: -5px;
 }
 </style>

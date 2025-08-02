@@ -62,7 +62,8 @@ import org.apache.cloudstack.api.response.SslCertResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.network.tls.CertService;
 import org.apache.commons.io.IOUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.util.io.pem.PemObject;
 import org.bouncycastle.util.io.pem.PemReader;
@@ -88,11 +89,11 @@ import com.cloud.utils.db.EntityManager;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.utils.security.CertificateHelper;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
 public class CertServiceImpl implements CertService {
 
-    private static final Logger s_logger = Logger.getLogger(CertServiceImpl.class);
+    protected Logger logger = LogManager.getLogger(getClass());
 
     @Inject
     AccountManager _accountMgr;
@@ -126,7 +127,7 @@ public class CertServiceImpl implements CertService {
         final String name = certCmd.getName();
 
         validate(cert, key, password, chain, certCmd.getEnabledRevocationCheck());
-        s_logger.debug("Certificate Validation succeeded");
+        logger.debug("Certificate Validation succeeded");
 
         final String fingerPrint = CertificateHelper.generateFingerPrint(parseCertificate(cert));
 
@@ -134,7 +135,7 @@ public class CertServiceImpl implements CertService {
         final Account caller = ctx.getCallingAccount();
 
         Account owner = null;
-        if (!Strings.isNullOrEmpty(certCmd.getAccountName()) && certCmd.getDomainId() != null || certCmd.getProjectId() != null) {
+        if (StringUtils.isNotEmpty(certCmd.getAccountName()) && certCmd.getDomainId() != null || certCmd.getProjectId() != null) {
             owner = _accountMgr.finalizeOwner(caller, certCmd.getAccountName(), certCmd.getDomainId(), certCmd.getProjectId());
         } else {
             owner = caller;
@@ -232,7 +233,7 @@ public class CertServiceImpl implements CertService {
             lbCertMapRule = _lbCertDao.findByLbRuleId(lbRuleId);
 
             if (lbCertMapRule == null) {
-                s_logger.debug("No certificate bound to loadbalancer id: " + lbRuleId);
+                logger.debug("No certificate bound to loadbalancer id: " + lbRuleId);
                 return certResponseList;
             }
 
@@ -304,7 +305,7 @@ public class CertServiceImpl implements CertService {
 
         final SslCertResponse response = new SslCertResponse();
         final Account account = _accountDao.findByIdIncludingRemoved(cert.getAccountId());
-        if (account.getType() == Account.ACCOUNT_TYPE_PROJECT) {
+        if (account.getType() == Account.Type.PROJECT) {
             // find the project
             final Project project = _projectMgr.findByProjectAccountIdIncludingRemoved(account.getId());
             if (project != null)
@@ -423,7 +424,7 @@ public class CertServiceImpl implements CertService {
     }
 
     public PrivateKey parsePrivateKey(final String key) throws IOException {
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(key));
+        Preconditions.checkArgument(StringUtils.isNotEmpty(key));
         try (final PemReader pemReader = new PemReader(new StringReader(key));) {
             final PemObject pemObject = pemReader.readPemObject();
             final byte[] content = pemObject.getContent();
@@ -439,7 +440,7 @@ public class CertServiceImpl implements CertService {
 
     @Override
     public Certificate parseCertificate(final String cert) {
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(cert));
+        Preconditions.checkArgument(StringUtils.isNotEmpty(cert));
         final PemReader certPem = new PemReader(new StringReader(cert));
         try {
             return readCertificateFromPemObject(certPem.readPemObject());

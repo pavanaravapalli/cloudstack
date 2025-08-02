@@ -69,7 +69,7 @@ class TestLogin(cloudstackTestCase):
 
         try:
             resp = session.post(self.server_url, params=args, verify=False)
-        except requests.exceptions.ConnectionError, e:
+        except requests.exceptions.ConnectionError as e:
             self.fail("Failed to attempt login request to mgmt server")
             return None, None
 
@@ -133,6 +133,7 @@ class TestLogin(cloudstackTestCase):
             args["command"] = 'listUsers'
             args["listall"] = 'true'
             args["response"] = "json"
+            args["sessionkey"] = response.json()['loginresponse']['sessionkey']
             response = session.get(self.server_url, params=args)
             self.assertEqual(
                 response.status_code,

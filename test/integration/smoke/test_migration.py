@@ -18,7 +18,8 @@
 """ Network migration test
 """
 # Import Local Modules
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.lib.base import (
     Account,
     ServiceOffering,
@@ -118,7 +119,7 @@ class TestNetworkMigration(cloudstackTestCase):
             cls.network_offering_nouserdata.update(cls.api_client,
                                                    state='Enabled')
 
-            # Create Network Offering with all the serices
+            # Create Network Offering with all the services
             cls.network_offering_all = NetworkOffering.create(
                     cls.api_client,
                     cls.test_data["isolated_network_offering"]
@@ -228,12 +229,12 @@ class TestNetworkMigration(cloudstackTestCase):
                 domainid=self.account.domainid,
                 id=deployVmResponse.id
         )
-        self.assert_(len(vms) > 0, "There are no Vms deployed in the account"
+        self.assertTrue(len(vms) > 0, "There are no Vms deployed in the account"
                                    " %s" % self.account.name)
         vm = vms[0]
-        self.assert_(vm.id == str(deployVmResponse.id),
+        self.assertTrue(vm.id == str(deployVmResponse.id),
                      "Vm deployed is different from the test")
-        self.assert_(vm.state == "Running", "VM is not in Running state")
+        self.assertTrue(vm.state == "Running", "VM is not in Running state")
 
         self.migrate_network(
                 self.network_offering_nouserdata,

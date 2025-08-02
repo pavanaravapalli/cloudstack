@@ -24,15 +24,17 @@ import java.util.List;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
-import org.apache.log4j.Logger;
-
+import org.apache.cloudstack.framework.jobs.impl.AsyncJobVO;
 import org.apache.cloudstack.framework.jobs.impl.VmWorkJobVO;
 import org.apache.cloudstack.framework.jobs.impl.VmWorkJobVO.Step;
 import org.apache.cloudstack.jobs.JobInfo;
+import org.apache.commons.collections.CollectionUtils;
 
 import com.cloud.utils.DateUtil;
 import com.cloud.utils.db.Filter;
 import com.cloud.utils.db.GenericDaoBase;
+import com.cloud.utils.db.GenericSearchBuilder;
+import com.cloud.utils.db.JoinBuilder;
 import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.db.SearchCriteria.Op;
@@ -43,7 +45,6 @@ import com.cloud.utils.db.TransactionStatus;
 import com.cloud.vm.VirtualMachine;
 
 public class VmWorkJobDaoImpl extends GenericDaoBase<VmWorkJobVO, Long> implements VmWorkJobDao {
-    private static final Logger s_logger = Logger.getLogger(VmWorkJobDaoImpl.class);
 
     protected SearchBuilder<VmWorkJobVO> PendingWorkJobSearch;
     protected SearchBuilder<VmWorkJobVO> PendingWorkJobByCommandSearch;
@@ -67,6 +68,7 @@ public class VmWorkJobDaoImpl extends GenericDaoBase<VmWorkJobVO, Long> implemen
         PendingWorkJobByCommandSearch.and("jobStatus", PendingWorkJobByCommandSearch.entity().getStatus(), Op.EQ);
         PendingWorkJobByCommandSearch.and("vmType", PendingWorkJobByCommandSearch.entity().getVmType(), Op.EQ);
         PendingWorkJobByCommandSearch.and("vmInstanceId", PendingWorkJobByCommandSearch.entity().getVmInstanceId(), Op.EQ);
+        PendingWorkJobByCommandSearch.and("secondaryObjectIdentifier", PendingWorkJobByCommandSearch.entity().getSecondaryObjectIdentifier(), Op.EQ);
         PendingWorkJobByCommandSearch.and("step", PendingWorkJobByCommandSearch.entity().getStep(), Op.NEQ);
         PendingWorkJobByCommandSearch.and("cmd", PendingWorkJobByCommandSearch.entity().getCmd(), Op.EQ);
         PendingWorkJobByCommandSearch.done();
@@ -120,6 +122,19 @@ public class VmWorkJobDaoImpl extends GenericDaoBase<VmWorkJobVO, Long> implemen
     }
 
     @Override
+    public List<VmWorkJobVO> listPendingWorkJobs(VirtualMachine.Type type, long instanceId, String jobCmd, String secondaryObjectIdentifier) {
+        SearchCriteria<VmWorkJobVO> sc = PendingWorkJobByCommandSearch.create();
+        sc.setParameters("jobStatus", JobInfo.Status.IN_PROGRESS);
+        sc.setParameters("vmType", type);
+        sc.setParameters("vmInstanceId", instanceId);
+        sc.setParameters("secondaryObjectIdentifier", secondaryObjectIdentifier);
+        sc.setParameters("cmd", jobCmd);
+
+        Filter filter = new Filter(VmWorkJobVO.class, "created", true, null, null);
+        return this.listBy(sc, filter);
+    }
+
+    @Override
     public void updateStep(long workJobId, Step step) {
         VmWorkJobVO jobVo = findById(workJobId);
         jobVo.setStep(step);
@@ -145,8 +160,8 @@ public class VmWorkJobDaoImpl extends GenericDaoBase<VmWorkJobVO, Long> implemen
         sc.setParameters("dispatcher", "VmWorkJobDispatcher");
         List<VmWorkJobVO> expungeList = listBy(sc);
         for (VmWorkJobVO job : expungeList) {
-            if (s_logger.isDebugEnabled())
-                s_logger.debug("Expunge completed work job-" + job.getId());
+            if (logger.isDebugEnabled())
+                logger.debug("Expunge completed work job-" + job.getId());
             expunge(job.getId());
             _baseJobDao.expunge(job.getId());
         }
@@ -176,10 +191,10 @@ public class VmWorkJobDaoImpl extends GenericDaoBase<VmWorkJobVO, Long> implemen
 
                     pstmt.execute();
                 } catch (SQLException e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "SQL failed to delete vm work job: " + e.getLocalizedMessage());
                 } catch (Throwable e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "caught an error during delete vm work job: " + e.getLocalizedMessage());
                 }
 
@@ -191,13 +206,38 @@ public class VmWorkJobDaoImpl extends GenericDaoBase<VmWorkJobVO, Long> implemen
 
                     pstmt.execute();
                 } catch (SQLException e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "SQL failed to delete async job: " + e.getLocalizedMessage());
                 } catch (Throwable e) {
-                    s_logger.info("[ignored]"
+                    logger.info("[ignored]"
                             + "caught an error during delete async job: " + e.getLocalizedMessage());
                 }
             }
         });
+    }
+
+    @Override
+    public int expungeByVmList(List<Long> vmIds, Long batchSize) {
+        if (CollectionUtils.isEmpty(vmIds)) {
+            return 0;
+        }
+        SearchBuilder<VmWorkJobVO> sb = createSearchBuilder();
+        sb.and("vmIds", sb.entity().getVmInstanceId(), SearchCriteria.Op.IN);
+        SearchCriteria<VmWorkJobVO> sc = sb.create();
+        sc.setParameters("vmIds", vmIds.toArray());
+        return batchExpunge(sc, batchSize);
+    }
+
+    @Override
+    public List<Long> listVmIdsWithPendingJob() {
+        GenericSearchBuilder<VmWorkJobVO, Long> sb = createSearchBuilder(Long.class);
+        SearchBuilder<AsyncJobVO> asyncJobSearch = _baseJobDao.createSearchBuilder();
+        asyncJobSearch.and("status", asyncJobSearch.entity().getStatus(), SearchCriteria.Op.EQ);
+        sb.join("asyncJobSearch", asyncJobSearch, sb.entity().getId(), asyncJobSearch.entity().getId(), JoinBuilder.JoinType.INNER);
+        sb.and("removed", sb.entity().getRemoved(), Op.NULL);
+        sb.selectFields(sb.entity().getVmInstanceId());
+        SearchCriteria<Long> sc = sb.create();
+        sc.setJoinParameters("asyncJobSearch", "status", JobInfo.Status.IN_PROGRESS);
+        return customSearch(sc, null);
     }
 }

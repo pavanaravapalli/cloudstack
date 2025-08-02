@@ -19,7 +19,7 @@
 
 package com.cloud.hypervisor.kvm.resource;
 
-import org.apache.log4j.Logger;
+import org.apache.commons.compress.utils.Sets;
 import org.libvirt.LibvirtException;
 
 import com.cloud.agent.api.to.NicTO;
@@ -30,7 +30,6 @@ import java.util.Map;
 
 public class DirectVifDriver extends VifDriverBase {
 
-    private static final Logger s_logger = Logger.getLogger(DirectVifDriver.class);
 
     /**
      * Experimental driver to configure direct networking in libvirt. This should only
@@ -47,12 +46,8 @@ public class DirectVifDriver extends VifDriverBase {
     public LibvirtVMDef.InterfaceDef plug(NicTO nic, String guestOsType, String nicAdapter, Map<String, String> extraConfig) throws InternalErrorException, LibvirtException {
         LibvirtVMDef.InterfaceDef intf = new LibvirtVMDef.InterfaceDef();
 
-        if (nic.getType() == Networks.TrafficType.Guest) {
-            Integer networkRateKBps = (nic.getNetworkRateMbps() != null && nic.getNetworkRateMbps().intValue() != -1) ? nic.getNetworkRateMbps().intValue() * 128 : 0;
-            intf.defDirectNet(_libvirtComputingResource.getNetworkDirectDevice(), null, nic.getMac(), getGuestNicModel(guestOsType, nicAdapter),
-                _libvirtComputingResource.getNetworkDirectSourceMode(), networkRateKBps);
-
-        } else if (nic.getType() == Networks.TrafficType.Public) {
+        if (Sets.newHashSet(Networks.TrafficType.Guest,
+                            Networks.TrafficType.Public).contains(nic.getType())) {
             Integer networkRateKBps = (nic.getNetworkRateMbps() != null && nic.getNetworkRateMbps().intValue() != -1) ? nic.getNetworkRateMbps().intValue() * 128 : 0;
             intf.defDirectNet(_libvirtComputingResource.getNetworkDirectDevice(), null, nic.getMac(), getGuestNicModel(guestOsType, nicAdapter),
                 _libvirtComputingResource.getNetworkDirectSourceMode(), networkRateKBps);
@@ -62,7 +57,7 @@ public class DirectVifDriver extends VifDriverBase {
     }
 
     @Override
-    public void unplug(LibvirtVMDef.InterfaceDef iface) {
+    public void unplug(LibvirtVMDef.InterfaceDef iface, boolean deleteBr) {
         // not needed, libvirt will cleanup
     }
 
@@ -80,4 +75,7 @@ public class DirectVifDriver extends VifDriverBase {
     public void createControlNetwork(String privBrName) {
     }
 
+    @Override
+    public void deleteBr(NicTO nic) {
+    }
 }

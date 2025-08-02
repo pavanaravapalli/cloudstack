@@ -27,9 +27,10 @@ import javax.persistence.PrimaryKeyJoinColumn;
 import javax.persistence.Table;
 
 import com.cloud.network.rules.HealthCheckPolicy;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
 @Entity
-@Table(name = ("load_balancer_healthcheck_policies"))
+@Table(name = "load_balancer_healthcheck_policies")
 @PrimaryKeyJoinColumn(name = "load_balancer_id", referencedColumnName = "id")
 public class LBHealthCheckPolicyVO implements HealthCheckPolicy {
     @Id
@@ -168,5 +169,12 @@ public class LBHealthCheckPolicyVO implements HealthCheckPolicy {
     @Override
     public boolean isDisplay() {
         return display;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("LBHealthCheckPolicy %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "id", "uuid", "pingPath"));
     }
 }

@@ -28,7 +28,6 @@ import com.cloud.resource.ResourceWrapper;
 
 @ResourceWrapper(handles =  NetworkElementCommand.class)
 public final class CitrixNetworkElementCommandWrapper extends CommandWrapper<NetworkElementCommand, Answer, CitrixResourceBase> {
-
     @Override
     public Answer execute(final NetworkElementCommand command, final CitrixResourceBase citrixResourceBase) {
         final VirtualRoutingResource routingResource = citrixResourceBase.getVirtualRoutingResource();

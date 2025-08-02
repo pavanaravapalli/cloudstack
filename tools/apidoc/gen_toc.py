@@ -16,11 +16,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import os
 import os.path
 import sys
 from xml.dom import minidom
 from xml.parsers.expat import ExpatError
+import difflib
 
 
 ROOT_ADMIN = 'r'
@@ -50,6 +50,10 @@ known_categories = {
     'SystemVm': 'System VM',
     'VirtualMachine': 'Virtual Machine',
     'VM': 'Virtual Machine',
+    'Vnf': 'Virtual Network Functions',
+    'VnfTemplate': 'Virtual Network Functions',
+    'GuestSubnet': 'Routing',
+    'HypervisorGuestOsNames': 'Guest OS',
     'Domain': 'Domain',
     'Template': 'Template',
     'Iso': 'ISO',
@@ -61,46 +65,60 @@ known_categories = {
     'StaticNat': 'NAT',
     'IpForwarding': 'NAT',
     'Host': 'Host',
-    'OutOfBand': 'Out-of-band Management',
+    'HostTags': 'Host',
+    'OutOfBandManagement': 'Out-of-band Management',
     'Cluster': 'Cluster',
     'Account': 'Account',
     'Role': 'Role',
     'Snapshot': 'Snapshot',
     'User': 'User',
+    'UserData': 'User Data',
     'Os': 'Guest OS',
     'ServiceOffering': 'Service Offering',
     'DiskOffering': 'Disk Offering',
     'LoadBalancer': 'Load Balancer',
-    'SslCert': 'Load Balancer',
+    'SslCert': 'SSL Certificates',
     'Router': 'Router',
-    'SystemVm': 'System VM',
     'Configuration': 'Configuration',
     'Capabilities': 'Configuration',
     'Pod': 'Pod',
+    'ManagementNetworkIpRange': 'Pod',
     'PublicIpRange': 'Network',
     'Zone': 'Zone',
     'Vmware' : 'Zone',
     'NetworkOffering': 'Network Offering',
     'NetworkACL': 'Network ACL',
+    'NetworkAclItem': 'Network ACL',
     'Network': 'Network',
     'CiscoNexus': 'Network',
     'OpenDaylight': 'Network',
     'createServiceInstance': 'Network',
     'addGloboDnsHost': 'Network',
+    'TungstenFabric': 'Tungsten',
+    'listNsxControllers': 'NSX',
+    'addNsxController': 'NSX',
+    'deleteNsxController': 'NSX',
+    'NetrisProvider': 'Netris',
     'Vpn': 'VPN',
-    'Limit': 'Limit',
+    'Limit': 'Resource Limit',
+    'Netscaler': 'Netscaler',
+    'NetscalerControlCenter': 'Netscaler',
+    'NetscalerLoadBalancer': 'Netscaler',
+    'SolidFire': 'SolidFire',
+    'PaloAlto': 'Palo Alto',
     'ResourceCount': 'Limit',
     'CloudIdentifier': 'Cloud Identifier',
     'InstanceGroup': 'VM Group',
     'StorageMaintenance': 'Storage Pool',
     'StoragePool': 'Storage Pool',
     'StorageProvider': 'Storage Pool',
+    'StorageScope' : 'Storage Pool',
+    'updateStorageCapabilities' : 'Storage Pool',
     'SecurityGroup': 'Security Group',
     'SSH': 'SSH',
-    'register': 'Registration',
     'AsyncJob': 'Async job',
     'Certificate': 'Certificate',
-    'Hypervisor': 'Hypervisor',
+    'Hypervisor': 'Configuration',
     'Alert': 'Alert',
     'Event': 'Event',
     'login': 'Authentication',
@@ -110,6 +128,11 @@ known_categories = {
     'listIdps': 'Authentication',
     'authorizeSamlSso': 'Authentication',
     'listSamlAuthorization': 'Authentication',
+    'oauthlogin': 'Authentication',
+    'deleteOauthProvider': 'Oauth',
+    'listOauthProvider': 'Oauth',
+    'registerOauthProvider': 'Oauth',
+    'updateOauthProvider': 'Oauth',
     'quota': 'Quota',
     'emailTemplate': 'Quota',
     'Capacity': 'System Capacity',
@@ -117,24 +140,26 @@ known_categories = {
     'ExternalLoadBalancer': 'Ext Load Balancer',
     'ExternalFirewall': 'Ext Firewall',
     'Usage': 'Usage',
-    'TrafficMonitor': 'Usage',
-    'TrafficType': 'Usage',
+    'TrafficMonitor': 'Network',
+    'TrafficType': 'Network',
     'Product': 'Product',
     'LB': 'Load Balancer',
     'ldap': 'LDAP',
     'Ldap': 'LDAP',
-    'Swift': 'Swift',
+    'Swift': 'Image Store',
     'S3' : 'S3',
-    'SecondaryStorage': 'Host',
+    'SecondaryStorage': 'Image Store',
     'Project': 'Project',
     'Lun': 'Storage',
     'Pool': 'Pool',
     'VPC': 'VPC',
+    'VPCOffering': 'VPC Offering',
     'PrivateGateway': 'VPC',
     'migrateVpc': 'VPC',
     'Simulator': 'simulator',
     'StaticRoute': 'VPC',
     'Tags': 'Resource tags',
+    'Icon': 'Resource Icon',
     'NiciraNvpDevice': 'Nicira NVP',
     'BrocadeVcsDevice': 'Brocade VCS',
     'BigSwitchBcfDevice': 'BigSwitch BCF',
@@ -142,13 +167,15 @@ known_categories = {
     'Counter': 'AutoScale',
     'Condition': 'AutoScale',
     'Api': 'API Discovery',
+    'ApiLimit': 'Configuration',
     'Region': 'Region',
     'Detail': 'Resource metadata',
     'addIpToNic': 'Nic',
     'removeIpFromNic': 'Nic',
     'updateVmNicIp': 'Nic',
     'listNics':'Nic',
-	'AffinityGroup': 'Affinity Group',
+    'AffinityGroup': 'Affinity Group',
+    'ImageStore': 'Image Store',
     'addImageStore': 'Image Store',
     'listImageStore': 'Image Store',
     'deleteImageStore': 'Image Store',
@@ -156,6 +183,7 @@ known_categories = {
     'deleteSecondaryStagingStore': 'Image Store',
     'listSecondaryStagingStores': 'Image Store',
     'updateImageStore': 'Image Store',
+    'downloadImageStoreObject': 'Image Store',
     'InternalLoadBalancer': 'Internal LB',
 	'DeploymentPlanners': 'Configuration',
 	'ObjectStore': 'Image Store',
@@ -168,15 +196,16 @@ known_categories = {
     'CacheStores' : 'Cache Stores',
     'CacheStore' : 'Cache Store',
     'OvsElement' : 'Ovs Element',
-    'StratosphereSsp' : ' Stratosphere SSP',
+    'StratosphereSsp' : 'Misc Network Service Providers',
     'Metrics' : 'Metrics',
+    'listClustersMetrics': 'Cluster',
+    'VpnUser': 'VPN',
+    'listZonesMetrics': 'Metrics',
     'Infrastructure' : 'Metrics',
-    'listNetscalerControlCenter' : 'Load Balancer',
     'listRegisteredServicePackages': 'Load Balancer',
     'listNsVpx' : 'Load Balancer',
     'destroyNsVPx': 'Load Balancer',
     'deployNetscalerVpx' : 'Load Balancer',
-    'deleteNetscalerControlCenter' : 'Load Balancer',
     'stopNetScalerVpx' : 'Load Balancer',
     'deleteServicePackageOffering' : 'Load Balancer',
     'destroyNsVpx' : 'Load Balancer',
@@ -184,6 +213,7 @@ known_categories = {
     'listAnnotations' : 'Annotations',
     'addAnnotation' : 'Annotations',
     'removeAnnotation' : 'Annotations',
+    'updateAnnotationVisibility' : 'Annotations',
     'CA': 'Certificate',
     'listElastistorInterface': 'Misc',
     'cloudian': 'Cloudian',
@@ -195,10 +225,54 @@ known_categories = {
     'UnmanagedInstance': 'Virtual Machine',
     'KubernetesSupportedVersion': 'Kubernetes Service',
     'KubernetesCluster': 'Kubernetes Service',
-    'UnmanagedInstance': 'Virtual Machine',
     'Rolling': 'Rolling Maintenance',
     'importVsphereStoragePolicies' : 'vSphere storage policies',
-    'listVsphereStoragePolicies' : 'vSphere storage policies'
+    'listVsphereStoragePolicies' : 'vSphere storage policies',
+    'createConsoleEndpoint': 'Console Session',
+    'listConsoleSessions': 'Console Session',
+    'importVm': 'Virtual Machine',
+    'revertToVMSnapshot': 'Virtual Machine',
+    'listQuarantinedIp': 'IP Quarantine',
+    'updateQuarantinedIp': 'IP Quarantine',
+    'removeQuarantinedIp': 'IP Quarantine',
+    'Shutdown': 'Maintenance',
+    'Maintenance': 'Maintenance',
+    'addObjectStoragePool': 'Object Store',
+    'listObjectStoragePools': 'Object Store',
+    'deleteObjectStoragePool': 'Object Store',
+    'updateObjectStoragePool': 'Object Store',
+    'createBucket': 'Object Store',
+    'updateBucket': 'Object Store',
+    'deleteBucket': 'Object Store',
+    'listBuckets': 'Object Store',
+    'listVmsForImport': 'Virtual Machine',
+    'SharedFS': 'Shared FileSystem',
+    'SharedFileSystem': 'Shared FileSystem',
+    'Webhook': 'Webhook',
+    'Webhooks': 'Webhook',
+    'purgeExpungedResources': 'Resource',
+    'forgotPassword': 'Authentication',
+    'resetPassword': 'Authentication',
+    'BgpPeer': 'BGP Peer',
+    'createASNRange': 'AS Number Range',
+    'listASNRange': 'AS Number Range',
+    'deleteASNRange': 'AS Number Range',
+    'listASNumbers': 'AS Number',
+    'releaseASNumber': 'AS Number',
+    'addNodesToKubernetesCluster': 'Kubernetes Service',
+    'removeNodesFromKubernetesCluster': 'Kubernetes Service',
+    'configureStorageAccess': 'Storage Access Groups',
+    'listStorageAccessGroups': 'Storage Access Groups',
+    'listGuiThemes': 'GUI Theme',
+    'createGuiTheme': 'GUI Theme',
+    'updateGuiTheme': 'GUI Theme',
+    'removeGuiTheme': 'GUI Theme',
+    'Gpu': 'GPU',
+    'Vgpu': 'GPU',
+    'Extension' : 'Extension',
+    'Extensions' : 'Extension',
+    'CustomAction' : 'Extension',
+    'CustomActions' : 'Extension'
 }
 
 
@@ -206,19 +280,26 @@ categories = {}
 
 
 def choose_category(fn):
+    possible_known_categories = []
     for k, v in known_categories.items():
         if k in fn:
-            return v
+            possible_known_categories.append(k)
+
+    if len(possible_known_categories) > 0:
+        close_matches = difflib.get_close_matches(fn, possible_known_categories, n=1, cutoff=0.1)
+        if len(close_matches) > 0:
+            return known_categories[close_matches[0]]
+        else:
+            return known_categories[possible_known_categories[0]]
     raise Exception('Need to add a category for %s to %s:known_categories' %
                     (fn, __file__))
-    sys.exit(1)
 
 
 for f in sys.argv:
     dirname, fn = os.path.split(f)
     if not fn.endswith('.xml'):
         continue
-    if fn.endswith('Summary.xml'):
+    if fn.endswith('Summary.xml') and fn != 'quotaSummary.xml':
         continue
     if fn.endswith('SummarySorted.xml'):
         continue
@@ -231,6 +312,7 @@ for f in sys.argv:
             dom = minidom.parse(data)
         name = dom.getElementsByTagName('name')[0].firstChild.data
         isAsync = dom.getElementsByTagName('isAsync')[0].firstChild.data
+        isDeprecated = dom.getElementsByTagName('isDeprecated')[0].firstChild.data
         category = choose_category(fn)
         if category not in categories:
             categories[category] = []
@@ -238,6 +320,7 @@ for f in sys.argv:
             'name': name,
             'dirname': dirname_to_dirname[dirname],
             'async': isAsync == 'true',
+            'deprecated': isDeprecated == 'true',
             'user': dirname_to_user[dirname],
             })
     except ExpatError as e:
@@ -248,10 +331,11 @@ for f in sys.argv:
 
 def xml_for(command):
     name = command['name']
-    async = command['async'] and ' (A)' or ''
+    isAsync = command['async'] and ' (A)' or ''
+    isDeprecated = command['deprecated'] and ' (D)' or ''
     dirname = command['dirname']
     return '''<xsl:if test="name=\'%(name)s\'">
-<li><a href="%(dirname)s/%(name)s.html"><xsl:value-of select="name"/>%(async)s</a></li>
+<li><a href="%(dirname)s/%(name)s.html"><xsl:value-of select="name"/>%(isAsync)s %(isDeprecated)s</a></li>
 </xsl:if>
 ''' % locals()
 
@@ -259,7 +343,6 @@ def xml_for(command):
 def write_xml(out, user):
     with open(out, 'w') as f:
         cat_strings = []
-
         for category in categories.keys():
             strings = []
             for command in categories[category]:

@@ -22,7 +22,7 @@ version="1.0">
 <xsl:output method="html" doctype-public="-//W3C//DTD HTML 1.0 Transitional//EN"/>
 <xsl:template match="/">
 <html xmlns="http://www.w3.org/1999/xhtml"><head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
 <link rel= "stylesheet" href="../includes/main.css" type="text/css" />
 <link rel="shortcut icon" href="../favicon.ico" type="image/x-icon" />
 
@@ -37,7 +37,7 @@ version="1.0">
 </div>
         </div>
 
-        <div id="main_master">
+        <div id="main_controller">
             <div id="inside_header">
 
                 <div class="header_top">
@@ -141,14 +141,14 @@ version="1.0">
         </div><!-- #BeginLibraryItem "/libraries/footer.lbi" -->
 <div id="footer">
 <div id="comments_thread">
-    <script type="text/javascript" src="https://comments.apache.org/show_comments.lua?site=test" async="true">
+    <script src="https://comments.apache.org/show_comments.lua?site=test" async="true">
     </script>
     <noscript>
     <iframe width="930" height="500" src="https://comments.apache.org/iframe.lua?site=test&amp;page=4.2.0/rootadmin"></iframe>
     </noscript>
   </div>
 
-		<div id="footer_mainmaster">
+		<div id="footer_maincontroller">
                 <p>Copyright © 2015 The Apache Software Foundation, Licensed under the
                    <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0.</a> <br />
                 Apache, CloudStack, Apache CloudStack, the Apache CloudStack logo, the CloudMonkey logo  and the Apache feather logo are trademarks of The Apache Software Foundation.</p>

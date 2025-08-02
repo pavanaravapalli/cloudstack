@@ -34,6 +34,13 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import javax.naming.ConfigurationException;
 
+import com.cloud.agent.api.HandleCksIsoCommand;
+import org.apache.cloudstack.agent.routing.ManageServiceCommand;
+import com.cloud.agent.api.routing.UpdateNetworkCommand;
+import com.cloud.agent.api.to.IpAddressTO;
+import com.cloud.network.router.VirtualRouter;
+import com.cloud.utils.PasswordGenerator;
+import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.ca.SetupCertificateAnswer;
 import org.apache.cloudstack.ca.SetupCertificateCommand;
 import org.apache.cloudstack.ca.SetupKeyStoreCommand;
@@ -44,8 +51,10 @@ import org.apache.cloudstack.diagnostics.DiagnosticsCommand;
 import org.apache.cloudstack.diagnostics.PrepareFilesAnswer;
 import org.apache.cloudstack.diagnostics.PrepareFilesCommand;
 import org.apache.cloudstack.utils.security.KeyStoreUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.net.util.SubnetUtils;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.joda.time.Duration;
 
 import com.cloud.agent.api.Answer;
@@ -79,7 +88,7 @@ import com.cloud.utils.exception.CloudRuntimeException;
  **/
 public class VirtualRoutingResource {
 
-    private static final Logger s_logger = Logger.getLogger(VirtualRoutingResource.class);
+    protected Logger logger = LogManager.getLogger(getClass());
     private VirtualRouterDeployer _vrDeployer;
     private Map<String, Queue<NetworkElementCommand>> _vrAggregateCommandsSet;
     protected Map<String, Lock> _vrLockMap = new HashMap<String, Lock>();
@@ -111,7 +120,7 @@ public class VirtualRoutingResource {
         try {
             ExecutionResult rc = _vrDeployer.prepareCommand(cmd);
             if (!rc.isSuccess()) {
-                s_logger.error("Failed to prepare VR command due to " + rc.getDetails());
+                logger.error("Failed to prepare VR command due to " + rc.getDetails());
                 return new Answer(cmd, false, rc.getDetails());
             }
 
@@ -131,6 +140,18 @@ public class VirtualRoutingResource {
 
             if (cmd instanceof AggregationControlCommand) {
                 return execute((AggregationControlCommand)cmd);
+            }
+
+            if (cmd instanceof UpdateNetworkCommand) {
+                return execute((UpdateNetworkCommand) cmd);
+            }
+
+            if (cmd instanceof HandleCksIsoCommand) {
+                return execute((HandleCksIsoCommand) cmd);
+            }
+
+            if (cmd instanceof ManageServiceCommand) {
+                return execute((ManageServiceCommand) cmd);
             }
 
             if (_vrAggregateCommandsSet.containsKey(routerName)) {
@@ -154,10 +175,17 @@ public class VirtualRoutingResource {
             if (!aggregated) {
                 ExecutionResult rc = _vrDeployer.cleanupCommand(cmd);
                 if (!rc.isSuccess()) {
-                    s_logger.error("Failed to cleanup VR command due to " + rc.getDetails());
+                    logger.error("Failed to cleanup VR command due to " + rc.getDetails());
                 }
             }
         }
+    }
+
+    protected Answer execute(final HandleCksIsoCommand cmd) {
+        String routerIp = getRouterSshControlIp(cmd);
+        logger.info("Attempting to mount CKS ISO on Virtual Router");
+        ExecutionResult result = _vrDeployer.executeInVR(routerIp, VRScripts.CKS_ISO_MOUNT_SERVE, String.valueOf(cmd.isMountCksIso()));
+        return new Answer(cmd, result.isSuccess(), result.getDetails());
     }
 
     private Answer execute(final SetupKeyStoreCommand cmd) {
@@ -174,11 +202,12 @@ public class VirtualRoutingResource {
     }
 
     private Answer execute(final SetupCertificateCommand cmd) {
-        final String args = String.format("/usr/local/cloud/systemvm/conf/agent.properties " +
+        final String args = String.format("/usr/local/cloud/systemvm/conf/agent.properties %s " +
                         "/usr/local/cloud/systemvm/conf/%s %s " +
                         "/usr/local/cloud/systemvm/conf/%s \"%s\" " +
                         "/usr/local/cloud/systemvm/conf/%s \"%s\" " +
                         "/usr/local/cloud/systemvm/conf/%s \"%s\"",
+                PasswordGenerator.generateRandomPassword(16),
                 KeyStoreUtils.KS_FILENAME,
                 KeyStoreUtils.SSH_MODE,
                 KeyStoreUtils.CERT_FILENAME,
@@ -209,8 +238,67 @@ public class VirtualRoutingResource {
         } else if (cmd instanceof GetRouterMonitorResultsCommand) {
             return execute((GetRouterMonitorResultsCommand)cmd);
         } else {
-            s_logger.error("Unknown query command in VirtualRoutingResource!");
+            logger.error("Unknown query command in VirtualRoutingResource!");
             return Answer.createUnsupportedCommandAnswer(cmd);
+        }
+    }
+
+    private String getRouterSshControlIp(NetworkElementCommand cmd) {
+        String routerIp = cmd.getAccessDetail(NetworkElementCommand.ROUTER_IP);
+        if (logger.isDebugEnabled())
+            logger.debug("Use router's private IP for SSH control. IP : " + routerIp);
+        return routerIp;
+    }
+
+    private Answer execute(UpdateNetworkCommand cmd) {
+        IpAddressTO[] ipAddresses = cmd.getIpAddresses();
+        String routerIp = getRouterSshControlIp(cmd);
+        boolean finalResult = true;
+        for (IpAddressTO ipAddressTO : ipAddresses) {
+            try {
+                SubnetUtils util = new SubnetUtils(ipAddressTO.getPublicIp(), ipAddressTO.getVlanNetmask());
+                String address = util.getInfo().getCidrSignature();
+                String subnet = address.split("/")[1];
+                ExecutionResult result = _vrDeployer.executeInVR(routerIp, VRScripts.VR_UPDATE_INTERFACE_CONFIG,
+                        ipAddressTO.getPublicIp() + " " + subnet + " " + ipAddressTO.getMtu() + " " + 15);
+                if (logger.isDebugEnabled())
+                    logger.debug("result: " + result.isSuccess() + ", output: " + result.getDetails());
+                if (!Boolean.TRUE.equals(result.isSuccess())) {
+                    if (result.getDetails().contains(String.format("Interface with IP %s not found", ipAddressTO.getPublicIp()))) {
+                        logger.warn(String.format("Skipping IP: %s as it isn't configured on router interface", ipAddressTO.getPublicIp()));
+                    } else if (ipAddressTO.getDetails().get(ApiConstants.REDUNDANT_STATE).equals(VirtualRouter.RedundantState.PRIMARY.name())) {
+                        logger.warn(String.format("Failed to update interface mtu to %s on interface with ip: %s",
+                                ipAddressTO.getMtu(), ipAddressTO.getPublicIp()));
+                        finalResult = false;
+                    }
+                    continue;
+                }
+                logger.info(String.format("Successfully updated mtu to %s on interface with ip: %s",
+                        ipAddressTO.getMtu(), ipAddressTO.getPublicIp()));
+                finalResult &= true;
+            } catch (Exception e) {
+                String msg = "Prepare UpdateNetwork failed due to " + e.toString();
+                logger.error(msg, e);
+                return new Answer(cmd, e);
+            }
+        }
+        if (finalResult) {
+            return new Answer(cmd, true, null);
+        }
+        return new Answer(cmd, new CloudRuntimeException("Failed to update interface mtu"));
+    }
+
+    private Answer execute(ManageServiceCommand cmd) {
+        String routerIp = cmd.getAccessDetail(NetworkElementCommand.ROUTER_IP);
+        String args = cmd.getAction() + " " + cmd.getServiceName();
+        ExecutionResult result = _vrDeployer.executeInVR(routerIp, VRScripts.MANAGE_SERVICE, args);
+        if (result.isSuccess()) {
+            return new Answer(cmd, true,
+                    String.format("Successfully executed action: %s on service: %s. Details: %s",
+                            cmd.getAction(), cmd.getServiceName(), result.getDetails()));
+        } else {
+            return new Answer(cmd, false, String.format("Failed to execute action: %s on service: %s. Details: %s",
+                    cmd.getAction(), cmd.getServiceName(), result.getDetails()));
         }
     }
 
@@ -240,9 +328,9 @@ public class VirtualRoutingResource {
         for (ConfigItem configItem : cfg) {
             long startTimestamp = System.currentTimeMillis();
             ExecutionResult result = applyConfigToVR(cmd.getRouterAccessIp(), configItem, VRScripts.VR_SCRIPT_EXEC_TIMEOUT);
-            if (s_logger.isDebugEnabled()) {
+            if (logger.isDebugEnabled()) {
                 long elapsed = System.currentTimeMillis() - startTimestamp;
-                s_logger.debug("Processing " + configItem + " took " + elapsed + "ms");
+                logger.debug("Processing " + configItem + " took " + elapsed + "ms");
             }
             if (result == null) {
                 result = new ExecutionResult(false, "null execution result");
@@ -254,7 +342,7 @@ public class VirtualRoutingResource {
 
         // Not sure why this matters, but log it anyway
         if (cmd.getAnswersCount() != results.size()) {
-            s_logger.warn("Expected " + cmd.getAnswersCount() + " answers while executing " + cmd.getClass().getSimpleName() + " but received " + results.size());
+            logger.warn("Expected " + cmd.getAnswersCount() + " answers while executing " + cmd.getClass().getSimpleName() + " but received " + results.size());
         }
 
         if (results.size() == 1) {
@@ -303,7 +391,7 @@ public class VirtualRoutingResource {
             } else if (!readingFailedChecks && readingMonitorResults) { // Reading monitor checks result
                 monitorResults.append(line);
             } else {
-                s_logger.error("Unexpected lines reached while parsing health check response. Skipping line:- " + line);
+                logger.error("Unexpected lines reached while parsing health check response. Skipping line:- " + line);
             }
         }
 
@@ -323,16 +411,16 @@ public class VirtualRoutingResource {
         }
 
         String args = cmd.shouldPerformFreshChecks() ? "true" : "false";
-        s_logger.info("Fetching health check result for " + routerIp + " and executing fresh checks: " + args);
+        logger.info("Fetching health check result for " + routerIp + " and executing fresh checks: " + args);
         ExecutionResult result = _vrDeployer.executeInVR(routerIp, VRScripts.ROUTER_MONITOR_RESULTS, args);
 
         if (!result.isSuccess()) {
-            s_logger.warn("Result of " + cmd + " failed with details: " + result.getDetails());
+            logger.warn("Result of " + cmd + " failed with details: " + result.getDetails());
             return new GetRouterMonitorResultsAnswer(cmd, false, null, result.getDetails());
         }
 
         if (result.getDetails().isEmpty()) {
-            s_logger.warn("Result of " + cmd + " received no details.");
+            logger.warn("Result of " + cmd + " received no details.");
             return new GetRouterMonitorResultsAnswer(cmd, false, null, "No results available.");
         }
 
@@ -342,12 +430,12 @@ public class VirtualRoutingResource {
     private Pair<Boolean, String> checkRouterFileSystem(String routerIp) {
         ExecutionResult fileSystemWritableTestResult = _vrDeployer.executeInVR(routerIp, VRScripts.ROUTER_FILESYSTEM_WRITABLE_CHECK, null);
         if (fileSystemWritableTestResult.isSuccess()) {
-            s_logger.debug("Router connectivity and file system writable check passed");
+            logger.debug("Router connectivity and file system writable check passed");
             return new Pair<Boolean, String>(true, "success");
         }
 
         String resultDetails = fileSystemWritableTestResult.getDetails();
-        s_logger.warn("File system writable check failed with details: " + resultDetails);
+        logger.warn("File system writable check failed with details: " + resultDetails);
         if (StringUtils.isNotBlank(resultDetails)) {
             final String readOnlyFileSystemError = "Read-only file system";
             if (resultDetails.contains(readOnlyFileSystemError)) {
@@ -432,8 +520,8 @@ public class VirtualRoutingResource {
         if (params.get("router.aggregation.command.each.timeout") != null) {
             String value = (String)params.get("router.aggregation.command.each.timeout");
             _eachTimeout = Duration.standardSeconds(NumbersUtil.parseLong(value, 600));
-            if (s_logger.isDebugEnabled()){
-                s_logger.debug("The router.aggregation.command.each.timeout in seconds is set to " + _eachTimeout.getStandardSeconds());
+            if (logger.isDebugEnabled()){
+                logger.debug("The router.aggregation.command.each.timeout in seconds is set to " + _eachTimeout.getStandardSeconds());
             }
         }
 
@@ -454,8 +542,8 @@ public class VirtualRoutingResource {
 
         value = (String)params.get("router.aggregation.command.each.timeout");
         _eachTimeout = Duration.standardSeconds(NumbersUtil.parseInt(value, (int)VRScripts.VR_SCRIPT_EXEC_TIMEOUT.getStandardSeconds()));
-        if (s_logger.isDebugEnabled()){
-            s_logger.debug("The router.aggregation.command.each.timeout in seconds is set to " + _eachTimeout.getStandardSeconds());
+        if (logger.isDebugEnabled()){
+            logger.debug("The router.aggregation.command.each.timeout in seconds is set to " + _eachTimeout.getStandardSeconds());
         }
 
         if (_vrDeployer == null) {
@@ -478,8 +566,8 @@ public class VirtualRoutingResource {
         for (int i = 0; i <= retry; i++) {
             SocketChannel sch = null;
             try {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Trying to connect to " + ipAddress);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Trying to connect to " + ipAddress);
                 }
                 sch = SocketChannel.open();
                 sch.configureBlocking(true);
@@ -488,8 +576,8 @@ public class VirtualRoutingResource {
                 sch.connect(addr);
                 return true;
             } catch (final IOException e) {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Could not connect to " + ipAddress);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Could not connect to " + ipAddress);
                 }
             } finally {
                 if (sch != null) {
@@ -505,7 +593,7 @@ public class VirtualRoutingResource {
             }
         }
 
-        s_logger.debug("Unable to logon to " + ipAddress);
+        logger.debug("Unable to logon to " + ipAddress);
 
         return false;
     }
@@ -515,7 +603,7 @@ public class VirtualRoutingResource {
          * [TODO] Still have to migrate LoadBalancerConfigCommand and BumpUpPriorityCommand
          * [FIXME] Have a look at SetSourceNatConfigItem
          */
-        s_logger.debug("Transforming " + cmd.getClass().getCanonicalName() + " to ConfigItems");
+        logger.debug("Transforming " + cmd.getClass().getCanonicalName() + " to ConfigItems");
 
         final AbstractConfigItemFacade configItemFacade = AbstractConfigItemFacade.getInstance(cmd.getClass());
 
@@ -545,7 +633,7 @@ public class VirtualRoutingResource {
                     answerCounts += command.getAnswersCount();
                     List<ConfigItem> cfg = generateCommandCfg(command);
                     if (cfg == null) {
-                        s_logger.warn("Unknown commands for VirtualRoutingResource, but continue: " + cmd.toString());
+                        logger.warn("Unknown commands for VirtualRoutingResource, but continue: " + cmd.toString());
                         continue;
                     }
 
@@ -560,8 +648,8 @@ public class VirtualRoutingResource {
                 ScriptConfigItem scriptConfigItem = new ScriptConfigItem(VRScripts.VR_CFG, "-c " + VRScripts.CONFIG_CACHE_LOCATION + cfgFileName);
                 // 120s is the minimal timeout
                 Duration timeout = _eachTimeout.withDurationAdded(_eachTimeout.getStandardSeconds(), answerCounts);
-                if (s_logger.isDebugEnabled()){
-                    s_logger.debug("Aggregate action timeout in seconds is " + timeout.getStandardSeconds());
+                if (logger.isDebugEnabled()){
+                    logger.debug("Aggregate action timeout in seconds is " + timeout.getStandardSeconds());
                 }
 
                 ExecutionResult result = applyConfigToVR(cmd.getRouterAccessIp(), fileConfigItem, timeout);
@@ -581,5 +669,24 @@ public class VirtualRoutingResource {
             }
         }
         return new Answer(cmd, false, "Fail to recognize aggregation action " + action.toString());
+    }
+
+    public boolean isSystemVMSetup(String vmName, String controlIp) throws InterruptedException {
+        if (vmName.startsWith("s-") || vmName.startsWith("v-")) {
+            ScriptConfigItem scriptConfigItem = new ScriptConfigItem(VRScripts.SYSTEM_VM_PATCHED, "/opt/cloud/bin/keystore*");
+            ExecutionResult result = new ExecutionResult(false, "");
+            int retries = 0;
+            while (!result.isSuccess() && retries < 600) {
+                result = applyConfigToVR(controlIp, scriptConfigItem, VRScripts.VR_SCRIPT_EXEC_TIMEOUT);
+                if (result.isSuccess()) {
+                    return true;
+                }
+
+                retries++;
+                Thread.sleep(1000);
+            }
+            return false;
+        }
+        return true;
     }
 }

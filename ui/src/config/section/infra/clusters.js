@@ -15,16 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { shallowRef, defineAsyncComponent } from 'vue'
 import store from '@/store'
 
 export default {
   name: 'cluster',
   title: 'label.clusters',
-  icon: 'cluster',
+  icon: 'cluster-outlined',
+  docHelp: 'conceptsandterminology/concepts.html#about-clusters',
   permission: ['listClustersMetrics'],
+  searchFilters: ['name', 'zoneid', 'podid', 'arch', 'hypervisor'],
   columns: () => {
-    const fields = ['name', 'state', 'allocationstate', 'clustertype', 'hypervisortype', 'hosts']
-    const metricsFields = ['cpuused', 'cpumaxdeviation', 'cpuallocated', 'cputotal', 'memoryused', 'memorymaxdeviation', 'memoryallocated', 'memorytotal']
+    const fields = ['name', 'allocationstate', 'clustertype', 'arch', 'hypervisortype']
+    const metricsFields = ['state', 'hosts', 'cpuused', 'cpumaxdeviation', 'cpuallocated', 'cputotal', 'memoryused', 'memorymaxdeviation', 'memoryallocated', 'memorytotal', 'drsimbalance']
     if (store.getters.metrics) {
       fields.push(...metricsFields)
     }
@@ -32,62 +35,81 @@ export default {
     fields.push('zonename')
     return fields
   },
-  details: ['name', 'id', 'allocationstate', 'clustertype', 'managedstate', 'hypervisortype', 'podname', 'zonename'],
+  details: ['name', 'id', 'allocationstate', 'clustertype', 'managedstate', 'arch', 'hypervisortype', 'externalprovisioner', 'podname', 'zonename', 'drsimbalance', 'storageaccessgroups', 'podstorageaccessgroups', 'zonestorageaccessgroups', 'externaldetails'],
   related: [{
     name: 'host',
     title: 'label.hosts',
     param: 'clusterid'
   }],
+  resourceType: 'Cluster',
+  filters: () => {
+    const filters = ['enabled', 'disabled']
+    return filters
+  },
   tabs: [{
     name: 'details',
-    component: () => import('@/components/view/DetailsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
   }, {
     name: 'resources',
-    component: () => import('@/views/infra/Resources.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/Resources.vue')))
   }, {
     name: 'settings',
-    component: () => import('@/components/view/SettingsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/SettingsTab.vue')))
+  }, {
+    name: 'drs',
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/ClusterDRSTab.vue'))),
+    show: (resource) => { return resource.hypervisortype !== 'External' }
+  }, {
+    name: 'comments',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/AnnotationsTab.vue')))
+  },
+  {
+    name: 'events',
+    resourceType: 'Cluster',
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+    show: () => { return 'listEvents' in store.getters.apis }
   }],
   actions: [
     {
       api: 'addCluster',
-      icon: 'plus',
+      icon: 'plus-outlined',
       label: 'label.add.cluster',
-      docHelp: 'adminguide/installguide/configuration.html#adding-a-cluster',
+      docHelp: 'installguide/configuration.html#adding-a-cluster',
       listView: true,
       popup: true,
-      component: () => import('@/views/infra/ClusterAdd.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/ClusterAdd.vue')))
     },
     {
       api: 'updateCluster',
-      icon: 'edit',
+      icon: 'edit-outlined',
       label: 'label.edit',
       dataView: true,
-      args: ['clustername']
+      popup: true,
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/ClusterUpdate.vue')))
     },
     {
       api: 'updateCluster',
-      icon: 'play-circle',
+      icon: 'play-circle-outlined',
       label: 'label.action.enable.cluster',
       message: 'message.action.enable.cluster',
-      docHelp: 'adminguide/installguide/hosts.html#disabling-and-enabling-zones-pods-and-clusters',
+      docHelp: 'adminguide/hosts.html#disabling-and-enabling-zones-pods-and-clusters',
       dataView: true,
       defaultArgs: { allocationstate: 'Enabled' },
       show: (record) => { return record.allocationstate === 'Disabled' }
     },
     {
       api: 'updateCluster',
-      icon: 'pause-circle',
+      icon: 'pause-circle-outlined',
       label: 'label.action.disable.cluster',
       message: 'message.action.disable.cluster',
-      docHelp: 'adminguide/installguide/hosts.html#disabling-and-enabling-zones-pods-and-clusters',
+      docHelp: 'adminguide/hosts.html#disabling-and-enabling-zones-pods-and-clusters',
       dataView: true,
       defaultArgs: { allocationstate: 'Disabled' },
       show: (record) => { return record.allocationstate === 'Enabled' }
     },
     {
       api: 'updateCluster',
-      icon: 'plus-square',
+      icon: 'plus-square-outlined',
       label: 'label.action.manage.cluster',
       message: 'message.action.manage.cluster',
       dataView: true,
@@ -96,7 +118,7 @@ export default {
     },
     {
       api: 'updateCluster',
-      icon: 'minus-square',
+      icon: 'minus-square-outlined',
       label: 'label.action.unmanage.cluster',
       message: 'message.action.unmanage.cluster',
       dataView: true,
@@ -104,14 +126,23 @@ export default {
       show: (record) => { return record.managedstate === 'Managed' }
     },
     {
+      api: 'executeDRS',
+      icon: 'gold-outlined',
+      label: 'label.action.drs.cluster',
+      message: 'message.action.drs.cluster',
+      dataView: true,
+      defaultArgs: { iterations: null },
+      args: ['iterations'],
+      show: (record) => { return record.hypervisortype !== 'External' && record.managedstate === 'Managed' }
+    },
+    {
       api: 'enableOutOfBandManagementForCluster',
-      icon: 'plus-circle',
+      icon: 'plus-circle-outlined',
       label: 'label.outofbandmanagement.enable',
       message: 'label.outofbandmanagement.enable',
       dataView: true,
       show: (record) => {
-        return record.resourcedetails && record.resourcedetails.outOfBandManagementEnabled &&
-          record.resourcedetails.outOfBandManagementEnabled === 'false'
+        return record.hypervisortype !== 'External' && record?.resourcedetails?.outOfBandManagementEnabled === 'false'
       },
       args: ['clusterid'],
       mapping: {
@@ -122,13 +153,12 @@ export default {
     },
     {
       api: 'disableOutOfBandManagementForCluster',
-      icon: 'minus-circle',
+      icon: 'minus-circle-outlined',
       label: 'label.outofbandmanagement.disable',
       message: 'label.outofbandmanagement.disable',
       dataView: true,
       show: (record) => {
-        return !(record.resourcedetails && record.resourcedetails.outOfBandManagementEnabled &&
-          record.resourcedetails.outOfBandManagementEnabled === 'false')
+        return record.hypervisortype !== 'External' && !(record?.resourcedetails?.outOfBandManagementEnabled === 'false')
       },
       args: ['clusterid'],
       mapping: {
@@ -139,13 +169,12 @@ export default {
     },
     {
       api: 'enableHAForCluster',
-      icon: 'eye',
+      icon: 'eye-outlined',
       label: 'label.ha.enable',
       message: 'label.ha.enable',
       dataView: true,
       show: (record) => {
-        return record.resourcedetails && record.resourcedetails.resourceHAEnabled &&
-          record.resourcedetails.resourceHAEnabled === 'false'
+        return record.hypervisortype !== 'External' && record?.resourcedetails?.resourceHAEnabled === 'false'
       },
       args: ['clusterid'],
       mapping: {
@@ -156,13 +185,12 @@ export default {
     },
     {
       api: 'disableHAForCluster',
-      icon: 'eye-invisible',
+      icon: 'eye-invisible-outlined',
       label: 'label.ha.disable',
       message: 'label.ha.disable',
       dataView: true,
       show: (record) => {
-        return !(record.resourcedetails && record.resourcedetails.resourceHAEnabled &&
-          record.resourcedetails.resourceHAEnabled === 'false')
+        return record.hypervisortype !== 'External' && !(record?.resourcedetails?.resourceHAEnabled === 'false')
       },
       args: ['clusterid'],
       mapping: {
@@ -173,7 +201,7 @@ export default {
     },
     {
       api: 'startRollingMaintenance',
-      icon: 'setting',
+      icon: 'setting-outlined',
       label: 'label.start.rolling.maintenance',
       message: 'label.start.rolling.maintenance',
       dataView: true,
@@ -182,11 +210,14 @@ export default {
         clusterids: {
           value: (record) => { return record.id }
         }
+      },
+      show: (record) => {
+        return record.hypervisortype !== 'External'
       }
     },
     {
       api: 'deleteCluster',
-      icon: 'delete',
+      icon: 'delete-outlined',
       label: 'label.action.delete.cluster',
       message: 'message.action.delete.cluster',
       dataView: true

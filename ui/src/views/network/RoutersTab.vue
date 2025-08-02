@@ -25,26 +25,28 @@
     :pagination="false"
     :loading="fetchLoading"
   >
-    <template slot="name" slot-scope="text,item">
-      <router-link :to="{ path: '/router/' + item.id }" >{{ text }}</router-link>
-    </template>
-    <template slot="status" slot-scope="text, item">
-      <status class="status" :text="item.state" displayText />
-    </template>
-    <template slot="requiresupgrade" slot-scope="text, item">
-      {{ item.requiresupgrade ? $t('label.yes') : $t('label.no') }}
-    </template>
-    <template slot="isredundantrouter" slot-scope="text, record">
-      {{ record.isredundantrouter ? record.redundantstate : record.isredundantrouter }}
-    </template>
-    <template slot="hostname" slot-scope="text, record">
-      <router-link :to="{ path: '/host/' + record.hostid }" >{{ record.hostname || record.hostid }}</router-link>
+    <template #bodyCell="{ column, text, record }">
+      <template v-if="column.key === 'name'">
+        <router-link :to="{ path: '/router/' + record.id }" >{{ text }}</router-link>
+      </template>
+      <template v-if="column.key === 'status'">
+        <status class="status" :text="record.state" displayText />
+      </template>
+      <template v-if="column.key === 'requiresupgrade'">
+        {{ record.requiresupgrade ? $t('label.yes') : $t('label.no') }}
+      </template>
+      <template v-if="column.key === 'isredundantrouter'">
+        {{ record.isredundantrouter ? record.redundantstate : record.isredundantrouter }}
+      </template>
+      <template v-if="column.key === 'hostname'">
+        <router-link :to="{ path: '/host/' + record.hostid }" >{{ record.hostname || record.hostid }}</router-link>
+      </template>
     </template>
   </a-table>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import Status from '@/components/widgets/Status'
 
 export default {
@@ -68,14 +70,14 @@ export default {
       routers: [],
       columns: [
         {
+          key: 'name',
           title: this.$t('label.name'),
-          dataIndex: 'name',
-          scopedSlots: { customRender: 'name' }
+          dataIndex: 'name'
         },
         {
+          key: 'status',
           title: this.$t('label.status'),
-          dataIndex: 'state',
-          scopedSlots: { customRender: 'status' }
+          dataIndex: 'state'
         },
         {
           title: this.$t('label.ip'),
@@ -86,32 +88,35 @@ export default {
           dataIndex: 'version'
         },
         {
+          key: 'requiresupgrade',
           title: this.$t('label.requiresupgrade'),
-          dataIndex: 'requiresupgrade',
-          scopedSlots: { customRender: 'requiresupgrade' }
+          dataIndex: 'requiresupgrade'
         },
         {
+          key: 'isredundantrouter',
           title: this.$t('label.isredundantrouter'),
-          dataIndex: 'isredundantrouter',
-          scopedSlots: { customRender: 'isredundantrouter' }
+          dataIndex: 'isredundantrouter'
         },
         {
+          key: 'hostname',
           title: this.$t('label.hostname'),
-          dataIndex: 'hostname',
-          scopedSlots: { customRender: 'hostname' }
+          dataIndex: 'hostname'
         }
       ]
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    resource: function (newItem, oldItem) {
-      if (!newItem || !newItem.id) {
-        return
+    resource: {
+      deep: true,
+      handler (newItem) {
+        if (!newItem || !newItem.id) {
+          return
+        }
+        this.fetchData()
       }
-      this.fetchData()
     }
   },
   methods: {
@@ -125,7 +130,7 @@ export default {
         params.networkid = this.resource.id
       }
       this.fetchLoading = true
-      api('listRouters', params).then(json => {
+      getAPI('listRouters', params).then(json => {
         this.routers = json.listroutersresponse.router || []
       }).catch(error => {
         this.$notifyError(error)

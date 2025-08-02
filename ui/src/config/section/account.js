@@ -15,55 +15,103 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { shallowRef, defineAsyncComponent } from 'vue'
+import store from '@/store'
+
 export default {
   name: 'account',
   title: 'label.accounts',
-  icon: 'team',
+  icon: 'team-outlined',
   docHelp: 'adminguide/accounts.html',
   permission: ['listAccounts'],
+  searchFilters: () => {
+    var filters = ['name', 'accounttype', 'domainid']
+    if (store.getters.userInfo.roletype === 'Admin') {
+      filters.push('apikeyaccess')
+    }
+    return filters
+  },
   columns: ['name', 'state', 'rolename', 'roletype', 'domainpath'],
-  details: ['name', 'id', 'rolename', 'roletype', 'domainpath', 'networkdomain', 'iptotal', 'vmtotal', 'volumetotal', 'receivedbytes', 'sentbytes', 'created'],
+  details: ['name', 'id', 'rolename', 'roletype', 'domainpath', 'networkdomain', 'apikeyaccess', 'iptotal', 'vmtotal', 'volumetotal', 'receivedbytes', 'sentbytes', 'created'],
   related: [{
     name: 'accountuser',
     title: 'label.users',
     param: 'account'
+  }, {
+    name: 'vm',
+    title: 'label.vms',
+    param: 'account'
+  }, {
+    name: 'volume',
+    title: 'label.volumes',
+    param: 'account'
+  }, {
+    name: 'guestnetwork',
+    title: 'label.networks',
+    param: 'account'
+  }, {
+    name: 'ssh',
+    title: 'label.sshkeypairs',
+    param: 'account'
+  }, {
+    name: 'userdata',
+    title: 'label.user.data',
+    param: 'account'
+  }, {
+    name: 'template',
+    title: 'label.templates',
+    param: 'account'
+  }, {
+    name: 'iso',
+    title: 'label.isos',
+    param: 'account'
   }],
+  filters: () => {
+    const filters = ['enabled', 'disabled', 'locked']
+    return filters
+  },
   tabs: [
     {
       name: 'details',
-      component: () => import('@/components/view/DetailsTab.vue')
-    },
-    {
-      name: 'resources',
-      component: () => import('@/components/view/ResourceCountUsage.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
     },
     {
       name: 'limits',
-      show: (record, route, user) => { return ['Admin'].includes(user.roletype) },
-      component: () => import('@/components/view/ResourceLimitTab.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/components/view/ResourceCountUsage.vue')))
+    },
+    {
+      name: 'limits.configure',
+      show: (record, route, user) => { return ['Admin', 'DomainAdmin'].includes(user.roletype) },
+      component: shallowRef(defineAsyncComponent(() => import('@/components/view/ResourceLimitTab.vue')))
     },
     {
       name: 'certificate',
-      component: () => import('@/views/iam/SSLCertificateTab.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/iam/SSLCertificateTab.vue')))
     },
     {
       name: 'settings',
-      component: () => import('@/components/view/SettingsTab.vue'),
-      show: (record, route, user) => { return ['Admin'].includes(user.roletype) }
+      component: shallowRef(defineAsyncComponent(() => import('@/components/view/SettingsTab.vue'))),
+      show: () => { return 'listConfigurations' in store.getters.apis }
+    },
+    {
+      name: 'events',
+      resourceType: 'Account',
+      component: shallowRef(defineAsyncComponent(() => import('@/components/view/EventsTab.vue'))),
+      show: () => { return 'listEvents' in store.getters.apis }
     }
   ],
   actions: [
     {
       api: 'createAccount',
-      icon: 'plus',
+      icon: 'plus-outlined',
       label: 'label.add.account',
       listView: true,
       popup: true,
-      component: () => import('@/views/iam/AddAccount.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/iam/AddAccount.vue')))
     },
     {
       api: 'ldapCreateAccount',
-      icon: 'user-add',
+      icon: 'user-add-outlined',
       label: 'label.add.ldap.account',
       docHelp: 'adminguide/accounts.html#using-an-ldap-server-for-user-authentication',
       listView: true,
@@ -71,26 +119,19 @@ export default {
       show: (record, store) => {
         return store.isLdapEnabled
       },
-      component: () => import('@/views/iam/AddLdapAccount.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/iam/AddLdapAccount.vue')))
     },
     {
       api: 'updateAccount',
-      icon: 'edit',
+      icon: 'edit-outlined',
       label: 'label.action.edit.account',
       dataView: true,
-      args: ['newname', 'account', 'domainid', 'networkdomain'],
-      mapping: {
-        account: {
-          value: (record) => { return record.name }
-        },
-        domainid: {
-          value: (record) => { return record.domainid }
-        }
-      }
+      popup: true,
+      component: shallowRef(defineAsyncComponent(() => import('@/views/iam/EditAccount.vue')))
     },
     {
       api: 'updateResourceCount',
-      icon: 'sync',
+      icon: 'sync-outlined',
       label: 'label.action.update.resource.count',
       message: 'message.update.resource.count',
       dataView: true,
@@ -107,7 +148,7 @@ export default {
     },
     {
       api: 'enableAccount',
-      icon: 'play-circle',
+      icon: 'play-circle-outlined',
       label: 'label.action.enable.account',
       message: 'message.enable.account',
       dataView: true,
@@ -116,11 +157,14 @@ export default {
           !(record.domain === 'ROOT' && record.name === 'admin' && record.accounttype === 1) &&
           (record.state === 'disabled' || record.state === 'locked')
       },
-      params: { lock: 'false' }
+      params: { lock: 'false' },
+      groupAction: true,
+      popup: true,
+      groupMap: (selection) => { return selection.map(x => { return { id: x } }) }
     },
     {
       api: 'disableAccount',
-      icon: 'pause-circle',
+      icon: 'pause-circle-outlined',
       label: 'label.action.disable.account',
       message: 'message.disable.account',
       dataView: true,
@@ -134,11 +178,14 @@ export default {
         lock: {
           value: (record) => { return false }
         }
-      }
+      },
+      groupAction: true,
+      popup: true,
+      groupMap: (selection) => { return selection.map(x => { return { id: x, lock: false } }) }
     },
     {
       api: 'disableAccount',
-      icon: 'lock',
+      icon: 'LockOutlined',
       label: 'label.action.lock.account',
       message: 'message.lock.account',
       dataView: true,
@@ -152,11 +199,14 @@ export default {
         lock: {
           value: (record) => { return true }
         }
-      }
+      },
+      groupAction: true,
+      popup: true,
+      groupMap: (selection) => { return selection.map(x => { return { id: x, lock: true } }) }
     },
     {
       api: 'uploadSslCert',
-      icon: 'safety-certificate',
+      icon: 'SafetyCertificateOutlined',
       label: 'label.add.certificate',
       dataView: true,
       args: ['name', 'certificate', 'privatekey', 'certchain', 'password', 'account', 'domainid'],
@@ -173,14 +223,15 @@ export default {
     },
     {
       api: 'deleteAccount',
-      icon: 'delete',
+      icon: 'delete-outlined',
       label: 'label.action.delete.account',
       message: 'message.delete.account',
       dataView: true,
-      show: (record, store) => {
-        return ['Admin', 'DomainAdmin'].includes(store.userInfo.roletype) && !record.isdefault &&
-          !(record.domain === 'ROOT' && record.name === 'admin' && record.accounttype === 1)
-      }
+      disabled: (record, store) => {
+        return store.userInfo.accountid === record?.id
+      },
+      popup: true,
+      component: shallowRef(defineAsyncComponent(() => import('@/views/iam/DeleteAccountWrapper.vue')))
     }
   ]
 }

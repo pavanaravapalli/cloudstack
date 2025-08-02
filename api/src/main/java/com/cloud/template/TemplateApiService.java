@@ -40,6 +40,7 @@ import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.StorageUnavailableException;
 import com.cloud.user.Account;
 import com.cloud.utils.exception.CloudRuntimeException;
+import org.apache.cloudstack.api.command.user.userdata.LinkUserDataToTemplateCmd;
 import org.apache.cloudstack.api.response.GetUploadParamsResponse;
 
 public interface TemplateApiService {
@@ -56,9 +57,24 @@ public interface TemplateApiService {
 
     VirtualMachineTemplate prepareTemplate(long templateId, long zoneId, Long storageId);
 
-    boolean detachIso(long vmId);
 
-    boolean attachIso(long isoId, long vmId);
+    /**
+     * Detach ISO from VM
+     * @param vmId id of the VM
+     * @param isoId id of the ISO (when passed). If it is not passed, it will get it from user_vm table
+     * @param extraParams forced, isVirtualRouter
+     * @return true when operation succeeds, false if not
+     */
+    boolean detachIso(long vmId, Long isoId, Boolean... extraParams);
+
+    /**
+     * Attach ISO to a VM
+     * @param isoId id of the ISO to attach
+     * @param vmId id of the VM to attach the ISO to
+     * @param extraParams: forced, isVirtualRouter
+     * @return true when operation succeeds, false if not
+     */
+    boolean attachIso(long isoId, long vmId, Boolean... extraParams);
 
     /**
      * Deletes a template
@@ -106,4 +122,6 @@ public interface TemplateApiService {
     VirtualMachineTemplate updateTemplate(UpdateIsoCmd cmd);
 
     VirtualMachineTemplate updateTemplate(UpdateTemplateCmd cmd);
+
+    VirtualMachineTemplate linkUserDataToTemplate(LinkUserDataToTemplateCmd cmd);
 }

@@ -19,6 +19,7 @@ package com.cloud.api.query.vo;
 import java.util.Date;
 
 import javax.persistence.Column;
+import javax.persistence.Convert;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
@@ -30,8 +31,10 @@ import com.cloud.hypervisor.Hypervisor.HypervisorType;
 import com.cloud.storage.Storage;
 import com.cloud.storage.VMTemplateStorageResourceAssoc.Status;
 import com.cloud.storage.Volume;
+import com.cloud.user.Account;
 import com.cloud.utils.db.GenericDao;
 import com.cloud.vm.VirtualMachine;
+import org.apache.cloudstack.util.HypervisorTypeConverter;
 
 @Entity
 @Table(name = "volume_view")
@@ -87,7 +90,8 @@ public class VolumeJoinVO extends BaseViewWithTagInformationVO implements Contro
     private String accountName = null;
 
     @Column(name = "account_type")
-    private short accountType;
+    @Enumerated(value = EnumType.ORDINAL)
+    private Account.Type accountType;
 
     @Column(name = "domain_id")
     private long domainId;
@@ -177,7 +181,7 @@ public class VolumeJoinVO extends BaseViewWithTagInformationVO implements Contro
     private String errorString;
 
     @Column(name = "hypervisor_type")
-    @Enumerated(value = EnumType.STRING)
+    @Convert(converter = HypervisorTypeConverter.class)
     private HypervisorType hypervisorType;
 
     @Column(name = "disk_offering_id")
@@ -270,6 +274,15 @@ public class VolumeJoinVO extends BaseViewWithTagInformationVO implements Contro
     @Column(name = "chain_info", length = 65535)
     String chainInfo;
 
+    @Column(name = "external_uuid")
+    private String externalUuid = null;
+
+    @Column(name = "encrypt_format")
+    private String encryptionFormat = null;
+
+    @Column(name = "delete_protection")
+    protected Boolean deleteProtection;
+
     public VolumeJoinVO() {
     }
 
@@ -342,7 +355,7 @@ public class VolumeJoinVO extends BaseViewWithTagInformationVO implements Contro
     }
 
     @Override
-    public short getAccountType() {
+    public Account.Type getAccountType() {
         return accountType;
     }
 
@@ -597,9 +610,24 @@ public class VolumeJoinVO extends BaseViewWithTagInformationVO implements Contro
         return chainInfo;
     }
 
+    public String getExternalUuid() {
+        return externalUuid;
+    }
+
+    public void setExternalUuid(String externalUuid) {
+        this.externalUuid = externalUuid;
+    }
+
+    public String getEncryptionFormat() {
+        return encryptionFormat;
+    }
+
+    public Boolean getDeleteProtection() {
+        return deleteProtection;
+    }
+
     @Override
     public Class<?> getEntityType() {
         return Volume.class;
     }
-
 }

@@ -17,13 +17,40 @@
 
 <template>
   <span class="row-action-button">
-    <console :resource="resource" :size="size" v-if="resource && resource.id && dataView" />
+    <a-tooltip arrowPointAtCenter placement="bottomRight" v-if="resource && resource.id && dataView && resource.hypervisor !== 'External'">
+      <template #title>
+        {{ $t('label.view.console') }}
+      </template>
+      <console
+        style="margin-top: -5px;"
+        :resource="resource"
+        size="default"
+        v-if="resource.id"
+        icon="code"
+      />
+    </a-tooltip>
+    <a-tooltip arrowPointAtCenter placement="bottomRight" v-if="resource && resource.id && dataView && resource.hypervisor !== 'External'">
+      <template #title>
+        {{ $t('label.copy.consoleurl') }}
+      </template>
+      <console
+        copyUrlToClipboard
+        style="margin-top: -5px;"
+        :resource="resource"
+        size="default"
+        v-if="resource.id"
+        icon="copy"
+      />
+    </a-tooltip>
     <a-tooltip
       v-for="(action, actionIndex) in actions"
       :key="actionIndex"
       arrowPointAtCenter
       placement="bottomRight">
-      <template slot="title">
+      <template v-if="action.hoverLabel" #title>
+        {{ $t(action.hoverLabel) }}
+      </template>
+      <template v-else #title>
         {{ $t(action.label) }}
       </template>
       <a-badge
@@ -32,37 +59,41 @@
         :count="actionBadge[action.api] ? actionBadge[action.api].badgeNum : 0"
         v-if="action.api in $store.getters.apis &&
           action.showBadge && (
-            (!dataView && ((action.listView && ('show' in action ? action.show(resource, $store.getters) : true)) || (action.groupAction && selectedRowKeys.length > 0 && ('groupShow' in action ? action.show(resource, $store.getters) : true)))) ||
+            (!dataView && ((action.listView && ('show' in action ? action.show(resource, $store.getters) : true)) || (action.groupAction && selectedRowKeys.length > 0 && ('groupShow' in action ? action.groupShow(selectedItems, $store.getters) : true)))) ||
             (dataView && action.dataView && ('show' in action ? action.show(resource, $store.getters) : true))
-          )" >
+          )"
+        :disabled="'disabled' in action ? action.disabled(resource, $store.getters) : false" >
         <a-button
-          :type="action.icon === 'delete' ? 'danger' : (action.icon === 'plus' ? 'primary' : 'default')"
-          :shape="!dataView && action.icon === 'plus' ? 'round' : 'circle'"
+          :type="(primaryIconList.includes(action.icon) ? 'primary' : 'default')"
+          :shape="!dataView && ['PlusOutlined', 'plus-outlined'].includes(action.icon) ? 'round' : 'circle'"
+          :danger="dangerIconList.includes(action.icon)"
           style="margin-left: 5px"
           :size="size"
           @click="execAction(action)">
-          <span v-if="!dataView && action.icon === 'plus'">
+          <span v-if="!dataView && ['PlusOutlined', 'plus-outlined'].includes(action.icon)">
             {{ $t(action.label) }}
           </span>
-          <a-icon v-if="(typeof action.icon === 'string')" :type="action.icon" />
+          <render-icon v-if="(typeof action.icon === 'string')" :icon="action.icon" />
           <font-awesome-icon v-else :icon="action.icon" />
         </a-button>
       </a-badge>
       <a-button
         v-if="action.api in $store.getters.apis &&
           !action.showBadge && (
-            (!dataView && ((action.listView && ('show' in action ? action.show(resource, $store.getters) : true)) || (action.groupAction && selectedRowKeys.length > 0 && ('groupShow' in action ? action.show(resource, $store.getters) : true)))) ||
+            (!dataView && ((action.listView && ('show' in action ? action.show(resource, $store.getters) : true)) || (action.groupAction && selectedRowKeys.length > 0 && ('groupShow' in action ? action.groupShow(selectedItems, $store.getters) : true)))) ||
             (dataView && action.dataView && ('show' in action ? action.show(resource, $store.getters) : true))
           )"
-        :type="action.icon === 'delete' ? 'danger' : (action.icon === 'plus' ? 'primary' : 'default')"
-        :shape="!dataView && ['plus', 'user-add'].includes(action.icon) ? 'round' : 'circle'"
+        :disabled="'disabled' in action ? action.disabled(resource, $store.getters) : false"
+        :type="(primaryIconList.includes(action.icon) ? 'primary' : 'default')"
+        :danger="dangerIconList.includes(action.icon)"
+        :shape="!dataView && ['PlusOutlined', 'plus-outlined', 'UserAddOutlined', 'user-add-outlined'].includes(action.icon) ? 'round' : 'circle'"
         style="margin-left: 5px"
         :size="size"
         @click="execAction(action)">
-        <span v-if="!dataView && ['plus', 'user-add'].includes(action.icon)">
+        <span v-if="!dataView && ['PlusOutlined', 'plus-outlined', 'UserAddOutlined', 'user-add-outlined'].includes(action.icon)">
           {{ $t(action.label) }}
         </span>
-        <a-icon v-if="(typeof action.icon === 'string')" :type="action.icon" />
+        <render-icon v-if="(typeof action.icon === 'string')" :icon="action.icon" />
         <font-awesome-icon v-else :icon="action.icon" />
       </a-button>
     </a-tooltip>
@@ -70,7 +101,7 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { postAPI } from '@/api'
 import Console from '@/components/widgets/Console'
 
 export default {
@@ -83,7 +114,7 @@ export default {
       actionBadge: {}
     }
   },
-  mounted () {
+  created () {
     this.handleShowBadge()
   },
   props: {
@@ -109,6 +140,12 @@ export default {
         return []
       }
     },
+    selectedItems: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
     loading: {
       type: Boolean,
       default: false
@@ -119,16 +156,30 @@ export default {
     }
   },
   watch: {
-    resource (newItem, oldItem) {
-      if (!newItem || !newItem.id) {
-        return
+    resource: {
+      deep: true,
+      handler (newItem, oldItem) {
+        if (!newItem || !newItem.id) {
+          return
+        }
+        this.handleShowBadge()
       }
-      this.handleShowBadge()
+    }
+  },
+  computed: {
+    primaryIconList () {
+      return ['PlusOutlined', 'plus-outlined', 'DeleteOutlined', 'delete-outlined', 'UsergroupDeleteOutlined', 'usergroup-delete-outlined']
+    },
+    dangerIconList () {
+      return ['DeleteOutlined', 'delete-outlined', 'UsergroupDeleteOutlined', 'usergroup-delete-outlined']
     }
   },
   methods: {
     execAction (action) {
       action.resource = this.resource
+      if (action.docHelp) {
+        action.docHelp = this.$applyDocHelpMappings(action.docHelp)
+      }
       this.$emit('exec-action', action)
     },
     handleShowBadge () {
@@ -143,7 +194,7 @@ export default {
           const action = actionBadge[i]
 
           arrAsync.push(new Promise((resolve, reject) => {
-            api(action.api, action.param).then(json => {
+            postAPI(action.api, action.param).then(json => {
               let responseJsonName
               const response = {}
 
@@ -170,8 +221,8 @@ export default {
 
         Promise.all(arrAsync).then(response => {
           for (let j = 0; j < response.length; j++) {
-            this.$set(this.actionBadge, response[j].api, {})
-            this.$set(this.actionBadge[response[j].api], 'badgeNum', response[j].count)
+            this.actionBadge[response[j].api] = {}
+            this.actionBadge[response[j].api].badgeNum = response[j].count
           }
         }).catch(() => {})
       }
@@ -185,7 +236,7 @@ export default {
   margin-left: 5px;
 }
 
-/deep/.button-action-badge .ant-badge-count {
+:deep(.button-action-badge) .ant-badge-count {
   right: 10px;
   z-index: 8;
 }

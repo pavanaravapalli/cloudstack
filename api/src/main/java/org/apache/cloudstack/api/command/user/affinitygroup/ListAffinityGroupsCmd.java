@@ -16,12 +16,11 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.affinitygroup;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.affinity.AffinityGroup;
 import org.apache.cloudstack.affinity.AffinityGroupResponse;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseListProjectAndAccountResourcesCmd;
 import org.apache.cloudstack.api.Parameter;
@@ -31,9 +30,7 @@ import org.apache.cloudstack.api.response.UserVmResponse;
 @APICommand(name = "listAffinityGroups", description = "Lists affinity groups", responseObject = AffinityGroupResponse.class, entityType = {AffinityGroup.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListAffinityGroupsCmd extends BaseListProjectAndAccountResourcesCmd {
-    public static final Logger s_logger = Logger.getLogger(ListAffinityGroupsCmd.class.getName());
 
-    private static final String s_name = "listaffinitygroupsresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -78,11 +75,6 @@ public class ListAffinityGroupsCmd extends BaseListProjectAndAccountResourcesCmd
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public void execute() {
         ListResponse<AffinityGroupResponse> response = _queryService.searchForAffinityGroups(this);
         response.setResponseName(getCommandName());
@@ -90,7 +82,7 @@ public class ListAffinityGroupsCmd extends BaseListProjectAndAccountResourcesCmd
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.AffinityGroup;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.AffinityGroup;
     }
 }

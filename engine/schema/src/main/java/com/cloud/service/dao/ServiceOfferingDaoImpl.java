@@ -24,7 +24,8 @@ import java.util.Map;
 import javax.inject.Inject;
 import javax.persistence.EntityExistsException;
 
-import org.apache.log4j.Logger;
+import com.cloud.storage.DiskOfferingVO;
+import com.cloud.storage.dao.DiskOfferingDao;
 import org.springframework.stereotype.Component;
 
 import com.cloud.event.UsageEventVO;
@@ -33,32 +34,35 @@ import com.cloud.service.ServiceOfferingVO;
 import com.cloud.storage.Storage.ProvisioningType;
 import com.cloud.utils.db.DB;
 import com.cloud.utils.db.GenericDaoBase;
+import com.cloud.utils.db.GenericSearchBuilder;
 import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.vm.VirtualMachine;
-import com.cloud.vm.dao.UserVmDetailsDao;
+import com.cloud.vm.dao.VMInstanceDetailsDao;
 
 @Component
 @DB()
 public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Long> implements ServiceOfferingDao {
-    protected static final Logger s_logger = Logger.getLogger(ServiceOfferingDaoImpl.class);
 
     @Inject
     protected ServiceOfferingDetailsDao detailsDao;
     @Inject
-    protected UserVmDetailsDao userVmDetailsDao;
+    protected VMInstanceDetailsDao vmInstanceDetailsDao;
+    @Inject
+    private DiskOfferingDao diskOfferingDao;
 
     protected final SearchBuilder<ServiceOfferingVO> UniqueNameSearch;
     protected final SearchBuilder<ServiceOfferingVO> ServiceOfferingsByKeywordSearch;
     protected final SearchBuilder<ServiceOfferingVO> PublicCpuRamSearch;
+    protected final SearchBuilder<ServiceOfferingVO> SearchComputeOfferingByComputeOnlyDiskOffering;
 
     public ServiceOfferingDaoImpl() {
         super();
 
         UniqueNameSearch = createSearchBuilder();
         UniqueNameSearch.and("name", UniqueNameSearch.entity().getUniqueName(), SearchCriteria.Op.EQ);
-        UniqueNameSearch.and("system", UniqueNameSearch.entity().isSystemUse(), SearchCriteria.Op.EQ);
+        UniqueNameSearch.and("system_use", UniqueNameSearch.entity().isSystemUse(), SearchCriteria.Op.EQ);
         UniqueNameSearch.done();
 
         ServiceOfferingsByKeywordSearch = createSearchBuilder();
@@ -71,13 +75,17 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
         PublicCpuRamSearch.and("ram", PublicCpuRamSearch.entity().getRamSize(), SearchCriteria.Op.EQ);
         PublicCpuRamSearch.and("system_use", PublicCpuRamSearch.entity().isSystemUse(), SearchCriteria.Op.EQ);
         PublicCpuRamSearch.done();
+
+        SearchComputeOfferingByComputeOnlyDiskOffering = createSearchBuilder();
+        SearchComputeOfferingByComputeOnlyDiskOffering.and("disk_offering_id", SearchComputeOfferingByComputeOnlyDiskOffering.entity().getDiskOfferingId(), SearchCriteria.Op.EQ);
+        SearchComputeOfferingByComputeOnlyDiskOffering.done();
     }
 
     @Override
     public ServiceOfferingVO findByName(String name) {
         SearchCriteria<ServiceOfferingVO> sc = UniqueNameSearch.create();
         sc.setParameters("name", name);
-        sc.setParameters("system", true);
+        sc.setParameters("system_use", true);
         List<ServiceOfferingVO> vos = search(sc, null, null, false);
         if (vos.size() == 0) {
             return null;
@@ -92,13 +100,14 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
         assert offering.getUniqueName() != null : "how are you going to find this later if you don't set it?";
         ServiceOfferingVO vo = findByName(offering.getUniqueName());
         if (vo != null) {
+            DiskOfferingVO diskOfferingVO = diskOfferingDao.findById(vo.getDiskOfferingId());
             // check invalid CPU speed in system service offering, set it to default value of 500 Mhz if 0 CPU speed is found
             if (vo.getSpeed() <= 0) {
                 vo.setSpeed(500);
                 update(vo.getId(), vo);
             }
             if (!vo.getUniqueName().endsWith("-Local")) {
-                if (vo.isUseLocalStorage()) {
+                if (diskOfferingVO.isUseLocalStorage()) {
                     vo.setUniqueName(vo.getUniqueName() + "-Local");
                     vo.setName(vo.getName() + " - Local Storage");
                     update(vo.getId(), vo);
@@ -167,7 +176,7 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
             if (vmId == null) {
                 throw new CloudRuntimeException("missing argument vmId");
             }
-            Map<String, String> dynamicOffering = userVmDetailsDao.listDetailsKeyPairs(vmId);
+            Map<String, String> dynamicOffering = vmInstanceDetailsDao.listDetailsKeyPairs(vmId);
             return getComputeOffering(offering, dynamicOffering);
         }
         return offering;
@@ -181,7 +190,7 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
             if (vmId == null) {
                 throw new CloudRuntimeException("missing argument vmId");
             }
-            Map<String, String> dynamicOffering = userVmDetailsDao.listDetailsKeyPairs(vmId);
+            Map<String, String> dynamicOffering = vmInstanceDetailsDao.listDetailsKeyPairs(vmId);
             return getComputeOffering(offering, dynamicOffering);
         }
         return offering;
@@ -214,23 +223,33 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
     public List<ServiceOfferingVO> createSystemServiceOfferings(String name, String uniqueName, int cpuCount, int ramSize, int cpuSpeed,
             Integer rateMbps, Integer multicastRateMbps, boolean offerHA, String displayText, ProvisioningType provisioningType,
             boolean recreatable, String tags, boolean systemUse, VirtualMachine.Type vmType, boolean defaultUse) {
+        DiskOfferingVO diskOfferingVO = new DiskOfferingVO(name, displayText, provisioningType, false, tags, recreatable, false, true);
+        diskOfferingVO.setUniqueName(uniqueName);
+        diskOfferingVO = diskOfferingDao.persistDefaultDiskOffering(diskOfferingVO);
+
         List<ServiceOfferingVO> list = new ArrayList<ServiceOfferingVO>();
         ServiceOfferingVO offering = new ServiceOfferingVO(name, cpuCount, ramSize, cpuSpeed, rateMbps, multicastRateMbps, offerHA, displayText,
-                provisioningType, false, recreatable, tags, systemUse, vmType, defaultUse);
+                systemUse, vmType, defaultUse);
         offering.setUniqueName(uniqueName);
+        offering.setDiskOfferingId(diskOfferingVO.getId());
         offering = persistSystemServiceOffering(offering);
         if (offering != null) {
             list.add(offering);
         }
 
         boolean useLocal = true;
-        if (offering.isUseLocalStorage()) { // if 1st one is already local then 2nd needs to be shared
+        if (diskOfferingVO.isUseLocalStorage()) { // if 1st one is already local then 2nd needs to be shared
             useLocal = false;
         }
 
+        diskOfferingVO = new DiskOfferingVO(name + (useLocal ? " - Local Storage" : ""), displayText, provisioningType, false, tags, recreatable, useLocal, true);
+        diskOfferingVO.setUniqueName(uniqueName + (useLocal ? "-Local" : ""));
+        diskOfferingVO = diskOfferingDao.persistDefaultDiskOffering(diskOfferingVO);
+
         offering = new ServiceOfferingVO(name + (useLocal ? " - Local Storage" : ""), cpuCount, ramSize, cpuSpeed, rateMbps, multicastRateMbps, offerHA, displayText,
-                provisioningType, useLocal, recreatable, tags, systemUse, vmType, defaultUse);
+                systemUse, vmType, defaultUse);
         offering.setUniqueName(uniqueName + (useLocal ? "-Local" : ""));
+        offering.setDiskOfferingId(diskOfferingVO.getId());
         offering = persistSystemServiceOffering(offering);
         if (offering != null) {
             list.add(offering);
@@ -248,7 +267,7 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
         ServiceOfferingVO serviceOffering = findByName(name);
         if (serviceOffering == null) {
             String message = "System service offering " + name + " not found";
-            s_logger.error(message);
+            logger.error(message);
             throw new CloudRuntimeException(message);
         }
         return serviceOffering;
@@ -261,5 +280,45 @@ public class ServiceOfferingDaoImpl extends GenericDaoBase<ServiceOfferingVO, Lo
         sc.setParameters("ram", memory);
         sc.setParameters("system_use", false);
         return listBy(sc);
+    }
+
+    @Override
+    public ServiceOfferingVO findServiceOfferingByComputeOnlyDiskOffering(long diskOfferingId, boolean includingRemoved) {
+        SearchCriteria<ServiceOfferingVO> sc = SearchComputeOfferingByComputeOnlyDiskOffering.create();
+        sc.setParameters("disk_offering_id", diskOfferingId);
+        List<ServiceOfferingVO> vos = includingRemoved ? listIncludingRemovedBy(sc) : listBy(sc);
+        if (vos.size() == 0) {
+            return null;
+        }
+        return vos.get(0);
+    }
+
+    @Override
+    public List<Long> listIdsByHostTag(String tag) {
+        GenericSearchBuilder<ServiceOfferingVO, Long> sb = createSearchBuilder(Long.class);
+        sb.selectFields(sb.entity().getId());
+        sb.and("tagNotNull", sb.entity().getHostTag(), SearchCriteria.Op.NNULL);
+        sb.and().op("tagEq", sb.entity().getHostTag(), SearchCriteria.Op.EQ);
+        sb.or("tagStartLike", sb.entity().getHostTag(), SearchCriteria.Op.LIKE);
+        sb.or("tagMidLike", sb.entity().getHostTag(), SearchCriteria.Op.LIKE);
+        sb.or("tagEndLike", sb.entity().getHostTag(), SearchCriteria.Op.LIKE);
+        sb.cp();
+        sb.done();
+        SearchCriteria<Long> sc = sb.create();
+
+        sc.setParameters("tagEq", tag);
+        sc.setParameters("tagStartLike", tag + ",%");
+        sc.setParameters("tagMidLike", "%," + tag + ",%");
+        sc.setParameters("tagEndLike",   "%," + tag);
+        return customSearch(sc, null);
+    }
+
+    @Override
+    public void addCheckForGpuEnabled(SearchBuilder<ServiceOfferingVO> serviceOfferingSearch, Boolean gpuEnabled) {
+        if (gpuEnabled) {
+            serviceOfferingSearch.and("gpuEnabled", serviceOfferingSearch.entity().getVgpuProfileId(), SearchCriteria.Op.NNULL);
+        } else {
+            serviceOfferingSearch.and("gpuDisabled", serviceOfferingSearch.entity().getVgpuProfileId(), SearchCriteria.Op.NULL);
+        }
     }
 }

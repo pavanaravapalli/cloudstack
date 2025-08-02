@@ -32,6 +32,7 @@ public class StartupRoutingCommand extends StartupCommand {
     Integer cpuSockets;
     int cpus;
     long speed;
+    String cpuArch;
     long memory;
     long dom0MinMemory;
     boolean poolSync;
@@ -44,6 +45,8 @@ public class StartupRoutingCommand extends StartupCommand {
     List<String> hostTags = new ArrayList<String>();
     String hypervisorVersion;
     HashMap<String, HashMap<String, VgpuTypesInfo>> groupDetails = new HashMap<String, HashMap<String, VgpuTypesInfo>>();
+    List<VgpuTypesInfo> gpuDevices = new ArrayList<>();
+    private Boolean hostHealthCheckResult;
 
     public StartupRoutingCommand() {
         super(Host.Type.Routing);
@@ -173,12 +176,24 @@ public class StartupRoutingCommand extends StartupCommand {
         this.hostTags.add(hostTag);
     }
 
-    public  HashMap<String, HashMap<String, VgpuTypesInfo>> getGpuGroupDetails() {
+    public void setHostTags(List<String> hostTags) {
+        this.hostTags = hostTags;
+    }
+
+    public HashMap<String, HashMap<String, VgpuTypesInfo>> getGpuGroupDetails() {
         return groupDetails;
     }
 
     public void setGpuGroupDetails(HashMap<String, HashMap<String, VgpuTypesInfo>> groupDetails) {
         this.groupDetails = groupDetails;
+    }
+
+    public List<VgpuTypesInfo> getGpuDevices() {
+        return gpuDevices;
+    }
+
+    public void setGpuDevices(List<VgpuTypesInfo> gpuDevices) {
+        this.gpuDevices = gpuDevices;
     }
 
     public boolean getSupportsClonedVolumes() {
@@ -187,5 +202,21 @@ public class StartupRoutingCommand extends StartupCommand {
 
     public void setSupportsClonedVolumes(boolean supportsClonedVolumes) {
         this.supportsClonedVolumes = supportsClonedVolumes;
+    }
+
+    public Boolean getHostHealthCheckResult() {
+        return hostHealthCheckResult;
+    }
+
+    public void setHostHealthCheckResult(Boolean hostHealthCheckResult) {
+        this.hostHealthCheckResult = hostHealthCheckResult;
+    }
+
+    public String getCpuArch() {
+        return cpuArch;
+    }
+
+    public void setCpuArch(String cpuArch) {
+        this.cpuArch = cpuArch;
     }
 }

@@ -22,7 +22,6 @@ import java.util.List;
 
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.network.topology.NetworkTopologyVisitor;
-import org.apache.log4j.Logger;
 
 import com.cloud.dc.DataCenter;
 import com.cloud.dc.DataCenter.NetworkType;
@@ -59,7 +58,6 @@ import com.cloud.vm.dao.UserVmDao;
 
 public class DhcpSubNetRules extends RuleApplier {
 
-    private static final Logger s_logger = Logger.getLogger(DhcpSubNetRules.class);
 
     private final NicProfile _nic;
     private final VirtualMachineProfile _profile;
@@ -123,17 +121,17 @@ public class DhcpSubNetRules extends RuleApplier {
                         IpAddressManager ipAddrMgr = visitor.getVirtualNetworkApplianceFactory().getIpAddrMgr();
                         if (dc.getNetworkType() == NetworkType.Basic) {
                             routerPublicIP = ipAddrMgr.assignPublicIpAddressFromVlans(_router.getDataCenterId(), vm.getPodIdToDeployIn(), caller, Vlan.VlanType.DirectAttached,
-                                    vlanDbIdList, _nic.getNetworkId(), null, false);
+                                    vlanDbIdList, _nic.getNetworkId(), null, _nic.getIPv4Gateway(), false);
                         } else {
                             routerPublicIP = ipAddrMgr.assignPublicIpAddressFromVlans(_router.getDataCenterId(), null, caller, Vlan.VlanType.DirectAttached, vlanDbIdList,
-                                    _nic.getNetworkId(), null, false);
+                                    _nic.getNetworkId(), null, _nic.getIPv4Gateway(), false);
                         }
 
                         _routerAliasIp = routerPublicIP.getAddress().addr();
                     }
                 } catch (final InsufficientAddressCapacityException e) {
-                    s_logger.info(e.getMessage());
-                    s_logger.info("unable to configure dhcp for this VM.");
+                    logger.info(e.getMessage());
+                    logger.info("unable to configure dhcp for this VM {}", vm);
                     return false;
                 }
                 // this means we did not create an IP alias on the router.

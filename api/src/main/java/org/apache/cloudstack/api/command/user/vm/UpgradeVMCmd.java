@@ -16,12 +16,8 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vm;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
@@ -44,12 +40,12 @@ import com.cloud.user.Account;
 import com.cloud.uservm.UserVm;
 import com.cloud.vm.VirtualMachine;
 
-@APICommand(name = "changeServiceForVirtualMachine", responseObject=UserVmResponse.class, description="Changes the service offering for a virtual machine. " +
-                                            "The virtual machine must be in a \"Stopped\" state for " +
+@Deprecated(since = "4.18")
+@APICommand(name = "changeServiceForVirtualMachine", responseObject=UserVmResponse.class, description="(This API is deprecated, use scaleVirtualMachine API)" +
+        "Changes the service offering for a virtual machine. The virtual machine must be in a \"Stopped\" state for " +
         "this command to take effect.", responseView = ResponseView.Restricted, entityType = {VirtualMachine.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = true)
 public class UpgradeVMCmd extends BaseCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(UpgradeVMCmd.class.getName());
     private static final String s_name = "changeserviceforvirtualmachineresponse";
 
     /////////////////////////////////////////////////////
@@ -65,8 +61,21 @@ public class UpgradeVMCmd extends BaseCmd implements UserCmd {
             required=true, description="the service offering ID to apply to the virtual machine")
     protected Long serviceOfferingId;
 
-    @Parameter(name = ApiConstants.DETAILS, type = CommandType.MAP, description = "name value pairs of custom parameters for cpu, memory and cpunumber. example details[i].name=value")
+    @Parameter(name = ApiConstants.DETAILS, type = CommandType.MAP, description = "name value pairs of custom parameters for cpuspeed, memory and cpunumber. example details[i].name=value")
     private Map<String, String> details;
+
+    @Parameter(name = ApiConstants.MIN_IOPS, type = CommandType.LONG, required = false, description = "New minimum number of IOPS for the custom disk offering", since = "4.17")
+    private Long minIops;
+
+    @Parameter(name = ApiConstants.MAX_IOPS, type = CommandType.LONG, required = false, description = "New maximum number of IOPS for the custom disk offering", since = "4.17")
+    private Long maxIops;
+
+    @Parameter(name = ApiConstants.AUTO_MIGRATE, type = CommandType.BOOLEAN, required = false, description = "Flag for automatic migration of the root volume " +
+            "with new compute offering whenever migration is required to apply the offering", since = "4.17")
+    private Boolean autoMigrate;
+
+    @Parameter(name = ApiConstants.SHRINK_OK, type = CommandType.BOOLEAN, required = false, description = "Verify OK to Shrink", since = "4.17")
+    private Boolean shrinkOk;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -81,19 +90,29 @@ public class UpgradeVMCmd extends BaseCmd implements UserCmd {
     }
 
     public Map<String, String> getDetails() {
-        Map<String, String> customparameterMap = new HashMap<String, String>();
-        if (details != null && details.size() != 0) {
-            Collection parameterCollection = details.values();
-            Iterator iter = parameterCollection.iterator();
-            while (iter.hasNext()) {
-                HashMap<String, String> value = (HashMap<String, String>)iter.next();
-                for (String key : value.keySet()) {
-                    customparameterMap.put(key, value.get(key));
-                }
-            }
-        }
+        Map<String, String> customparameterMap = convertDetailsToMap(details);
+
+        if (shrinkOk != null) customparameterMap.put(ApiConstants.SHRINK_OK, String.valueOf(isShrinkOk()));
+        if (autoMigrate != null) customparameterMap.put(ApiConstants.AUTO_MIGRATE, String.valueOf(getAutoMigrate()));
+        if (getMinIops() != null) customparameterMap.put(ApiConstants.MIN_IOPS, String.valueOf(getMinIops()));
+        if (getMaxIops() != null) customparameterMap.put(ApiConstants.MAX_IOPS, String.valueOf(getMaxIops()));
+
         return customparameterMap;
     }
+
+    public Long getMinIops() {
+        return minIops;
+    }
+
+    public Long getMaxIops() {
+        return maxIops;
+    }
+
+    public boolean getAutoMigrate() {
+        return autoMigrate == null ? true : autoMigrate;
+    }
+
+    public boolean isShrinkOk() { return shrinkOk == null ? true : shrinkOk; }
 
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////

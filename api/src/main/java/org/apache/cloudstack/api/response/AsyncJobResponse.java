@@ -32,8 +32,20 @@ import com.cloud.serializer.Param;
 public class AsyncJobResponse extends BaseResponse {
 
     @SerializedName("accountid")
-    @Param(description = "the account that executed the async command")
+    @Param(description = "the account id that executed the async command")
     private String accountId;
+
+    @SerializedName("account")
+    @Param(description = "the account that executed the async command")
+    private String account;
+
+    @SerializedName("domainid")
+    @Param(description = "the domain id that executed the async command")
+    private String domainid;
+
+    @SerializedName("domainpath")
+    @Param(description = "the domain that executed the async command")
+    private String domainPath;
 
     @SerializedName(ApiConstants.USER_ID)
     @Param(description = "the user that executed the async command")
@@ -42,10 +54,6 @@ public class AsyncJobResponse extends BaseResponse {
     @SerializedName("cmd")
     @Param(description = "the async command executed")
     private String cmd;
-
-    @SerializedName("jobstatus")
-    @Param(description = "the current job status-should be 0 for PENDING")
-    private Integer jobStatus;
 
     @SerializedName("jobprocstatus")
     @Param(description = "the progress information of the PENDING job")
@@ -71,6 +79,14 @@ public class AsyncJobResponse extends BaseResponse {
     @Param(description = "the unique ID of the instance/entity object related to the job")
     private String jobInstanceId;
 
+    @SerializedName(ApiConstants.MANAGEMENT_SERVER_ID)
+    @Param(description = "the msid of the management server on which the job is running", since = "4.19")
+    private String managementServerId;
+
+    @SerializedName(ApiConstants.MANAGEMENT_SERVER_NAME)
+    @Param(description = "the management server name of the host", since = "4.21.0")
+    private String managementServerName;
+
     @SerializedName(ApiConstants.CREATED)
     @Param(description = "  the created date of the job")
     private Date created;
@@ -83,17 +99,24 @@ public class AsyncJobResponse extends BaseResponse {
         this.accountId = accountId;
     }
 
+    public void setAccount(String account) {
+        this.account = account;
+    }
+
+    public void setDomainId(String domainid) {
+        this.domainid = domainid;
+    }
+
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
+    }
+
     public void setUserId(String userId) {
         this.userId = userId;
     }
 
     public void setCmd(String cmd) {
         this.cmd = cmd;
-    }
-
-    @Override
-    public void setJobStatus(Integer jobStatus) {
-        this.jobStatus = jobStatus;
     }
 
     public void setJobProcStatus(Integer jobProcStatus) {
@@ -126,5 +149,13 @@ public class AsyncJobResponse extends BaseResponse {
 
     public void setRemoved(final Date removed) {
         this.removed = removed;
+    }
+
+    public void setManagementServerId(String managementServerId) {
+        this.managementServerId = managementServerId;
+    }
+
+    public void setManagementServerName(String managementServerName) {
+        this.managementServerName = managementServerName;
     }
 }

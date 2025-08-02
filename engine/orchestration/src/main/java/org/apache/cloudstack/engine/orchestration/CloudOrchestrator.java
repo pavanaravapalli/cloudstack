@@ -18,6 +18,9 @@
  */
 package org.apache.cloudstack.engine.orchestration;
 
+import com.cloud.storage.Snapshot;
+import com.cloud.storage.Volume;
+import com.cloud.template.VirtualMachineTemplate;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,9 +60,13 @@ import com.cloud.utils.component.ComponentContext;
 import com.cloud.vm.NicProfile;
 import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachineManager;
+import com.cloud.vm.VmDiskInfo;
 import com.cloud.vm.dao.UserVmDao;
-import com.cloud.vm.dao.UserVmDetailsDao;
+import com.cloud.vm.dao.VMInstanceDetailsDao;
 import com.cloud.vm.dao.VMInstanceDao;
+
+import static org.apache.cloudstack.api.ApiConstants.MAX_IOPS;
+import static org.apache.cloudstack.api.ApiConstants.MIN_IOPS;
 
 @Component
 public class CloudOrchestrator implements OrchestrationService {
@@ -80,7 +87,7 @@ public class CloudOrchestrator implements OrchestrationService {
     protected UserVmDao _userVmDao = null;
 
     @Inject
-    protected UserVmDetailsDao _userVmDetailsDao = null;
+    protected VMInstanceDetailsDao _vmInstanceDetailsDao = null;
 
     @Inject
     protected ServiceOfferingDao _serviceOfferingDao;
@@ -155,8 +162,9 @@ public class CloudOrchestrator implements OrchestrationService {
 
     @Override
     public VirtualMachineEntity createVirtualMachine(String id, String owner, String templateId, String hostName, String displayName, String hypervisor, int cpu,
-        int speed, long memory, Long diskSize, List<String> computeTags, List<String> rootDiskTags, Map<String, List<NicProfile>> networkNicMap, DeploymentPlan plan,
-        Long rootDiskSize, Map<String, Map<Integer, String>> extraDhcpOptionMap, Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap) throws InsufficientCapacityException {
+                                                     int speed, long memory, Long diskSize, List<String> computeTags, List<String> rootDiskTags, Map<String, List<NicProfile>> networkNicMap, DeploymentPlan plan,
+                                                     Long rootDiskSize, Map<String, Map<Integer, String>> extraDhcpOptionMap, Map<Long, DiskOffering> dataDiskTemplateToDiskOfferingMap, Long dataDiskOfferingId, Long rootDiskOfferingId,
+                                                     List<VmDiskInfo> dataDiskInfoList, Volume volume, Snapshot snapshot) throws InsufficientCapacityException {
 
         // VirtualMachineEntityImpl vmEntity = new VirtualMachineEntityImpl(id, owner, hostName, displayName, cpu, speed, memory, computeTags, rootDiskTags, networks,
         // vmEntityManager);
@@ -181,80 +189,98 @@ public class CloudOrchestrator implements OrchestrationService {
         // Else, a disk offering is optional, and if present will be used to create the data disk
 
         DiskOfferingInfo rootDiskOfferingInfo = new DiskOfferingInfo();
-        List<DiskOfferingInfo> dataDiskOfferings = new ArrayList<DiskOfferingInfo>();
 
         ServiceOfferingVO computeOffering = _serviceOfferingDao.findById(vm.getId(), vm.getServiceOfferingId());
 
-        rootDiskOfferingInfo.setDiskOffering(computeOffering);
+        DiskOfferingVO rootDiskOffering = _diskOfferingDao.findById(rootDiskOfferingId);
+        if (rootDiskOffering == null) {
+            throw new InvalidParameterValueException("Unable to find root disk offering " + rootDiskOfferingId);
+        }
+        rootDiskOfferingInfo.setDiskOffering(rootDiskOffering);
         rootDiskOfferingInfo.setSize(rootDiskSize);
 
-        if (computeOffering.isCustomizedIops() != null && computeOffering.isCustomizedIops()) {
-            Map<String, String> userVmDetails = _userVmDetailsDao.listDetailsKeyPairs(vm.getId());
+        if (rootDiskOffering.isCustomizedIops() != null && rootDiskOffering.isCustomizedIops()) {
+            Map<String, String> userVmDetails = _vmInstanceDetailsDao.listDetailsKeyPairs(vm.getId());
 
             if (userVmDetails != null) {
-                String minIops = userVmDetails.get("minIops");
-                String maxIops = userVmDetails.get("maxIops");
+                String minIops = userVmDetails.get(MIN_IOPS);
+                String maxIops = userVmDetails.get(MAX_IOPS);
 
                 rootDiskOfferingInfo.setMinIops(minIops != null && minIops.trim().length() > 0 ? Long.parseLong(minIops) : null);
                 rootDiskOfferingInfo.setMaxIops(maxIops != null && maxIops.trim().length() > 0 ? Long.parseLong(maxIops) : null);
             }
         }
 
-        if (vm.getDiskOfferingId() != null) {
-            DiskOfferingVO diskOffering = _diskOfferingDao.findById(vm.getDiskOfferingId());
+        List<DiskOfferingInfo> dataDiskOfferings = new ArrayList<DiskOfferingInfo>();
+        List<Long> dataDiskDeviceIds = new ArrayList<>();
+        if (dataDiskOfferingId != null) {
+            DiskOfferingVO diskOffering = _diskOfferingDao.findById(dataDiskOfferingId);
             if (diskOffering == null) {
-                throw new InvalidParameterValueException("Unable to find disk offering " + vm.getDiskOfferingId());
+                throw new InvalidParameterValueException("Unable to find data disk offering " + dataDiskOfferingId);
             }
-            Long size = null;
-            if (diskOffering.getDiskSize() == 0) {
-                size = diskSize;
-                if (size == null) {
-                    throw new InvalidParameterValueException("Disk offering " + diskOffering + " requires size parameter.");
+            if (!diskOffering.isComputeOnly()) {
+                Long size = null;
+                if (diskOffering.getDiskSize() == 0) {
+                    size = diskSize;
+                    if (size == null) {
+                        throw new InvalidParameterValueException("Disk offering " + diskOffering + " requires size parameter.");
+                    }
+                    _volumeMgr.validateVolumeSizeRange(size * 1024 * 1024 * 1024);
                 }
-                _volumeMgr.validateVolumeSizeRange(size * 1024 * 1024 * 1024);
-            }
 
-            DiskOfferingInfo dataDiskOfferingInfo = new DiskOfferingInfo();
+                DiskOfferingInfo dataDiskOfferingInfo = new DiskOfferingInfo();
 
-            dataDiskOfferingInfo.setDiskOffering(diskOffering);
-            dataDiskOfferingInfo.setSize(size);
+                dataDiskOfferingInfo.setDiskOffering(diskOffering);
+                dataDiskOfferingInfo.setSize(size);
 
-            if (diskOffering.isCustomizedIops() != null && diskOffering.isCustomizedIops()) {
-                Map<String, String> userVmDetails = _userVmDetailsDao.listDetailsKeyPairs(vm.getId());
+                if (diskOffering.isCustomizedIops() != null && diskOffering.isCustomizedIops()) {
+                    Map<String, String> userVmDetails = _vmInstanceDetailsDao.listDetailsKeyPairs(vm.getId());
 
-                if (userVmDetails != null) {
-                    String minIops = userVmDetails.get("minIopsDo");
-                    String maxIops = userVmDetails.get("maxIopsDo");
+                    if (userVmDetails != null) {
+                        String minIops = userVmDetails.get("minIopsDo");
+                        String maxIops = userVmDetails.get("maxIopsDo");
 
-                    dataDiskOfferingInfo.setMinIops(minIops != null && minIops.trim().length() > 0 ? Long.parseLong(minIops) : null);
-                    dataDiskOfferingInfo.setMaxIops(maxIops != null && maxIops.trim().length() > 0 ? Long.parseLong(maxIops) : null);
+                        dataDiskOfferingInfo.setMinIops(minIops != null && minIops.trim().length() > 0 ? Long.parseLong(minIops) : null);
+                        dataDiskOfferingInfo.setMaxIops(maxIops != null && maxIops.trim().length() > 0 ? Long.parseLong(maxIops) : null);
+                    }
                 }
-            }
 
-            dataDiskOfferings.add(dataDiskOfferingInfo);
+                dataDiskOfferings.add(dataDiskOfferingInfo);
+                dataDiskDeviceIds.add(null);
+            }
+        } else if (dataDiskInfoList != null){
+            dataDiskOfferings.addAll(dataDiskInfoList);
+            for (VmDiskInfo dataDiskInfo : dataDiskInfoList) {
+                dataDiskDeviceIds.add(dataDiskInfo.getDeviceId());
+            }
         }
 
         if (dataDiskTemplateToDiskOfferingMap != null && !dataDiskTemplateToDiskOfferingMap.isEmpty()) {
             for (Entry<Long, DiskOffering> datadiskTemplateToDiskOffering : dataDiskTemplateToDiskOfferingMap.entrySet()) {
-                DiskOffering diskOffering = datadiskTemplateToDiskOffering.getValue();
-                if (diskOffering == null) {
-                    throw new InvalidParameterValueException("Unable to find disk offering " + vm.getDiskOfferingId());
+                DiskOffering dataDiskOffering = datadiskTemplateToDiskOffering.getValue();
+                if (dataDiskOffering == null) {
+                    throw new InvalidParameterValueException("Unable to find disk offering " + dataDiskOfferingId);
                 }
-                if (diskOffering.getDiskSize() == 0) { // Custom disk offering is not supported for volumes created from datadisk templates
-                    throw new InvalidParameterValueException("Disk offering " + diskOffering + " requires size parameter.");
+                if (dataDiskOffering.getDiskSize() == 0) { // Custom disk offering is not supported for volumes created from datadisk templates
+                    throw new InvalidParameterValueException("Disk offering " + dataDiskOffering + " requires size parameter.");
                 }
             }
         }
-
-        _itMgr.allocate(vm.getInstanceName(), _templateDao.findById(new Long(templateId)), computeOffering, rootDiskOfferingInfo, dataDiskOfferings, networkIpMap, plan,
-            hypervisorType, extraDhcpOptionMap, dataDiskTemplateToDiskOfferingMap);
+        VirtualMachineTemplate template = null;
+        if (volume != null || snapshot != null) {
+            template = _templateDao.findByIdIncludingRemoved(new Long(templateId));
+        } else
+            template = _templateDao.findById(new Long(templateId));
+        _itMgr.allocate(vm.getInstanceName(), template, computeOffering, rootDiskOfferingInfo, dataDiskOfferings, dataDiskDeviceIds,
+                networkIpMap, plan, hypervisorType, extraDhcpOptionMap, dataDiskTemplateToDiskOfferingMap, volume, snapshot);
 
         return vmEntity;
     }
 
     @Override
     public VirtualMachineEntity createVirtualMachineFromScratch(String id, String owner, String isoId, String hostName, String displayName, String hypervisor, String os,
-        int cpu, int speed, long memory, Long diskSize, List<String> computeTags, List<String> rootDiskTags, Map<String, List<NicProfile>> networkNicMap, DeploymentPlan plan, Map<String, Map<Integer, String>> extraDhcpOptionMap)
+        int cpu, int speed, long memory, Long diskSize, List<String> computeTags, List<String> rootDiskTags, Map<String, List<NicProfile>> networkNicMap, DeploymentPlan plan,
+        Map<String, Map<Integer, String>> extraDhcpOptionMap, Long diskOfferingId, List<VmDiskInfo> dataDiskInfoList, Volume volume, Snapshot snapshot)
         throws InsufficientCapacityException {
 
         // VirtualMachineEntityImpl vmEntity = new VirtualMachineEntityImpl(id, owner, hostName, displayName, cpu, speed, memory, computeTags, rootDiskTags, networks, vmEntityManager);
@@ -268,9 +294,6 @@ public class CloudOrchestrator implements OrchestrationService {
 
         DiskOfferingInfo rootDiskOfferingInfo = new DiskOfferingInfo();
 
-        rootDiskOfferingInfo.setDiskOffering(computeOffering);
-
-        Long diskOfferingId = vm.getDiskOfferingId();
         if (diskOfferingId == null) {
             throw new InvalidParameterValueException("Installing from ISO requires a disk offering to be specified for the root disk.");
         }
@@ -278,8 +301,10 @@ public class CloudOrchestrator implements OrchestrationService {
         if (diskOffering == null) {
             throw new InvalidParameterValueException("Unable to find disk offering " + diskOfferingId);
         }
+        rootDiskOfferingInfo.setDiskOffering(diskOffering);
+
         Long size = null;
-        if (diskOffering.getDiskSize() == 0) {
+        if (!diskOffering.isComputeOnly() && diskOffering.getDiskSize() == 0) {
             size = diskSize;
             if (size == null) {
                 throw new InvalidParameterValueException("Disk offering " + diskOffering + " requires size parameter.");
@@ -291,7 +316,7 @@ public class CloudOrchestrator implements OrchestrationService {
         rootDiskOfferingInfo.setSize(size);
 
         if (diskOffering.isCustomizedIops() != null && diskOffering.isCustomizedIops()) {
-            Map<String, String> userVmDetails = _userVmDetailsDao.listDetailsKeyPairs(vm.getId());
+            Map<String, String> userVmDetails = _vmInstanceDetailsDao.listDetailsKeyPairs(vm.getId());
 
             if (userVmDetails != null) {
                 String minIops = userVmDetails.get("minIopsDo");
@@ -299,6 +324,14 @@ public class CloudOrchestrator implements OrchestrationService {
 
                 rootDiskOfferingInfo.setMinIops(minIops != null && minIops.trim().length() > 0 ? Long.parseLong(minIops) : null);
                 rootDiskOfferingInfo.setMaxIops(maxIops != null && maxIops.trim().length() > 0 ? Long.parseLong(maxIops) : null);
+            }
+        }
+        List<DiskOfferingInfo> dataDiskOfferings = new ArrayList<>();
+        List<Long> dataDiskDeviceIds = new ArrayList<>();
+        if (dataDiskInfoList != null) {
+            dataDiskOfferings.addAll(dataDiskInfoList);
+            for (VmDiskInfo dataDiskInfo : dataDiskInfoList) {
+                dataDiskDeviceIds.add(dataDiskInfo.getDeviceId());
             }
         }
 
@@ -312,7 +345,8 @@ public class CloudOrchestrator implements OrchestrationService {
 
         HypervisorType hypervisorType = HypervisorType.valueOf(hypervisor);
 
-        _itMgr.allocate(vm.getInstanceName(), _templateDao.findById(new Long(isoId)), computeOffering, rootDiskOfferingInfo, new ArrayList<DiskOfferingInfo>(), networkIpMap, plan, hypervisorType, extraDhcpOptionMap, null);
+        _itMgr.allocate(vm.getInstanceName(), _templateDao.findByIdIncludingRemoved(new Long(isoId)), computeOffering, rootDiskOfferingInfo, dataDiskOfferings, dataDiskDeviceIds,
+                networkIpMap, plan, hypervisorType, extraDhcpOptionMap, null, volume, snapshot);
 
         return vmEntity;
     }

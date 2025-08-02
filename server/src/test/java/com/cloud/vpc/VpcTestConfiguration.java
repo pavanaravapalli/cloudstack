@@ -17,21 +17,6 @@
 
 package com.cloud.vpc;
 
-import java.io.IOException;
-
-import org.mockito.Mockito;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.ComponentScan.Filter;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.FilterType;
-import org.springframework.core.type.classreading.MetadataReader;
-import org.springframework.core.type.classreading.MetadataReaderFactory;
-import org.springframework.core.type.filter.TypeFilter;
-
-import org.apache.cloudstack.framework.config.dao.ConfigurationDaoImpl;
-import org.apache.cloudstack.test.utils.SpringUtils;
-
 import com.cloud.alert.AlertManager;
 import com.cloud.cluster.agentlb.dao.HostTransferMapDaoImpl;
 import com.cloud.configuration.dao.ResourceCountDaoImpl;
@@ -86,7 +71,6 @@ import com.cloud.service.dao.ServiceOfferingDaoImpl;
 import com.cloud.storage.dao.SnapshotDaoImpl;
 import com.cloud.storage.dao.VMTemplateDaoImpl;
 import com.cloud.storage.dao.VMTemplateDetailsDaoImpl;
-import com.cloud.storage.dao.VMTemplateHostDaoImpl;
 import com.cloud.storage.dao.VMTemplateZoneDaoImpl;
 import com.cloud.storage.dao.VolumeDaoImpl;
 import com.cloud.tags.dao.ResourceTagsDaoImpl;
@@ -98,7 +82,7 @@ import com.cloud.vm.dao.DomainRouterDaoImpl;
 import com.cloud.vm.dao.NicDaoImpl;
 import com.cloud.vm.dao.NicSecondaryIpDaoImpl;
 import com.cloud.vm.dao.UserVmDaoImpl;
-import com.cloud.vm.dao.UserVmDetailsDaoImpl;
+import com.cloud.vm.dao.VMInstanceDetailsDaoImpl;
 import com.cloud.vm.dao.VMInstanceDaoImpl;
 import com.cloud.vpc.dao.MockNetworkOfferingDaoImpl;
 import com.cloud.vpc.dao.MockNetworkOfferingServiceMapDaoImpl;
@@ -106,17 +90,32 @@ import com.cloud.vpc.dao.MockNetworkServiceMapDaoImpl;
 import com.cloud.vpc.dao.MockVpcDaoImpl;
 import com.cloud.vpc.dao.MockVpcOfferingDaoImpl;
 import com.cloud.vpc.dao.MockVpcOfferingServiceMapDaoImpl;
+import org.apache.cloudstack.framework.config.dao.ConfigurationDaoImpl;
+import org.apache.cloudstack.framework.config.dao.ConfigurationGroupDaoImpl;
+import org.apache.cloudstack.framework.config.dao.ConfigurationSubGroupDaoImpl;
+import org.apache.cloudstack.test.utils.SpringUtils;
+import org.mockito.Mockito;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.ComponentScan.Filter;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.FilterType;
+import org.springframework.core.type.classreading.MetadataReader;
+import org.springframework.core.type.classreading.MetadataReaderFactory;
+import org.springframework.core.type.filter.TypeFilter;
+
+import java.io.IOException;
 
 @Configuration
-@ComponentScan(basePackageClasses = {VpcManagerImpl.class, NetworkElement.class, VpcOfferingDao.class, ConfigurationDaoImpl.class, IPAddressDaoImpl.class,
-    DomainRouterDaoImpl.class, VpcGatewayDaoImpl.class, PrivateIpDaoImpl.class, StaticRouteDaoImpl.class, PhysicalNetworkDaoImpl.class,
-    ResourceTagsDaoImpl.class, FirewallRulesDaoImpl.class, VlanDaoImpl.class, AccountDaoImpl.class, ResourceCountDaoImpl.class,
+@ComponentScan(basePackageClasses = {VpcManagerImpl.class, NetworkElement.class, VpcOfferingDao.class, ConfigurationDaoImpl.class, ConfigurationGroupDaoImpl.class,
+    ConfigurationSubGroupDaoImpl.class, IPAddressDaoImpl.class, DomainRouterDaoImpl.class, VpcGatewayDaoImpl.class, PrivateIpDaoImpl.class, StaticRouteDaoImpl.class,
+    PhysicalNetworkDaoImpl.class, ResourceTagsDaoImpl.class, FirewallRulesDaoImpl.class, VlanDaoImpl.class, AccountDaoImpl.class, ResourceCountDaoImpl.class,
     Site2SiteVpnGatewayDaoImpl.class, PodVlanMapDaoImpl.class, AccountVlanMapDaoImpl.class, DomainVlanMapDaoImpl.class, HostDaoImpl.class, HostDetailsDaoImpl.class,
     HostTagsDaoImpl.class, HostTransferMapDaoImpl.class, ClusterDaoImpl.class, HostPodDaoImpl.class, RouterNetworkDaoImpl.class,
     UserStatisticsDaoImpl.class, PhysicalNetworkTrafficTypeDaoImpl.class, FirewallRulesCidrsDaoImpl.class, ResourceLimitManagerImpl.class,
-    ResourceLimitDaoImpl.class, ResourceCountDaoImpl.class, DomainDaoImpl.class, UserVmDaoImpl.class, UserVmDetailsDaoImpl.class, NicDaoImpl.class,
+    ResourceLimitDaoImpl.class, ResourceCountDaoImpl.class, DomainDaoImpl.class, UserVmDaoImpl.class, VMInstanceDetailsDaoImpl.class, NicDaoImpl.class,
     SnapshotDaoImpl.class, VMInstanceDaoImpl.class, VolumeDaoImpl.class, UserIpv6AddressDaoImpl.class, NicSecondaryIpDaoImpl.class,
-    VpcServiceMapDaoImpl.class, ServiceOfferingDaoImpl.class, VMTemplateHostDaoImpl.class, MockVpcDaoImpl.class, VMTemplateDaoImpl.class,
+    VpcServiceMapDaoImpl.class, ServiceOfferingDaoImpl.class, MockVpcDaoImpl.class, VMTemplateDaoImpl.class,
     VMTemplateZoneDaoImpl.class, VMTemplateDetailsDaoImpl.class, DataCenterDaoImpl.class, DataCenterIpAddressDaoImpl.class,
     DataCenterLinkLocalIpAddressDaoImpl.class, DataCenterVnetDaoImpl.class, PodVlanDaoImpl.class, DataCenterDetailsDaoImpl.class,
     MockNetworkManagerImpl.class, MockVpcVirtualNetworkApplianceManager.class, EntityManagerImpl.class, LoadBalancerDaoImpl.class,

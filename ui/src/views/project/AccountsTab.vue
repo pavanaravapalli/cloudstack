@@ -25,52 +25,46 @@
           :columns="columns"
           :dataSource="dataSource"
           :pagination="false"
-          :rowKey="record => record.userid ? record.userid : (record.accountid || record.account)">
-          <span slot="user" slot-scope="text, record" v-if="record.userid">
-            {{ record.username }}
-          </span>
-          <span slot="projectrole" slot-scope="text, record" v-if="record.projectroleid">
-            {{ getProjectRole(record) }}
-          </span>
-          <span v-if="imProjectAdmin && dataSource.length > 1" slot="action" slot-scope="text, record" class="account-button-action">
-            <a-tooltip
-              slot="title"
-              placement="top"
-              :title="record.userid ? $t('label.make.user.project.owner') : $t('label.make.project.owner')">
-              <a-button
-                v-if="record.role !== owner"
-                type="default"
-                shape="circle"
-                icon="arrow-up"
-                size="small"
-                @click="promoteAccount(record)" />
-            </a-tooltip>
-            <a-tooltip
-              slot="title"
-              placement="top"
-              :title="record.userid ? $t('label.demote.project.owner.user') : $t('label.demote.project.owner')"
-              v-if="updateProjectApi.params.filter(x => x.name === 'swapowner').length > 0">
-              <a-button
-                v-if="record.role === owner"
-                type="default"
-                shape="circle"
-                icon="arrow-down"
-                size="small"
-                @click="demoteAccount(record)" />
-            </a-tooltip>
-            <a-tooltip
-              slot="title"
-              placement="top"
-              :title="record.userid ? $t('label.remove.project.user') : $t('label.remove.project.account')">
-              <a-button
-                type="danger"
-                shape="circle"
-                icon="delete"
-                size="small"
-                :disabled="!('deleteAccountFromProject' in $store.getters.apis)"
-                @click="onShowConfirmDelete(record)"/>
-            </a-tooltip>
-          </span>
+          :rowKey="rowItem => rowItem.userid ? rowItem.userid : (rowItem.accountid || rowItem.account)">
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'user'">
+              <span v-if="record.userid">{{ record.username }}</span>
+            </template>
+            <template v-if="column.key === 'projectrole'">
+              <span v-if="record.projectroleid">{{ getProjectRole(record) }}</span>
+            </template>
+            <template v-if="column.key === 'actions'">
+              <div>
+                <span v-if="imProjectAdmin && dataSource.length > 1" class="account-button-action">
+                  <tooltip-button
+                    tooltipPlacement="top"
+                    :tooltip="record.userid ? $t('label.make.user.project.owner') : $t('label.make.project.owner')"
+                    v-if="record.role !== owner"
+                    type="default"
+                    icon="arrow-up-outlined"
+                    size="small"
+                    @onClick="promoteAccount(record)" />
+                  <tooltip-button
+                    tooltipPlacement="top"
+                    :tooltip="record.userid ? $t('label.demote.project.owner.user') : $t('label.demote.project.owner')"
+                    v-if="updateProjectApi.params.filter(x => x.name === 'swapowner').length > 0 && record.role === owner"
+                    type="default"
+                    icon="arrow-down-outlined"
+                    size="small"
+                    @onClick="demoteAccount(record)" />
+                  <tooltip-button
+                    tooltipPlacement="top"
+                    :tooltip="record.userid ? $t('label.remove.project.user') : $t('label.remove.project.account')"
+                    type="primary"
+                    :danger="true"
+                    icon="delete-outlined"
+                    size="small"
+                    :disabled="!('deleteAccountFromProject' in $store.getters.apis)"
+                    @onClick="onShowConfirmDelete(record)" />
+                </span>
+              </div>
+            </template>
+          </template>
         </a-table>
         <a-pagination
           class="row-element"
@@ -83,7 +77,7 @@
           @change="changePage"
           @showSizeChange="changePageSize"
           showSizeChanger>
-          <template slot="buildOptionText" slot-scope="props">
+          <template #buildOptionText="props">
             <span>{{ props.value }} / {{ $t('label.page') }}</span>
           </template>
         </a-pagination>
@@ -93,10 +87,14 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
+import TooltipButton from '@/components/widgets/TooltipButton'
 
 export default {
   name: 'AccountsTab',
+  components: {
+    TooltipButton
+  },
   props: {
     resource: {
       type: Object,
@@ -126,48 +124,48 @@ export default {
   created () {
     this.columns = [
       {
+        key: 'account',
         title: this.$t('label.account'),
-        dataIndex: 'account',
-        scopedSlots: { customRender: 'account' }
+        dataIndex: 'account'
       },
       {
+        key: 'role',
         title: this.$t('label.roletype'),
-        dataIndex: 'role',
-        scopedSlots: { customRender: 'role' }
+        dataIndex: 'role'
       },
       {
-        title: this.$t('label.action'),
-        dataIndex: 'action',
-        scopedSlots: { customRender: 'action' }
+        key: 'actions',
+        title: this.$t('label.actions'),
+        dataIndex: 'actions'
       }
     ]
     if (this.isProjectRolesSupported()) {
       this.columns.splice(1, 0, {
+        key: 'user',
         title: this.$t('label.user'),
-        dataIndex: 'userid',
-        scopedSlots: { customRender: 'user' }
+        dataIndex: 'userid'
       })
       this.columns.splice(this.columns.length - 1, 0, {
+        key: 'projectrole',
         title: this.$t('label.project.role'),
-        dataIndex: 'projectroleid',
-        scopedSlots: { customRender: 'projectrole' }
+        dataIndex: 'projectroleid'
       })
     }
     this.page = 1
     this.pageSize = 10
     this.itemCount = 0
-  },
-  inject: ['parentFetchData'],
-  mounted () {
     this.fetchData()
   },
+  inject: ['parentFetchData'],
   watch: {
-    resource (newItem, oldItem) {
-      if (!newItem || !newItem.id) {
-        return
+    resource: {
+      deep: true,
+      handler (newItem) {
+        if (!newItem || !newItem.id) {
+          return
+        }
+        this.fetchData()
       }
-      this.resource = newItem
-      this.fetchData()
     }
   },
   methods: {
@@ -214,7 +212,7 @@ export default {
     },
     fetchUsers () {
       this.loading.user = true
-      api('listUsers', { listall: true }).then(response => {
+      getAPI('listUsers', { listall: true }).then(response => {
         this.users = response.listusersresponse.user || []
       }).catch(error => {
         this.$notifyError(error)
@@ -224,7 +222,7 @@ export default {
     },
     fetchProjectRoles () {
       this.loading.roles = true
-      api('listProjectRoles', { projectId: this.resource.id }).then(response => {
+      getAPI('listProjectRoles', { projectId: this.resource.id }).then(response => {
         this.projectRoles = response.listprojectrolesresponse.projectrole || []
       }).catch(error => {
         this.$notifyError(error)
@@ -234,7 +232,7 @@ export default {
     },
     fetchProjectAccounts (params) {
       this.loading.projectAccount = true
-      api('listProjectAccounts', params).then(json => {
+      getAPI('listProjectAccounts', params).then(json => {
         const listProjectAccount = json.listprojectaccountsresponse.projectaccount
         const itemCount = json.listprojectaccountsresponse.count
         if (!listProjectAccount || listProjectAccount.length === 0) {
@@ -299,7 +297,7 @@ export default {
       this.updateProject(record, params, title, loading)
     },
     updateProject (record, params, title, loading) {
-      api('updateProject', params).then(json => {
+      postAPI('updateProject', params).then(json => {
         const hasJobId = this.checkForAddAsyncJob(json, title, record.account)
         if (hasJobId) {
           this.fetchData()
@@ -316,7 +314,7 @@ export default {
       const title = `${this.$t('label.deleteconfirm')} ${this.$t('label.account')}`
 
       this.$confirm({
-        title: title,
+        title,
         okText: this.$t('label.ok'),
         okType: 'danger',
         cancelText: this.$t('label.cancel'),
@@ -339,7 +337,7 @@ export default {
       }
     },
     deleteOperation (apiName, params, record, title, loading) {
-      api(apiName, params).then(json => {
+      postAPI(apiName, params).then(json => {
         const hasJobId = this.checkForAddAsyncJob(json, title, record.account)
         if (hasJobId) {
           this.fetchData()
@@ -359,11 +357,11 @@ export default {
             if (res === 'jobid') {
               hasJobId = true
               const jobId = json[obj][res]
-              this.$store.dispatch('AddAsyncJob', {
-                title: title,
-                jobid: jobId,
-                description: description,
-                status: 'progress'
+              this.$pollJob({
+                jobId,
+                title,
+                description,
+                showLoading: false
               })
             }
           }
@@ -377,7 +375,7 @@ export default {
 </script>
 
 <style scoped>
-  /deep/.ant-table-fixed-right {
+  :deep(.ant-table-fixed-right) {
     z-index: 5;
   }
 

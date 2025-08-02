@@ -51,7 +51,7 @@ public class ProjectAccountResponse extends BaseResponse implements ControlledVi
 
     @SerializedName(ApiConstants.ACCOUNT_TYPE)
     @Param(description = "account type (admin, domain-admin, user)")
-    private Short accountType;
+    private Integer accountType;
 
     @SerializedName(ApiConstants.USER_ID)
     @Param(description = "Id of the user")
@@ -72,6 +72,10 @@ public class ProjectAccountResponse extends BaseResponse implements ControlledVi
     @SerializedName(ApiConstants.DOMAIN)
     @Param(description = "name of the Domain the account belongs too")
     private String domainName;
+
+    @SerializedName(ApiConstants.DOMAIN_PATH)
+    @Param(description = "path of the Domain the account belongs to", since = "4.19.2.0")
+    private String domainPath;
 
     @SerializedName(ApiConstants.USER)
     @Param(description = "the list of users associated with account", responseObject = UserResponse.class)
@@ -96,7 +100,7 @@ public class ProjectAccountResponse extends BaseResponse implements ControlledVi
         this.accountName = accountName;
     }
 
-    public void setAccountType(Short accountType) {
+    public void setAccountType(Integer accountType) {
         this.accountType = accountType;
     }
 
@@ -108,6 +112,11 @@ public class ProjectAccountResponse extends BaseResponse implements ControlledVi
     @Override
     public void setDomainName(String domainName) {
         this.domainName = domainName;
+    }
+
+    @Override
+    public void setDomainPath(String domainPath) {
+        this.domainPath = domainPath;
     }
 
     public void setUserId(String userId) { this.userId = userId; }

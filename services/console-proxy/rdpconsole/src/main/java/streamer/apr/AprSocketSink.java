@@ -16,7 +16,6 @@
 // under the License.
 package streamer.apr;
 
-import org.apache.log4j.Logger;
 import org.apache.tomcat.jni.Socket;
 
 import streamer.BaseElement;
@@ -27,7 +26,6 @@ import streamer.Event;
 import streamer.Link;
 
 public class AprSocketSink extends BaseElement {
-    private static final Logger s_logger = Logger.getLogger(AprSocketSink.class);
 
     protected AprSocketWrapperImpl socketWrapper;
     protected Long socket;
@@ -78,7 +76,7 @@ public class AprSocketSink extends BaseElement {
             socketWrapper.upgradeToSsl();
             break;
         case LINK_SWITCH_TO_PULL_MODE:
-            throw new RuntimeException("[" + this + "] ERROR: Unexpected event: sink recived LINK_SWITCH_TO_PULL_MODE event.");
+            throw new RuntimeException("[" + this + "] ERROR: Unexpected event: sink received LINK_SWITCH_TO_PULL_MODE event.");
         default:
             super.handleEvent(event, direction);
         }
@@ -119,7 +117,7 @@ public class AprSocketSink extends BaseElement {
         try {
             sendEventToAllPads(Event.STREAM_CLOSE, Direction.IN);
         } catch (Exception e) {
-            s_logger.info("[ignored]"
+            logger.info("[ignored]"
                     + "failing sending sink event to all pads: " + e.getLocalizedMessage());
         }
         socketWrapper.shutdown();

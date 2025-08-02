@@ -398,7 +398,7 @@ class TestManagedSystemVMs(cloudstackTestCase):
         except:
             return
 
-        self.assert_(False, "The service offering was created, but should not have been.")
+        self.assertTrue(False, "The service offering was created, but should not have been.")
 
     def _prepare_to_use_managed_storage_for_system_vms(self):
         self._update_system_vm_unique_name(TestManagedSystemVMs._secondary_storage_unique_name, TestManagedSystemVMs._secondary_storage_temp_unique_name)
@@ -624,4 +624,3 @@ class TestManagedSystemVMs(cloudstackTestCase):
             xen_server = cls.testdata[TestData.xenServer]
 
             cls.xen_session.xenapi.login_with_password(xen_server[TestData.username], xen_server[TestData.password])
-

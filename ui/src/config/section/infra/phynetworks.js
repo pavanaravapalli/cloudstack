@@ -15,50 +15,57 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { shallowRef, defineAsyncComponent, reactive } from 'vue'
 export default {
   name: 'physicalnetwork',
   title: 'label.physical.network',
   docHelp: 'adminguide/networking_and_traffic.html#basic-zone-physical-network-configuration',
-  icon: 'api',
+  icon: 'api-outlined',
   hidden: true,
   permission: ['listPhysicalNetworks'],
   columns: ['name', 'state', 'isolationmethods', 'vlan', 'broadcastdomainrange', 'zonename', 'tags'],
   details: ['name', 'state', 'isolationmethods', 'vlan', 'broadcastdomainrange', 'zonename', 'tags'],
   tabs: [{
     name: 'details',
-    component: () => import('@/components/view/DetailsTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/components/view/DetailsTab.vue')))
   }, {
     name: 'traffic.types',
-    component: () => import('@/views/infra/network/TrafficTypesTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/TrafficTypesTab.vue')))
   }, {
     name: 'network.service.providers',
-    component: () => import('@/views/infra/network/ServiceProvidersTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/ServiceProvidersTab.vue')))
   }, {
     name: 'dedicated.vlan.vni.ranges',
-    component: () => import('@/views/infra/network/DedicatedVLANTab.vue')
+    component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/DedicatedVLANTab.vue')))
   }],
   related: [{
     name: 'guestnetwork',
     title: 'label.guest.networks',
     param: 'physicalnetworkid'
+  },
+  {
+    name: 'publicip',
+    title: 'label.public.ip.addresses',
+    param: 'physicalnetworkid'
   }],
   actions: [
     {
       api: 'createPhysicalNetwork',
-      icon: 'plus',
+      icon: 'plus-outlined',
       label: 'label.add.physical.network',
       listView: true,
       args: ['name', 'zoneid', 'isolationmethods', 'vlan', 'tags', 'networkspeed', 'broadcastdomainrange'],
       mapping: {
         isolationmethods: {
-          options: ['VLAN', 'VXLAN', 'GRE', 'STT', 'BCF_SEGMENT', 'SSP', 'ODL', 'L3VPN', 'VCS']
+          options: ['VLAN', 'VXLAN', 'GRE', 'STT', 'BCF_SEGMENT', 'SSP', 'ODL', 'L3VPN', 'VCS', 'NSX', 'NETRIS']
         }
       }
     },
     {
       api: 'updatePhysicalNetwork',
-      icon: 'play-circle',
+      icon: 'play-circle-outlined',
       label: 'label.action.enable.physical.network',
+      message: 'message.action.enable.physical.network',
       dataView: true,
       args: ['state'],
       show: (record) => { return record.state === 'Disabled' },
@@ -70,8 +77,9 @@ export default {
     },
     {
       api: 'updatePhysicalNetwork',
-      icon: 'stop',
+      icon: 'stop-outlined',
       label: 'label.action.disable.physical.network',
+      message: 'message.action.disable.physical.network',
       dataView: true,
       args: ['state'],
       show: (record) => { return record.state === 'Enabled' },
@@ -83,14 +91,14 @@ export default {
     },
     {
       api: 'updatePhysicalNetwork',
-      icon: 'edit',
+      icon: 'edit-outlined',
       label: 'label.update.physical.network',
       dataView: true,
       args: ['vlan', 'tags']
     },
     {
       api: 'addTrafficType',
-      icon: 'plus-square',
+      icon: 'plus-square-outlined',
       label: 'label.add.traffic.type',
       dataView: true,
       args: ['traffictype', 'physicalnetworkid', 'isolationmethod'],
@@ -108,18 +116,21 @@ export default {
     },
     {
       api: 'updateTrafficType',
-      icon: 'branches',
+      icon: 'branches-outlined',
       label: 'label.update.traffic.label',
       dataView: true,
       popup: true,
-      component: () => import('@/views/infra/network/EditTrafficLabel.vue')
+      component: shallowRef(defineAsyncComponent(() => import('@/views/infra/network/EditTrafficLabel.vue')))
     },
     {
       api: 'deletePhysicalNetwork',
-      icon: 'delete',
+      icon: 'delete-outlined',
       label: 'label.action.delete.physical.network',
       message: 'message.action.delete.physical.network',
       dataView: true
     }
   ]
 }
+export const trafficTypeTab = reactive({
+  index: 0
+})

@@ -18,18 +18,15 @@
  */
 package org.apache.cloudstack.api.command.admin.host;
 
-import org.apache.log4j.Logger;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.BaseListCmd;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.HostTagResponse;
 
 @APICommand(name = "listHostTags", description = "Lists host tags", responseObject = HostTagResponse.class, requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListHostTagsCmd extends BaseListCmd {
-    public static final Logger s_logger = Logger.getLogger(ListHostTagsCmd.class.getName());
 
-    private static final String s_name = "listhosttagsresponse";
 
     // ///////////////////////////////////////////////////
     // ////////////// API parameters /////////////////////
@@ -44,13 +41,8 @@ public class ListHostTagsCmd extends BaseListCmd {
     // ///////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.Host;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.Host;
     }
 
     @Override

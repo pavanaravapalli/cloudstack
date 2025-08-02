@@ -30,9 +30,8 @@ import java.util.regex.Pattern;
 
 import javax.inject.Inject;
 
-import com.google.common.base.Strings;
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import com.cloud.utils.Pair;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import com.cloud.utils.Ternary;
@@ -42,30 +41,33 @@ import com.cloud.utils.security.CertificateHelper;
 
 @Component
 public class KeystoreManagerImpl extends ManagerBase implements KeystoreManager {
-    private static final Logger s_logger = Logger.getLogger(KeystoreManagerImpl.class);
 
     @Inject
     private KeystoreDao _ksDao;
 
     @Override
-    public boolean validateCertificate(String certificate, String key, String domainSuffix) {
-        if (Strings.isNullOrEmpty(certificate) || Strings.isNullOrEmpty(key) || Strings.isNullOrEmpty(domainSuffix)) {
-            s_logger.error("Invalid parameter found in (certificate, key, domainSuffix) tuple for domain: " + domainSuffix);
-            return false;
+    public Pair<Boolean, String> validateCertificate(String certificate, String key, String domainSuffix) {
+        String errMsg = null;
+        if (StringUtils.isAnyEmpty(certificate, key, domainSuffix)) {
+            errMsg = String.format("Invalid parameter found in (certificate, key, domainSuffix) tuple for domain: %s", domainSuffix);
+            logger.error(errMsg);
+            return new Pair<>(false, errMsg);
         }
 
         try {
             String ksPassword = "passwordForValidation";
             byte[] ksBits = CertificateHelper.buildAndSaveKeystore(domainSuffix, certificate, getKeyContent(key), ksPassword);
             KeyStore ks = CertificateHelper.loadKeystore(ksBits, ksPassword);
-            if (ks != null)
-                return true;
-
-            s_logger.error("Unabled to construct keystore for domain: " + domainSuffix);
+            if (ks != null) {
+                return new Pair<>(true, errMsg);
+            }
+            errMsg = String.format("Unable to construct keystore for domain: %s", domainSuffix);
+            logger.error(errMsg);
         } catch (Exception e) {
-            s_logger.error("Certificate validation failed due to exception for domain: " + domainSuffix, e);
+            errMsg = String.format("Certificate validation failed due to exception for domain: %s", domainSuffix);
+            logger.error(errMsg, e);
         }
-        return false;
+        return new Pair<>(false, errMsg);
     }
 
     @Override
@@ -108,16 +110,12 @@ public class KeystoreManagerImpl extends ManagerBase implements KeystoreManager 
 
         try {
             return CertificateHelper.buildAndSaveKeystore(certs, storePassword);
-        } catch (KeyStoreException e) {
-            s_logger.warn("Unable to build keystore for " + name + " due to KeyStoreException");
-        } catch (CertificateException e) {
-            s_logger.warn("Unable to build keystore for " + name + " due to CertificateException");
-        } catch (NoSuchAlgorithmException e) {
-            s_logger.warn("Unable to build keystore for " + name + " due to NoSuchAlgorithmException");
-        } catch (InvalidKeySpecException e) {
-            s_logger.warn("Unable to build keystore for " + name + " due to InvalidKeySpecException");
-        } catch (IOException e) {
-            s_logger.warn("Unable to build keystore for " + name + " due to IOException");
+        } catch (KeyStoreException | CertificateException | NoSuchAlgorithmException | InvalidKeySpecException | IOException e) {
+            String msg = String.format("Unable to build keystore for %s due to %s", name, e.getClass().getSimpleName());
+            logger.warn(msg);
+            if (logger.isDebugEnabled()) {
+                logger.debug(msg, e);
+            }
         }
         return null;
     }

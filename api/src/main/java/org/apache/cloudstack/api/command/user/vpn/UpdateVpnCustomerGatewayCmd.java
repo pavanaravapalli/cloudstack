@@ -16,7 +16,8 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vpn;
 
-import org.apache.log4j.Logger;
+import org.apache.cloudstack.api.ApiArgValidator;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -34,9 +35,7 @@ import com.cloud.network.Site2SiteCustomerGateway;
 @APICommand(name = "updateVpnCustomerGateway", description = "Update site to site vpn customer gateway", responseObject = Site2SiteCustomerGatewayResponse.class, entityType = {Site2SiteCustomerGateway.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateVpnCustomerGatewayCmd extends BaseAsyncCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateVpnCustomerGatewayCmd.class.getName());
 
-    private static final String s_name = "updatevpncustomergatewayresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -94,6 +93,14 @@ public class UpdateVpnCustomerGatewayCmd extends BaseAsyncCmd {
                    + "gateway associated with the account for the specified domain.")
     private Long domainId;
 
+    @Parameter(name = ApiConstants.SPLIT_CONNECTIONS, type = CommandType.BOOLEAN, required = false, description = "For IKEv2, whether to split multiple right subnet cidrs into multiple connection statements.",
+            since = "4.15.1")
+    private Boolean splitConnections;
+
+    @Parameter(name = ApiConstants.IKE_VERSION, type = CommandType.STRING, required = false, description = "Which IKE Version to use, one of ike (autoselect), ikev1, or ikev2." +
+            "Connections marked with 'ike' will use 'ikev2' when initiating, but accept any protocol version when responding. Defaults to ike", validations = {ApiArgValidator.NotNullOrEmpty}, since = "4.15.1")
+    private String ikeVersion;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -140,14 +147,17 @@ public class UpdateVpnCustomerGatewayCmd extends BaseAsyncCmd {
 
     public Boolean getEncap() { return encap; }
 
+    public boolean getSplitConnections() {
+        return null == splitConnections ? false : splitConnections;
+    }
+
+    public String getIkeVersion() {
+        return ikeVersion;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
     public long getEntityOwnerId() {
@@ -178,5 +188,15 @@ public class UpdateVpnCustomerGatewayCmd extends BaseAsyncCmd {
         } else {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to update customer VPN gateway");
         }
+    }
+
+    @Override
+    public Long getApiResourceId() {
+        return getId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VpnCustomerGateway;
     }
 }

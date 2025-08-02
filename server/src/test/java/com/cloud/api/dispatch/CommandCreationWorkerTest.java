@@ -16,24 +16,22 @@
 // under the License.
 package com.cloud.api.dispatch;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
+import com.cloud.exception.ResourceAllocationException;
 import com.cloud.user.Account;
 import com.cloud.user.AccountVO;
 import com.cloud.user.User;
 import com.cloud.user.UserVO;
+import org.apache.cloudstack.api.BaseAsyncCreateCmd;
 import org.apache.cloudstack.context.CallContext;
 import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-
-import org.apache.cloudstack.api.BaseAsyncCreateCmd;
-
-import com.cloud.exception.ResourceAllocationException;
 
 public class CommandCreationWorkerTest {
 
@@ -42,7 +40,7 @@ public class CommandCreationWorkerTest {
         // Prepare
         final BaseAsyncCreateCmd asyncCreateCmd = mock(BaseAsyncCreateCmd.class);
         final Map<String, String> params = new HashMap<String, String>();
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short) 0, "uuid");
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, "uuid");
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, account);
 

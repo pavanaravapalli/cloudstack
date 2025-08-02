@@ -17,67 +17,47 @@
 
 <template>
   <div>
-    <p v-html="$t('message.assign.instance.another')"></p>
-
-    <div class="form">
+    <div class="form" v-ctrl-enter="submitData">
 
       <div v-if="loading" class="loading">
-        <a-icon type="loading" style="color: #1890ff;"></a-icon>
+        <loading-outlined style="color: #1890ff;" />
       </div>
 
-      <div class="form__item">
-        <p class="form__label">{{ $t('label.accounttype') }}</p>
-        <a-select v-model="selectedAccountType" defaultValue="account">
-          <a-select-option :value="$t('label.account')">{{ $t('label.account') }}</a-select-option>
-          <a-select-option :value="$t('label.project')">{{ $t('label.project') }}</a-select-option>
-        </a-select>
-      </div>
+      <a-alert type="warning" style="margin-bottom: 20px">
+        <template #message>
+          <label v-html="$t('message.assign.instance.another')"></label>
+        </template>
+      </a-alert>
 
-      <div class="form__item">
-        <p class="form__label"><span class="required">*</span>{{ $t('label.domain') }}</p>
-        <a-select @change="changeDomain" v-model="selectedDomain" :defaultValue="selectedDomain">
-          <a-select-option v-for="domain in domains" :key="domain.name" :value="domain.id">
-            {{ domain.path }}
-          </a-select-option>
-        </a-select>
-      </div>
-
-      <template v-if="selectedAccountType === 'Account'">
-        <div class="form__item">
-          <p class="form__label"><span class="required">*</span>{{ $t('label.account') }}</p>
-          <a-select @change="changeAccount" v-model="selectedAccount">
-            <a-select-option v-for="account in accounts" :key="account.name" :value="account.name">
-              {{ account.name }}
-            </a-select-option>
-          </a-select>
-          <span v-if="accountError" class="required">{{ $t('label.required') }}</span>
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="form__item">
-          <p class="form__label"><span class="required">*</span>{{ $t('label.project') }}</p>
-          <a-select @change="changeProject" v-model="selectedProject">
-            <a-select-option v-for="project in projects" :key="project.id" :value="project.id">
-              {{ project.name }}
-            </a-select-option>
-          </a-select>
-          <span v-if="projectError" class="required">{{ $t('label.required') }}</span>
-        </div>
-      </template>
+      <ownership-selection @fetch-owner="fetchOwnerOptions"/>
 
       <div class="form__item">
         <p class="form__label">{{ $t('label.network') }}</p>
-        <a-select v-model="selectedNetwork">
-          <a-select-option v-for="network in networks" :key="network.id" :value="network.id">
-            {{ network.name ? network.name : '-' }}
+        <a-select
+          v-model:value="selectedNetwork"
+          showSearch
+          optionFilterProp="label"
+          :filterOption="(input, option) => {
+            return  option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
+          <a-select-option v-for="network in networks" :key="network.id" :value="network.id" :label="network.name ? network.name : '-'">
+            <span>
+              <resource-icon v-if="network && network.icon" :image="network.icon.base64image" size="1x" style="margin-right: 5px"/>
+              <apartment-outlined v-else style="margin-right: 5px" />
+              {{ network.name ? network.name : '-' }}
+            </span>
           </a-select-option>
         </a-select>
       </div>
 
-      <a-button type="primary" class="submit-btn" @click="submitData">
-        {{ $t('label.submit') }}
-      </a-button>
+      <div class="submit-btn">
+        <a-button @click="closeAction">
+          {{ $t('label.cancel') }}
+        </a-button>
+        <a-button type="primary" @click="submitData" ref="submit">
+          {{ $t('label.submit') }}
+        </a-button>
+      </div>
 
     </div>
 
@@ -85,7 +65,9 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
+import ResourceIcon from '@/components/view/ResourceIcon'
+import OwnershipSelection from '@views/compute/wizard/OwnershipSelection'
 
 export default {
   name: 'AssignInstance',
@@ -94,6 +76,10 @@ export default {
       type: Object,
       required: true
     }
+  },
+  components: {
+    ResourceIcon,
+    OwnershipSelection
   },
   inject: ['parentFetchData'],
   data () {
@@ -112,76 +98,42 @@ export default {
       loading: false
     }
   },
-  mounted () {
-    this.fetchData()
-  },
   methods: {
-    fetchData () {
-      this.loading = true
-      api('listDomains', {
-        response: 'json',
-        listAll: true,
-        details: 'min'
-      }).then(response => {
-        this.domains = response.listdomainsresponse.domain
-        this.selectedDomain = this.domains[0].id
-        this.fetchAccounts()
-        this.fetchProjects()
-      })
-    },
-    fetchAccounts () {
-      this.loading = true
-      api('listAccounts', {
-        response: 'json',
-        domainId: this.selectedDomain,
-        state: 'Enabled',
-        listAll: true
-      }).then(response => {
-        this.accounts = response.listaccountsresponse.account
-        this.loading = false
-      })
-    },
-    fetchProjects () {
-      this.loading = true
-      api('listProjects', {
-        response: 'json',
-        domainId: this.selectedDomain,
-        state: 'Active',
-        details: 'min',
-        listAll: true
-      }).then(response => {
-        this.projects = response.listprojectsresponse.project
-        this.loading = false
-      })
+    fetchOwnerOptions (selectedOptions) {
+      this.selectedAccountType = selectedOptions.selectedAccountType
+      this.selectedAccount = selectedOptions.selectedAccount
+      this.selectedDomain = selectedOptions.selectedDomain
+      this.selectedProject = selectedOptions.selectedProject
+      this.fetchNetworks()
     },
     fetchNetworks () {
       this.loading = true
-      api('listNetworks', {
-        response: 'json',
+      var params = {
         domainId: this.selectedDomain,
         listAll: true,
         isrecursive: false,
-        account: this.selectedAccount,
-        projectid: this.selectedProject
-      }).then(response => {
-        this.networks = response.listnetworksresponse.network
+        showicon: true
+      }
+      if (this.selectedProject != null) {
+        params.projectid = this.selectedProject
+      } else {
+        params.account = this.selectedAccount
+        params.ignoreproject = true
+      }
+      getAPI('listNetworks', params).then(response => {
+        this.networks = response.listnetworksresponse.network || []
+      }).catch(error => {
+        this.$notifyError(error)
+      }).finally(() => {
         this.loading = false
       })
     },
-    changeDomain () {
-      this.selectedAccount = null
-      this.fetchAccounts()
-      this.fetchProjects()
-    },
-    changeAccount () {
-      this.selectedProject = null
-      this.fetchNetworks()
-    },
-    changeProject () {
-      this.selectedAccount = null
-      this.fetchNetworks()
+    closeAction () {
+      this.$emit('close-action')
     },
     submitData () {
+      if (this.loading) return
+
       let variableKey = ''
       let variableValue = ''
 
@@ -202,7 +154,7 @@ export default {
       }
 
       this.loading = true
-      api('assignVirtualMachine', {
+      postAPI('assignVirtualMachine', {
         response: 'json',
         virtualmachineid: this.resource.id,
         domainid: this.selectedDomain,
@@ -212,8 +164,12 @@ export default {
         this.$notification.success({
           message: this.$t('label.loadbalancerinstance')
         })
-        this.$parent.$parent.close()
-        this.parentFetchData()
+        this.$emit('close-action')
+        if (this.$store.getters.project?.id) {
+          this.$router.push({ path: '/vm' })
+        } else {
+          this.parentFetchData()
+        }
       }).catch(error => {
         this.$notifyError(error)
       }).finally(() => {
@@ -226,6 +182,12 @@ export default {
 
 <style scoped lang="scss">
   .form {
+    width: 85vw;
+
+    @media (min-width: 760px) {
+      width: 500px;
+    }
+
     display: flex;
     flex-direction: column;
 
@@ -247,12 +209,10 @@ export default {
   .submit-btn {
     margin-top: 10px;
     align-self: flex-end;
-  }
 
-  .required {
-    margin-right: 2px;
-    color: red;
-    font-size: 0.7rem;
+    button {
+      margin-left: 10px;
+    }
   }
 
   .loading {

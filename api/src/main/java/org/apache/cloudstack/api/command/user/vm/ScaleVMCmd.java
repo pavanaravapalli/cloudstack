@@ -16,18 +16,13 @@
 // under the License.
 package org.apache.cloudstack.api.command.user.vm;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
-import com.cloud.offering.ServiceOffering;
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -37,7 +32,6 @@ import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.UserCmd;
 import org.apache.cloudstack.api.response.ServiceOfferingResponse;
-import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.api.response.UserVmResponse;
 
 import com.cloud.event.EventTypes;
@@ -45,15 +39,15 @@ import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.exception.VirtualMachineMigrationException;
+import com.cloud.offering.ServiceOffering;
 import com.cloud.user.Account;
 import com.cloud.uservm.UserVm;
 import com.cloud.vm.VirtualMachine;
 
 
-@APICommand(name = "scaleVirtualMachine", description = "Scales the virtual machine to a new service offering.", responseObject = SuccessResponse.class, responseView = ResponseView.Restricted, entityType = {VirtualMachine.class},
+@APICommand(name = "scaleVirtualMachine", description = "Scales the virtual machine to a new service offering. This command also considers the volume size in the service offering or disk offering linked to the new service offering and apply all characteristics to the root volume.", responseObject = UserVmResponse.class, responseView = ResponseView.Restricted, entityType = {VirtualMachine.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ScaleVMCmd extends BaseAsyncCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(ScaleVMCmd.class.getName());
     private static final String s_name = "scalevirtualmachineresponse";
 
     /////////////////////////////////////////////////////
@@ -68,8 +62,21 @@ public class ScaleVMCmd extends BaseAsyncCmd implements UserCmd {
             required=true, description="the ID of the service offering for the virtual machine")
     private Long serviceOfferingId;
 
-    @Parameter(name = ApiConstants.DETAILS, type = BaseCmd.CommandType.MAP, description = "name value pairs of custom parameters for cpu,memory and cpunumber. example details[i].name=value")
+    @Parameter(name = ApiConstants.DETAILS, type = BaseCmd.CommandType.MAP, description = "name value pairs of custom parameters for cpuspeed, memory and cpunumber. example details[i].name=value")
     private Map<String, String> details;
+
+    @Parameter(name = ApiConstants.MIN_IOPS, type = CommandType.LONG, required = false, description = "New minimum number of IOPS for the custom disk offering", since = "4.17")
+    private Long minIops;
+
+    @Parameter(name = ApiConstants.MAX_IOPS, type = CommandType.LONG, required = false, description = "New maximum number of IOPS for the custom disk offering", since = "4.17")
+    private Long maxIops;
+
+    @Parameter(name = ApiConstants.AUTO_MIGRATE, type = CommandType.BOOLEAN, required = false, description = "Flag for automatic migration of the root volume " +
+            "with new compute offering whenever migration is required to apply the offering", since = "4.17")
+    private Boolean autoMigrate;
+
+    @Parameter(name = ApiConstants.SHRINK_OK, type = CommandType.BOOLEAN, required = false, description = "Verify OK to Shrink", since = "4.17")
+    private Boolean shrinkOk;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -87,19 +94,29 @@ public class ScaleVMCmd extends BaseAsyncCmd implements UserCmd {
     //it is because details.values() cannot be cast to a map.
     //it gives a exception
     public Map<String, String> getDetails() {
-        Map<String, String> customparameterMap = new HashMap<String, String>();
-        if (details != null && details.size() != 0) {
-            Collection parameterCollection = details.values();
-            Iterator iter = parameterCollection.iterator();
-            while (iter.hasNext()) {
-                HashMap<String, String> value = (HashMap<String, String>)iter.next();
-                for (String key : value.keySet()) {
-                    customparameterMap.put(key, value.get(key));
-                }
-            }
-        }
+        Map<String, String> customparameterMap = convertDetailsToMap(details);
+
+        if (shrinkOk != null) customparameterMap.put(ApiConstants.SHRINK_OK, String.valueOf(isShrinkOk()));
+        if (autoMigrate != null) customparameterMap.put(ApiConstants.AUTO_MIGRATE, String.valueOf(getAutoMigrate()));
+        if (getMinIops() != null) customparameterMap.put(ApiConstants.MIN_IOPS, String.valueOf(getMinIops()));
+        if (getMaxIops() != null) customparameterMap.put(ApiConstants.MAX_IOPS, String.valueOf(getMaxIops()));
+
         return customparameterMap;
     }
+
+    public Long getMinIops() {
+        return minIops;
+    }
+
+    public Long getMaxIops() {
+        return maxIops;
+    }
+
+    public boolean getAutoMigrate() {
+        return autoMigrate == null ? true : autoMigrate;
+    }
+
+    public boolean isShrinkOk() { return shrinkOk == null ? true : shrinkOk; }
 
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
@@ -135,21 +152,31 @@ public class ScaleVMCmd extends BaseAsyncCmd implements UserCmd {
     }
 
     @Override
+    public Long getApiResourceId() {
+        return getId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
+    }
+
+    @Override
     public void execute() {
         UserVm result;
         try {
             result = _userVmService.upgradeVirtualMachine(this);
         } catch (ResourceUnavailableException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, ex.getMessage());
         } catch (ConcurrentOperationException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
         } catch (ManagementServerException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
         } catch (VirtualMachineMigrationException ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
         }
         if (result != null){

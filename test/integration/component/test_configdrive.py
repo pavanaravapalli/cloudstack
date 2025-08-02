@@ -19,46 +19,47 @@
     and password reset functionality with
     ConfigDrive
 """
+
+# Import Local Modules
+from marvin.cloudstackAPI import (restartVPC)
+from marvin.cloudstackTestCase import cloudstackTestCase
+from marvin.lib.base import (
+    Account,
+    createVlanIpRange,
+    Configurations,
+    FireWallRule,
+    Host,
+    listVlanIpRanges,
+    Network,
+    NetworkACL,
+    NetworkACLList,
+    NetworkOffering,
+    NetworkServiceProvider,
+    PublicIPAddress,
+    Router,
+    ServiceOffering,
+    createSSHKeyPair,
+    deleteSSHKeyPair,
+    StaticNATRule,
+    VirtualMachine,
+    VPC,
+    VpcOffering,
+    Hypervisor, Template)
+from marvin.lib.common import (
+    get_domain,
+    get_zone, get_test_template,
+    is_config_suitable)
+from marvin.lib.utils import random_gen
+
+# Import System Modules
 import base64
 import os
 import socket
-# Import Local Modules
 import subprocess
 import tempfile
-from contextlib import contextmanager
-
 import time
-from marvin.cloudstackAPI import (restartVPC)
-from marvin.cloudstackTestCase import cloudstackTestCase
-from marvin.lib.base import (Account,
-                             createVlanIpRange,
-                             Configurations,
-                             FireWallRule,
-                             Host,
-                             listVlanIpRanges,
-                             Network,
-                             NetworkACL,
-                             NetworkACLList,
-                             NetworkOffering,
-                             NetworkServiceProvider,
-                             PublicIPAddress,
-                             Router,
-                             ServiceOffering,
-                             createSSHKeyPair,
-                             deleteSSHKeyPair,
-                             StaticNATRule,
-                             VirtualMachine,
-                             VPC,
-                             VpcOffering,
-                             Hypervisor, Template)
-from marvin.lib.common import (get_domain,
-                               get_template,
-                               get_zone, get_test_template,
-                               is_config_suitable)
-from marvin.lib.utils import random_gen
-# Import System Modules
+from contextlib import contextmanager
 from nose.plugins.attrib import attr
-from retry import retry
 
 VPC_SERVICES = 'Dhcp,StaticNat,SourceNat,NetworkACL,UserData,Dns'
 ISO_SERVICES = 'Dhcp,SourceNat,StaticNat,UserData,Firewall,Dns'
@@ -104,12 +105,12 @@ class Services:
         self.services = {
             "test_templates": {
                 "kvm": {
-                    "name": "Centos-5.5-configdrive",
-                    "displaytext": "ConfigDrive enabled CentOS",
+                    "name": "Centos-5.5-sshkey-and-configdrive",
+                    "displaytext": "SSHkey and ConfigDrive enabled CentOS",
                     "format": "qcow2",
                     "hypervisor": "kvm",
                     "ostype": "CentOS 5.5 (64-bit)",
-                    "url": "http://people.apache.org/~fmaximus/centos55-extended.qcow2.bz2",
+                    "url": "http://people.apache.org/~weizhou/centos55-sshkey-configdrive.qcow2.bz2",
                     "requireshvm": "False",
                     "ispublic": "True",
                     "isextractable": "True"
@@ -365,7 +366,7 @@ class ConfigDriveUtils:
             return None
 
     def _get_config_drive_data(self, ssh, file, name, fail_on_missing=True):
-        """Fetches the content of a file file on the config drive
+        """Fetches the content of a file on the config drive
 
         :param ssh: SSH connection to the VM
         :param file: path to the file to fetch
@@ -551,6 +552,18 @@ class ConfigDriveUtils:
         if exposeHypevisorHostnameGS == 'true' and exposeHypevisorHostnameAcc == 'true':
             vm_files.append("hypervisor-host-name.txt")
 
+        configs = Configurations.list(
+            self.api_client,
+            name="metadata.allow.expose.domain",
+            listall=True
+        )
+
+        exposeDomain = configs[0].value
+
+        if exposeDomain == 'true':
+            vm_files.append("cloud-domain.txt")
+            vm_files.append("cloud-domain-id.txt")
+
         def get_name(vm_file):
             return "{} metadata".format(
                 vm_file.split('.'[-1].replace('-', ' '))
@@ -603,6 +616,18 @@ class ConfigDriveUtils:
                 "on which the VM is spawned"
             )
 
+        if exposeDomain == 'true':
+            self.assertEqual(
+                str(metadata["cloud-domain-id.txt"]),
+                self.domain.id,
+                "Domain name in the metadata file does not match expected"
+            )
+            self.assertEqual(
+                str(metadata["cloud-domain.txt"]),
+                self.domain.name,
+                "Domain name in the metadata file does not match expected"
+            )
+
         return
 
     def _verify_openstack_metadata(self, ssh, mount_path):
@@ -634,7 +659,7 @@ class ConfigDriveUtils:
         """
         ssh.execute("umount -d %s" % mount_path)
         # Give the VM time to unlock the iso device
-        time.sleep(2)
+        time.sleep(0.5)
         # Verify umount
         result = ssh.execute("ls %s" % mount_path)
         self.assertTrue(len(result) == 0,
@@ -653,8 +678,7 @@ class ConfigDriveUtils:
         orig_state = self.template.passwordenabled
         self.debug("Updating guest VM template to password enabled "
                    "from %s to %s" % (orig_state, new_state))
-        if orig_state != new_state:
-            self.update_template(passwordenabled=new_state)
+        self.update_template(passwordenabled=new_state)
         self.assertEqual(self.template.passwordenabled, new_state,
                          "Guest VM template is not password enabled")
         return orig_state
@@ -850,7 +874,7 @@ class ConfigDriveUtils:
 
         self.debug("SSHing into the VM %s" % vm.name)
 
-        ssh = self.ssh_into_VM(vm, public_ip, reconnect=reconnect)
+        ssh = self.ssh_into_VM(vm, public_ip, reconnect=reconnect, keypair=vm.key_pair)
 
         d = {x.name: x for x in ssh.logger.handlers}
         ssh.logger.handlers = list(d.values())
@@ -974,6 +998,7 @@ class ConfigDriveUtils:
         vm.add_nic(self.api_client, network.id)
         self.debug("Added NIC in VM with ID - %s and network with ID - %s"
                    % (vm.id, network.id))
+        vm.password_test = ConfigDriveUtils.PasswordTest(expect_pw=False)
 
     def unplug_nic(self, vm, network):
         nic = self._find_nic(vm, network)
@@ -1000,7 +1025,7 @@ class ConfigDriveUtils:
         :rtype: str
         """
         self.debug("Updating userdata for VM - %s" % vm.name)
-        updated_user_data = base64.b64encode(new_user_data)
+        updated_user_data = base64.encodebytes(new_user_data.encode()).decode()
         with self.stopped_vm(vm):
             vm.update(self.api_client, userdata=updated_user_data)
 
@@ -1088,10 +1113,8 @@ class ConfigDriveUtils:
 
         vm.details = vm_new_ssh.details
 
-        # reset SSH key also resets the password.
-        self._decrypt_password(vm)
-
-        vm.password_test = ConfigDriveUtils.PasswordTest(vm=vm)
+        # reset SSH key also removes the password (see https://github.com/apache/cloudstack/pull/4819)
+        vm.password_test = ConfigDriveUtils.PasswordTest(expect_pw=False)
         vm.key_pair = self.keypair
 
         if public_ip:
@@ -1118,7 +1141,7 @@ class ConfigDriveUtils:
                     cipher = PKCS1_v1_5.new(key)
                 new_password = cipher.decrypt(b64decode(password_), None)
                 if new_password:
-                    vm.password = new_password
+                    vm.password = new_password.decode()
                 else:
                     self.fail("Failed to decrypt new password")
             except ImportError:
@@ -1185,7 +1208,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
     """
 
     def __init__(self, methodName='runTest'):
-        super(cloudstackTestCase, self).__init__(methodName)
+        super(TestConfigDrive, self).__init__(methodName)
         ConfigDriveUtils.__init__(self)
 
     @classmethod
@@ -1198,6 +1221,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         cls.db_client = test_client.getDbConnection()
         cls.test_data = test_client.getParsedTestDataConfig()
         cls.test_data.update(Services().services)
+        cls._cleanup = []
 
         # Get Zone, Domain and templates
         cls.zone = get_zone(cls.api_client)
@@ -1215,7 +1239,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         cls.service_offering = ServiceOffering.create(
             cls.api_client,
             cls.test_data["service_offering"])
-        cls._cleanup = [cls.service_offering]
+        cls._cleanup.append(cls.service_offering)
 
         hypervisors = Hypervisor.list(cls.api_client, zoneid=cls.zone.id)
         cls.isSimulator = any(h.name == "Simulator" for h in hypervisors)
@@ -1223,50 +1247,27 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
 
     def setUp(self):
         # Create an account
+        self.cleanup = []
         self.account = Account.create(self.api_client,
                                       self.test_data["account"],
                                       admin=True,
                                       domainid=self.domain.id
                                       )
+        self.cleanup.append(self.account)
         self.tmp_files = []
-        self.cleanup = [self.account]
         self.generate_ssh_keys()
         return
 
     @classmethod
     def tearDownClass(cls):
-        # Cleanup resources used
-        cls.debug("Cleaning up the resources")
-        for obj in reversed(cls._cleanup):
-            try:
-                if isinstance(obj, VirtualMachine):
-                    obj.delete(cls.api_client, expunge=True)
-                else:
-                    obj.delete(cls.api_client)
-            except Exception as e:
-                cls.error("Failed to cleanup %s, got %s" % (obj, e))
-        # cleanup_resources(cls.api_client, cls._cleanup)
-        cls._cleanup = []
-        cls.debug("Cleanup complete!")
-        return
+        super(TestConfigDrive, cls).tearDownClass()
 
     def tearDown(self):
-        # Cleanup resources used
-        self.debug("Cleaning up the resources")
-        for obj in reversed(self.cleanup):
-            try:
-                if isinstance(obj, VirtualMachine):
-                    obj.delete(self.api_client, expunge=True)
-                else:
-                    obj.delete(self.api_client)
-            except Exception as e:
-                self.error("Failed to cleanup %s, got %s" % (obj, e))
-        # cleanup_resources(self.api_client, self.cleanup)
-        self.cleanup = []
+        super(TestConfigDrive,self).tearDown()
+
         for tmp_file in self.tmp_files:
             os.remove(tmp_file)
         self.debug("Cleanup complete!")
-        return
 
     # create_StaticNatRule_For_VM - Creates Static NAT rule on the given
     # public IP for the given VM in the given network
@@ -1530,12 +1531,13 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         self.debug("SSH into VM with ID - %s on public IP address - %s" %
                    (vm.id, public_ip.ipaddress.ipaddress))
         tries = 1 if negative_test else 3
+        private_key_file_location = keypair.private_key_file if keypair else None
 
-        @retry(tries=tries)
         def retry_ssh():
             ssh_client = vm.get_ssh_client(
                 ipaddress=public_ip.ipaddress.ipaddress,
                 reconnect=reconnect,
+                keyPairFileLocation=private_key_file_location,
                 retries=3 if negative_test else 30
             )
             self.debug("Successful to SSH into VM with ID - %s on "
@@ -1611,7 +1613,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
                          "List network should return a valid list"
                          )
         self.assertEqual(network.name, networks[0].name,
-                         "Name of the network should match with with the "
+                         "Name of the network should match with the "
                          "returned list data"
                          )
         if state:
@@ -1702,6 +1704,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
                        "%s to Host: %s" % (vm.id, host.id))
             try:
                 vm.migrate(self.api_client, hostid=host.id)
+                vm.password_test = ConfigDriveUtils.PasswordTest(expect_pw=False)
             except Exception as e:
                 self.fail("Failed to migrate instance, %s" % e)
             self.debug("Migrated VM with ID: "
@@ -1774,11 +1777,11 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         #    And the VM is successfully deployed and is in the "Running" state
         #    And there is no VR is deployed.
         # 4. And the user data in the ConfigDrive device is as expected
-        # 5. And the the vm password in the ConfigDrive device is as expected
+        # 5. And the vm password in the ConfigDrive device is as expected
 
         # 6. When I stop, reset the password, and start the VM
         # 7. Then I can login into the VM using the new password.
-        # 8. And the the vm password in the ConfigDrive device is the new one
+        # 8. And the vm password in the ConfigDrive device is the new one
 
         # 9. Verify various scenarios and check the data in configdriveIso
         # 10. Delete all the created objects (cleanup).
@@ -1917,7 +1920,8 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         # =====================================================================
         self.debug("+++ Scenario: "
                    "update userdata and reset password after migrate")
-        self.migrate_VM(vm1)
+        host = self.migrate_VM(vm1)
+        vm1.hostname = host.name
         self.then_config_drive_is_as_expected(vm1, public_ip_1, metadata=True)
         self.debug("Updating userdata after migrating VM - %s" % vm1.name)
         self.update_and_validate_userdata(vm1, "hello after migrate",
@@ -1955,7 +1959,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         # =====================================================================
         self.debug("+++ Scenario: "
                    "Update Userdata on a VM that is not password enabled")
-        self.update_template(passwordenabled=False)
+        self.given_template_password_enabled_is(False)
         vm1 = self.when_I_deploy_a_vm_with_keypair_in(network1)
 
         public_ip_1 = \
@@ -1996,11 +2000,11 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         #    And the VM is successfully deployed and is in the "Running" state
 
         # 4. And the user data in the ConfigDrive device is as expected
-        # 5. And the the vm password in the ConfigDrive device is as expected
+        # 5. And the vm password in the ConfigDrive device is as expected
 
         # 6. When I stop, reset the password, and start the VM
         # 7. Then I can login into the VM using the new password.
-        # 8. And the the vm password in the ConfigDrive device is the new one
+        # 8. And the vm password in the ConfigDrive device is the new one
 
         # 9. Verify various scenarios and check the data in configdriveIso
         # 10. Delete all the created objects (cleanup).
@@ -2112,7 +2116,8 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         # =====================================================================
         self.debug("+++ Scenario: "
                    "update userdata and reset password after migrate")
-        self.migrate_VM(vm)
+        host = self.migrate_VM(vm)
+        vm.hostname = host.name
         self.then_config_drive_is_as_expected(vm, public_ip_1, metadata=True)
         self.update_and_validate_userdata(vm, "hello migrate", public_ip_1)
 
@@ -2150,7 +2155,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         self.debug("+++ Scenario: "
                    "Update Userdata on a VM that is not password enabled")
 
-        self.update_template(passwordenabled=False)
+        self.given_template_password_enabled_is(False)
 
         vm = self.when_I_deploy_a_vm(network1,
                                      keypair=self.keypair.name)
@@ -2285,7 +2290,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         self.delete(vm1, expunge=True)
 
         self.given_config_drive_provider_is("Enabled")
-        self.update_template(passwordenabled=False)
+        self.given_template_password_enabled_is(False)
 
         vm1 = self.create_VM(
             [shared_network.network],
@@ -2362,6 +2367,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         self.debug("+++Deploy VM in the created Isolated network "
                    "with user data provider as configdrive")
 
+        self.given_template_password_enabled_is(True)
         vm1 = self.when_I_deploy_a_vm(network1)
 
         public_ip_1 = self.when_I_create_a_static_nat_ip_to(vm1, network1)
@@ -2370,7 +2376,6 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         self.then_config_drive_is_as_expected(
             vm1, public_ip_1,
             metadata=True)
-
 
         # =====================================================================
         # Network restart tests
@@ -2460,6 +2465,12 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
                               value="true"
                               )
 
+        # Enable domain in metadata
+        Configurations.update(self.api_client,
+                              name="metadata.allow.expose.domain",
+                              value="true"
+                              )
+
         # Verify that the above mentioned settings are set to true before proceeding
         if not is_config_suitable(
                 apiclient=self.api_client,
@@ -2473,9 +2484,16 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
                 value='true'):
             self.skipTest('Account level setting account.allow.expose.host.hostname should be true. skipping')
 
+        if not is_config_suitable(
+                apiclient=self.api_client,
+                name='metadata.allow.expose.domain',
+                value='true'):
+            self.skipTest('metadata.allow.expose.domain should be true. skipping')
+
         # =====================================================================
         self.debug("+++ Scenario: "
                    "Deploy VM in the Tier 1 with user data")
+        self.given_template_password_enabled_is(True)
         vm = self.when_I_deploy_a_vm(network1)
         public_ip_1 = self.when_I_create_a_static_nat_ip_to(vm, network1)
 
@@ -2514,6 +2532,7 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         # =====================================================================
         self.debug("+++ Scenario: "
                    "validate updated userdata after migrate")
+        time.sleep(30)
         host = self.migrate_VM(vm)
         vm.hostname = host.name
         self.then_config_drive_is_as_expected(vm, public_ip_1, metadata=True)
@@ -2527,6 +2546,12 @@ class TestConfigDrive(cloudstackTestCase, ConfigDriveUtils):
         # Update Account level setting
         Configurations.update(self.api_client,
                               name="account.allow.expose.host.hostname",
+                              value="false"
+                              )
+
+        # Disable domain in metadata
+        Configurations.update(self.api_client,
+                              name="metadata.allow.expose.domain",
                               value="false"
                               )
 

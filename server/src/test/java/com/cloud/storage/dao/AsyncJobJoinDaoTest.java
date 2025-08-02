@@ -20,13 +20,13 @@ package com.cloud.storage.dao;
 
 import com.cloud.api.query.dao.AsyncJobJoinDaoImpl;
 import com.cloud.api.query.vo.AsyncJobJoinVO;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.response.AsyncJobResponse;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Date;
@@ -50,7 +50,7 @@ public class AsyncJobJoinDaoTest {
         ReflectionTestUtils.setField(job,"result",null);
         ReflectionTestUtils.setField(job,"created",new Date());
         ReflectionTestUtils.setField(job,"removed",new Date());
-        ReflectionTestUtils.setField(job,"instanceType",ApiCommandJobType.VirtualMachine);
+        ReflectionTestUtils.setField(job,"instanceType", ApiCommandResourceType.VirtualMachine);
         ReflectionTestUtils.setField(job,"instanceId",3L);
         final AsyncJobResponse response = dao.newAsyncJobResponse(job);
         Assert.assertEquals(job.getUuid(),response.getJobId());

@@ -16,32 +16,48 @@
 // under the License.
 package com.cloud.dc;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import javax.inject.Inject;
 
 import org.apache.cloudstack.framework.config.ConfigKey;
 import org.apache.cloudstack.framework.config.ConfigKey.Scope;
 import org.apache.cloudstack.framework.config.ScopedConfigStorage;
+import org.apache.commons.collections.CollectionUtils;
 
+import com.cloud.dc.dao.ClusterDao;
+import com.cloud.org.Cluster;
+import com.cloud.utils.Pair;
 import com.cloud.utils.crypt.DBEncryptionUtil;
-import com.cloud.utils.db.GenericDaoBase;
 import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.db.TransactionLegacy;
+import org.apache.cloudstack.resourcedetail.ResourceDetailsDaoBase;
 
-public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long> implements ClusterDetailsDao, ScopedConfigStorage {
+public class ClusterDetailsDaoImpl extends ResourceDetailsDaoBase<ClusterDetailsVO> implements ClusterDetailsDao, ScopedConfigStorage {
+
+    @Inject
+    ClusterDao clusterDao;
+
     protected final SearchBuilder<ClusterDetailsVO> ClusterSearch;
     protected final SearchBuilder<ClusterDetailsVO> DetailSearch;
 
+    private final String CpuOverprovisioningFactor = "cpu.overprovisioning.factor";
+    private final String MemoryOverprovisioningFactor = "mem.overprovisioning.factor";
+    private final String CpuOverCommitRatio = "cpuOvercommitRatio";
+    private final String MemoryOverCommitRatio = "memoryOvercommitRatio";
+
     protected ClusterDetailsDaoImpl() {
         ClusterSearch = createSearchBuilder();
-        ClusterSearch.and("clusterId", ClusterSearch.entity().getClusterId(), SearchCriteria.Op.EQ);
+        ClusterSearch.and("clusterId", ClusterSearch.entity().getResourceId(), SearchCriteria.Op.EQ);
         ClusterSearch.done();
 
         DetailSearch = createSearchBuilder();
-        DetailSearch.and("clusterId", DetailSearch.entity().getClusterId(), SearchCriteria.Op.EQ);
+        DetailSearch.and("clusterId", DetailSearch.entity().getResourceId(), SearchCriteria.Op.EQ);
         DetailSearch.and("name", DetailSearch.entity().getName(), SearchCriteria.Op.EQ);
         DetailSearch.done();
     }
@@ -50,12 +66,7 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
     public ClusterDetailsVO findDetail(long clusterId, String name) {
         SearchCriteria<ClusterDetailsVO> sc = DetailSearch.create();
         // This is temporary fix to support list/update configuration api for cpu and memory overprovisioning ratios
-        if (name.equalsIgnoreCase("cpu.overprovisioning.factor")) {
-            name = "cpuOvercommitRatio";
-        }
-        if (name.equalsIgnoreCase("mem.overprovisioning.factor")) {
-            name = "memoryOvercommitRatio";
-        }
+        name = getCpuMemoryOvercommitRatio(name);
         sc.setParameters("clusterId", clusterId);
         sc.setParameters("name", name);
 
@@ -64,6 +75,11 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
             detail.setValue(DBEncryptionUtil.decrypt(detail.getValue()));
         }
         return detail;
+    }
+
+    @Override
+    public void addDetail(long resourceId, String key, String value, boolean display) {
+        super.addDetail(new ClusterDetailsVO(resourceId, key, value));
     }
 
     @Override
@@ -81,6 +97,23 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
             }
         }
         return details;
+    }
+
+    @Override
+    public Map<String, String> findDetails(long clusterId, Collection<String> names) {
+        if (CollectionUtils.isEmpty(names)) {
+            return new HashMap<>();
+        }
+        SearchBuilder<ClusterDetailsVO> sb = createSearchBuilder();
+        sb.and("clusterId", sb.entity().getResourceId(), SearchCriteria.Op.EQ);
+        sb.and("name", sb.entity().getName(), SearchCriteria.Op.IN);
+        sb.done();
+        SearchCriteria<ClusterDetailsVO> sc = sb.create();
+        sc.setParameters("clusterId", clusterId);
+        sc.setParameters("name", names.toArray());
+        List<ClusterDetailsVO> results = search(sc, null);
+        return results.stream()
+                .collect(Collectors.toMap(ClusterDetailsVO::getName, ClusterDetailsVO::getValue));
     }
 
     @Override
@@ -103,11 +136,13 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
         expunge(sc);
 
         for (Map.Entry<String, String> detail : details.entrySet()) {
+            String name = detail.getKey();
+            name = getCpuMemoryOvercommitRatio(name);
             String value = detail.getValue();
             if ("password".equals(detail.getKey())) {
                 value = DBEncryptionUtil.encrypt(value);
             }
-            ClusterDetailsVO vo = new ClusterDetailsVO(clusterId, detail.getKey(), value);
+            ClusterDetailsVO vo = new ClusterDetailsVO(clusterId, name, value);
             persist(vo);
         }
         txn.commit();
@@ -115,6 +150,7 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
 
     @Override
     public void persist(long clusterId, String name, String value) {
+        name = getCpuMemoryOvercommitRatio(name);
         TransactionLegacy txn = TransactionLegacy.currentTxn();
         txn.start();
         SearchCriteria<ClusterDetailsVO> sc = DetailSearch.create();
@@ -133,8 +169,8 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
     }
 
     @Override
-    public String getConfigValue(long id, ConfigKey<?> key) {
-        ClusterDetailsVO vo = findDetail(id, key.key());
+    public String getConfigValue(long id, String key) {
+        ClusterDetailsVO vo = findDetail(id, key);
         return vo == null ? null : vo.getValue();
     }
 
@@ -146,5 +182,25 @@ public class ClusterDetailsDaoImpl extends GenericDaoBase<ClusterDetailsVO, Long
         if (tokens != null && tokens.length > 3)
             dcName = tokens[3];
         return dcName;
+    }
+
+    private String getCpuMemoryOvercommitRatio(String name) {
+        if (name.equalsIgnoreCase(CpuOverprovisioningFactor)) {
+            name = CpuOverCommitRatio;
+        }
+        if (name.equalsIgnoreCase(MemoryOverprovisioningFactor)) {
+            name = MemoryOverCommitRatio;
+        }
+
+        return name;
+    }
+
+    @Override
+    public Pair<Scope, Long> getParentScope(long id) {
+        Cluster cluster = clusterDao.findById(id);
+        if (cluster == null) {
+            return null;
+        }
+        return new Pair<>(getScope().getParent(), cluster.getDataCenterId());
     }
 }

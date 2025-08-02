@@ -22,8 +22,9 @@ import java.util.List;
 
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
-
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.commons.lang3.StringUtils;
 
 import com.cloud.utils.component.ComponentMethodInterceptor;
 
@@ -69,11 +70,14 @@ public class ActionEventInterceptor implements ComponentMethodInterceptor, Metho
             if (async) {
                 CallContext ctx = CallContext.current();
 
-                String eventDescription = getEventDescription(actionEvent, ctx);
+                String eventDescription = getEventDescription(actionEvent, ctx, true);
+                Long eventResourceId = getEventResourceId(actionEvent, ctx);
+                String eventResourceType = getEventResourceType(actionEvent, ctx);
                 String eventType = getEventType(actionEvent, ctx);
                 boolean isEventDisplayEnabled = ctx.isEventDisplayEnabled();
 
-                ActionEventUtils.onStartedActionEventFromContext(eventType, eventDescription, isEventDisplayEnabled);
+                ActionEventUtils.onStartedActionEventFromContext(eventType, eventDescription,
+                        eventResourceId, eventResourceType, isEventDisplayEnabled);
             }
         }
         return event;
@@ -84,11 +88,13 @@ public class ActionEventInterceptor implements ComponentMethodInterceptor, Metho
         for (ActionEvent actionEvent : getActionEvents(method)) {
             CallContext ctx = CallContext.current();
             long userId = ctx.getCallingUserId();
-            long accountId = ctx.getProject() != null ? ctx.getProject().getProjectAccountId() : ctx.getCallingAccountId();    //This should be the entity owner id rather than the Calling User Account Id.
             long startEventId = ctx.getStartEventId();
             String eventDescription = getEventDescription(actionEvent, ctx);
+            Long eventResourceId = getEventResourceId(actionEvent, ctx);
+            String eventResourceType = getEventResourceType(actionEvent, ctx);
             String eventType = getEventType(actionEvent, ctx);
             boolean isEventDisplayEnabled = ctx.isEventDisplayEnabled();
+            long accountId = ActionEventUtils.getOwnerAccountId(ctx, eventType, ctx.getCallingAccountId());
 
             if (eventType.equals(""))
                 return;
@@ -96,11 +102,13 @@ public class ActionEventInterceptor implements ComponentMethodInterceptor, Metho
             if (actionEvent.create()) {
                 //This start event has to be used for subsequent events of this action
                 startEventId = ActionEventUtils.onCreatedActionEvent(userId, accountId, EventVO.LEVEL_INFO, eventType,
-                        isEventDisplayEnabled, "Successfully created entity for " + eventDescription);
+                        isEventDisplayEnabled, "Successfully created entity for " + eventDescription,
+                        eventResourceId, eventResourceType);
                 ctx.setStartEventId(startEventId);
             } else {
                 ActionEventUtils.onCompletedActionEvent(userId, accountId, EventVO.LEVEL_INFO, eventType,
-                        isEventDisplayEnabled, "Successfully completed " + eventDescription, startEventId);
+                        isEventDisplayEnabled, "Successfully completed " + eventDescription,
+                        eventResourceId, eventResourceType, startEventId);
             }
         }
     }
@@ -110,22 +118,26 @@ public class ActionEventInterceptor implements ComponentMethodInterceptor, Metho
         for (ActionEvent actionEvent : getActionEvents(method)) {
             CallContext ctx = CallContext.current();
             long userId = ctx.getCallingUserId();
-            long accountId = ctx.getCallingAccountId();
             long startEventId = ctx.getStartEventId();
             String eventDescription = getEventDescription(actionEvent, ctx);
+            Long eventResourceId = getEventResourceId(actionEvent, ctx);
+            String eventResourceType = getEventResourceType(actionEvent, ctx);
             String eventType = getEventType(actionEvent, ctx);
             boolean isEventDisplayEnabled = ctx.isEventDisplayEnabled();
+            long accountId = ActionEventUtils.getOwnerAccountId(ctx, eventType, ctx.getCallingAccountId());
 
             if (eventType.equals(""))
                 return;
 
             if (actionEvent.create()) {
                 long eventId = ActionEventUtils.onCreatedActionEvent(userId, accountId, EventVO.LEVEL_ERROR, eventType,
-                            isEventDisplayEnabled, "Error while creating entity for " + eventDescription);
+                        isEventDisplayEnabled, "Error while creating entity for " + eventDescription,
+                        eventResourceId, eventResourceType);
                 ctx.setStartEventId(eventId);
             } else {
                 ActionEventUtils.onCompletedActionEvent(userId, accountId, EventVO.LEVEL_ERROR, eventType, isEventDisplayEnabled,
-                        "Error while " + eventDescription, startEventId);
+                        "Error while " + eventDescription,
+                        eventResourceId, eventResourceType, startEventId);
             }
         }
     }
@@ -171,16 +183,37 @@ public class ActionEventInterceptor implements ComponentMethodInterceptor, Metho
         return type == null ? actionEvent.eventType() : type;
     }
 
-    protected String getEventDescription(ActionEvent actionEvent, CallContext ctx) {
+    protected String getEventDescription(ActionEvent actionEvent, CallContext ctx, boolean capitalizeFirstLetter) {
         String eventDescription = ctx.getEventDescription();
         if (eventDescription == null) {
             eventDescription = actionEvent.eventDescription();
         }
-
         if (ctx.getEventDetails() != null) {
             eventDescription += ". " + ctx.getEventDetails();
         }
-
+        if (capitalizeFirstLetter && StringUtils.isNotBlank(eventDescription)) {
+            eventDescription = eventDescription.substring(0, 1).toUpperCase() + eventDescription.substring(1);
+        }
         return eventDescription;
+    }
+
+    protected String getEventDescription(ActionEvent actionEvent, CallContext ctx) {
+        return getEventDescription(actionEvent, ctx, false);
+    }
+
+    protected Long getEventResourceId(ActionEvent actionEvent, CallContext ctx) {
+        Long resourceId = ctx.getEventResourceId();
+        if (resourceId != null) {
+            return resourceId;
+        }
+        return actionEvent.resourceId() == -1? null : actionEvent.resourceId();
+    }
+
+    protected String getEventResourceType(ActionEvent actionEvent, CallContext ctx) {
+        ApiCommandResourceType resourceType = ctx.getEventResourceType();
+        if (resourceType != null) {
+            return resourceType.toString();
+        }
+        return StringUtils.isEmpty(actionEvent.resourceType()) ? null : actionEvent.resourceType();
     }
 }

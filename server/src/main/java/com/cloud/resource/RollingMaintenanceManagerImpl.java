@@ -16,6 +16,29 @@
 // under the License.
 package com.cloud.resource;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import javax.inject.Inject;
+import javax.naming.ConfigurationException;
+
+import org.apache.cloudstack.affinity.AffinityGroupProcessor;
+import org.apache.cloudstack.api.ApiCommandResourceType;
+import org.apache.cloudstack.api.command.admin.cluster.UpdateClusterCmd;
+import org.apache.cloudstack.api.command.admin.host.PrepareForHostMaintenanceCmd;
+import org.apache.cloudstack.api.command.admin.resource.StartRollingMaintenanceCmd;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.framework.config.ConfigKey;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.ObjectUtils;
+
 import com.cloud.agent.AgentManager;
 import com.cloud.agent.api.Answer;
 import com.cloud.agent.api.RollingMaintenanceAnswer;
@@ -31,6 +54,7 @@ import com.cloud.exception.AgentUnavailableException;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.OperationTimedoutException;
 import com.cloud.host.Host;
+import com.cloud.host.HostTagVO;
 import com.cloud.host.HostVO;
 import com.cloud.host.Status;
 import com.cloud.host.dao.HostDao;
@@ -41,33 +65,17 @@ import com.cloud.org.Grouping;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.service.dao.ServiceOfferingDao;
 import com.cloud.utils.Pair;
+import com.cloud.utils.StringUtils;
 import com.cloud.utils.Ternary;
 import com.cloud.utils.component.ManagerBase;
 import com.cloud.utils.exception.CloudRuntimeException;
+import com.cloud.vm.VMInstanceDetailVO;
 import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachine.State;
 import com.cloud.vm.VirtualMachineProfileImpl;
+import com.cloud.vm.VmDetailConstants;
+import com.cloud.vm.dao.VMInstanceDetailsDao;
 import com.cloud.vm.dao.VMInstanceDao;
-import org.apache.cloudstack.affinity.AffinityGroupProcessor;
-import org.apache.cloudstack.api.command.admin.cluster.UpdateClusterCmd;
-import org.apache.cloudstack.api.command.admin.host.PrepareForMaintenanceCmd;
-import org.apache.cloudstack.api.command.admin.resource.StartRollingMaintenanceCmd;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.cloudstack.framework.config.ConfigKey;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.log4j.Logger;
-
-import javax.inject.Inject;
-import javax.naming.ConfigurationException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class RollingMaintenanceManagerImpl extends ManagerBase implements RollingMaintenanceManager {
 
@@ -81,6 +89,8 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
     private CapacityManager capacityManager;
     @Inject
     private VMInstanceDao vmInstanceDao;
+    @Inject
+    protected VMInstanceDetailsDao vmInstanceDetailsDao;
     @Inject
     private ServiceOfferingDao serviceOfferingDao;
     @Inject
@@ -96,7 +106,6 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
         _affinityProcessors = affinityProcessors;
     }
 
-    public static final Logger s_logger = Logger.getLogger(RollingMaintenanceManagerImpl.class.getName());
 
     private Pair<ResourceType, List<Long>> getResourceTypeAndIdPair(List<Long> podIds, List<Long> clusterIds, List<Long> zoneIds, List<Long> hostIds) {
         Pair<ResourceType, List<Long>> pair = CollectionUtils.isNotEmpty(podIds) ? new Pair<>(ResourceType.Pod, podIds) :
@@ -131,12 +140,12 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
         Pair<ResourceType, List<Long>> pair = getResourceTypeIdPair(cmd);
         ResourceType entity = pair.first();
         List<Long> ids = pair.second();
-
+        String cmdResourceType = ApiCommandResourceType.fromString(entity.name()) != null ? ApiCommandResourceType.fromString(entity.name()).toString() : null;
         String description = String.format("Success: %s, details: %s, hosts updated: %s, hosts skipped: %s", success, details,
                 generateReportHostsUpdated(hostsUpdated), generateReportHostsSkipped(hostsSkipped));
         ActionEventUtils.onCompletedActionEvent(CallContext.current().getCallingUserId(), CallContext.current().getCallingAccountId(),
                 EventVO.LEVEL_INFO, cmd.getEventType(),
-                "Completed rolling maintenance for entity " + entity + " with IDs: " + ids + " - " + description, 0);
+                "Completed rolling maintenance for entity " + entity + " with IDs: " + ids + " - " + description, ids.get(0), cmdResourceType, 0);
     }
 
     private String generateReportHostsUpdated(List<HostUpdated> hostsUpdated) {
@@ -190,11 +199,11 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
                 }
                 disableClusterIfEnabled(cluster, disabledClusters);
 
-                s_logger.debug("State checks on the hosts in the cluster");
+                logger.debug("State checks on the hosts in the cluster");
                 performStateChecks(cluster, hosts, forced, hostsSkipped);
-                s_logger.debug("Checking hosts capacity before attempting rolling maintenance");
+                logger.debug("Checking hosts capacity before attempting rolling maintenance");
                 performCapacityChecks(cluster, hosts, forced);
-                s_logger.debug("Attempting pre-flight stages on each host before starting rolling maintenance");
+                logger.debug("Attempting pre-flight stages on each host before starting rolling maintenance");
                 performPreFlightChecks(hosts, timeout, payload, forced, hostsToAvoidMaintenance);
 
                 for (Host host: hosts) {
@@ -213,7 +222,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
             }
         } catch (AgentUnavailableException | InterruptedException | CloudRuntimeException e) {
             String err = "Error starting rolling maintenance: " + e.getMessage();
-            s_logger.error(err, e);
+            logger.error(err, e);
             success = false;
             details = err;
             return new Ternary<>(success, details, new Pair<>(hostsUpdated, hostsSkipped));
@@ -307,7 +316,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
             return new Ternary<>(false, true, "Maintenance stage must be avoided");
         }
 
-        s_logger.debug("Updating capacity before re-checking capacity");
+        logger.debug("Updating capacity before re-checking capacity");
         alertManager.recalculateCapacity();
         result = reCheckCapacityBeforeMaintenanceOnHost(cluster, host, forced, hostsSkipped);
         if (result.first() || result.second()) {
@@ -362,7 +371,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
     private void cancelHostMaintenance(Host host) {
         if (!resourceManager.cancelMaintenance(host.getId())) {
             String message = "Could not cancel maintenance on host " + host.getUuid();
-            s_logger.error(message);
+            logger.error(message);
             throw new CloudRuntimeException(message);
         }
     }
@@ -395,8 +404,8 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
      * @throws AgentUnavailableException
      */
     private void putHostIntoMaintenance(Host host) throws InterruptedException, AgentUnavailableException {
-        s_logger.debug("Trying to set the host " + host.getId() + " into maintenance");
-        PrepareForMaintenanceCmd cmd = new PrepareForMaintenanceCmd();
+        logger.debug(String.format("Trying to set %s into maintenance", host));
+        PrepareForHostMaintenanceCmd cmd = new PrepareForHostMaintenanceCmd();
         cmd.setId(host.getId());
         resourceManager.maintain(cmd);
         waitForHostInMaintenance(host.getId());
@@ -423,9 +432,9 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
     private Ternary<Boolean, Boolean, String> reCheckCapacityBeforeMaintenanceOnHost(Cluster cluster, Host host, Boolean forced, List<HostSkipped> hostsSkipped) {
         Pair<Boolean, String> capacityCheckBeforeMaintenance = performCapacityChecksBeforeHostInMaintenance(host, cluster);
         if (!capacityCheckBeforeMaintenance.first()) {
-            String errorMsg = "Capacity check failed for host " + host.getUuid() + ": " + capacityCheckBeforeMaintenance.second();
+            String errorMsg = String.format("Capacity check failed for %s: %s", host, capacityCheckBeforeMaintenance.second());
             if (forced) {
-                s_logger.info("Skipping host " + host.getUuid() + " as: " + errorMsg);
+                logger.info(String.format("Skipping %s as: %s", host, errorMsg));
                 hostsSkipped.add(new HostSkipped(host, errorMsg));
                 return new Ternary<>(true, true, capacityCheckBeforeMaintenance.second());
             }
@@ -439,9 +448,9 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
      */
     private boolean isMaintenanceStageAvoided(Host host, Map<Long, String> hostsToAvoidMaintenance, List<HostSkipped> hostsSkipped) {
         if (hostsToAvoidMaintenance.containsKey(host.getId())) {
-            s_logger.debug("Host " + host.getId() + " is not being put into maintenance, skipping it");
             HostSkipped hostSkipped = new HostSkipped(host, hostsToAvoidMaintenance.get(host.getId()));
             hostsSkipped.add(hostSkipped);
+            logger.debug(String.format("%s is in avoid maintenance list [hosts skipped: %d], skipping its maintenance.", host, hostsSkipped.size()));
             return true;
         }
         return false;
@@ -468,7 +477,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
             return new Ternary<>(true, false, result.second());
         }
         if (result.third() && !hostsToAvoidMaintenance.containsKey(host.getId())) {
-            s_logger.debug("Host " + host.getId() + " added to the avoid maintenance set");
+            logHostAddedToAvoidMaintenanceSet(host);
             hostsToAvoidMaintenance.put(host.getId(), "Pre-maintenance stage set to avoid maintenance");
         }
         return new Ternary<>(false, false, result.second());
@@ -491,8 +500,8 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
             RollingMaintenanceAnswer answer = (RollingMaintenanceAnswer) agentManager.send(host.getId(), new RollingMaintenanceCommand(true));
             return answer.isMaintenaceScriptDefined();
         } catch (AgentUnavailableException | OperationTimedoutException e) {
-            String msg = "Could not check for maintenance script on host " + host.getId() + " due to: " + e.getMessage();
-            s_logger.error(msg, e);
+            String msg = String.format("Could not check for maintenance script on %s due to: %s", host, e.getMessage());
+            logger.error(msg, e);
             return false;
         }
     }
@@ -500,7 +509,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
     /**
      * Execute stage on host
      * @return tuple: (SUCCESS, DETAILS, AVOID_MAINTENANCE) where:
-     *                  - SUCCESS: True if stage is successfull
+     *                  - SUCCESS: True if stage is successful
      *                  - DETAILS: Information retrieved by the host after executing the stage
      *                  - AVOID_MAINTENANCE: True if maintenance stage must be avoided
      */
@@ -516,7 +525,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
     /**
      * Send rolling maintenance command to a host to perform a certain stage specified in cmd
      * @return tuple: (SUCCESS, DETAILS, AVOID_MAINTENANCE) where:
-     *                  - SUCCESS: True if stage is successfull
+     *                  - SUCCESS: True if stage is successful
      *                  - DETAILS: Information retrieved by the host after executing the stage
      *                  - AVOID_MAINTENANCE: True if maintenance stage must be avoided
      */
@@ -537,8 +546,8 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
                 answer = agentManager.send(host.getId(), cmd);
             } catch (AgentUnavailableException | OperationTimedoutException e) {
                 // Agent may be restarted on the scripts - continue polling until it is up
-                String msg = "Cannot send command to host: " + host.getId() + ", waiting " + pingInterval + "ms - " + e.getMessage();
-                s_logger.warn(msg);
+                String msg = String.format("Cannot send command to %s, waiting %sms - %s", host, pingInterval, e.getMessage());
+                logger.warn(msg, e);
                 cmd.setStarted(true);
                 Thread.sleep(pingInterval);
                 timeSpent += pingInterval;
@@ -571,10 +580,14 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
         for (Host host : hosts) {
             Ternary<Boolean, String, Boolean> result = performStageOnHost(host, Stage.PreFlight, timeout, payload, forced);
             if (result.third() && !hostsToAvoidMaintenance.containsKey(host.getId())) {
-                s_logger.debug("Host " + host.getId() + " added to the avoid maintenance set");
+                logHostAddedToAvoidMaintenanceSet(host);
                 hostsToAvoidMaintenance.put(host.getId(), "Pre-flight stage set to avoid maintenance");
             }
         }
+    }
+
+    private void logHostAddedToAvoidMaintenanceSet(Host host) {
+        logger.debug(String.format("%s added to the avoid maintenance set.", host));
     }
 
     /**
@@ -584,7 +597,7 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
         for (Host host : hosts) {
             Pair<Boolean, String> result = performCapacityChecksBeforeHostInMaintenance(host, cluster);
             if (!result.first() && !forced) {
-                throw new CloudRuntimeException("Capacity check failed for host " + host.getUuid() + ": " + result.second());
+                throw new CloudRuntimeException(String.format("Capacity check failed for %s : %s", host, result.second()));
             }
         }
     }
@@ -608,16 +621,24 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
         if (CollectionUtils.isEmpty(vmsRunning)) {
             return new Pair<>(true, "OK");
         }
-        List<String> hostTags = hostTagsDao.gethostTags(host.getId());
+        List<HostTagVO> hostTags = hostTagsDao.getHostTags(host.getId());
 
-        int sucessfullyCheckedVmMigrations = 0;
+        int successfullyCheckedVmMigrations = 0;
         for (VMInstanceVO runningVM : vmsRunning) {
             boolean canMigrateVm = false;
+            Ternary<Integer, Integer, Integer> cpuSpeedAndRamSize = getComputeResourcesCpuSpeedAndRamSize(runningVM);
+            Integer cpu = cpuSpeedAndRamSize.first();
+            Integer speed = cpuSpeedAndRamSize.second();
+            Integer ramSize = cpuSpeedAndRamSize.third();
+            if (ObjectUtils.anyNull(cpu, speed, ramSize)) {
+                logger.warn("Cannot fetch compute resources for the VM {}, skipping it from the capacity check", runningVM);
+                continue;
+            }
+
             ServiceOfferingVO serviceOffering = serviceOfferingDao.findById(runningVM.getServiceOfferingId());
             for (Host hostInCluster : hostsInCluster) {
-                if (!checkHostTags(hostTags, hostTagsDao.gethostTags(hostInCluster.getId()), serviceOffering.getHostTag())) {
-                    s_logger.debug("Host tags mismatch between host " + host.getUuid() + " and host " + hostInCluster.getUuid() +
-                            ". Skipping it from the capacity check");
+                if (!checkHostTags(hostTags, hostTagsDao.getHostTags(hostInCluster.getId()), serviceOffering.getHostTag())) {
+                    logger.debug("Host tags mismatch between {} and {} Skipping it from the capacity check", host, hostInCluster);
                     continue;
                 }
                 DeployDestination deployDestination = new DeployDestination(null, null, null, host);
@@ -627,19 +648,18 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
                     affinityChecks = affinityChecks && affinityProcessor.check(vmProfile, deployDestination);
                 }
                 if (!affinityChecks) {
-                    s_logger.debug("Affinity check failed between host " + host.getUuid() + " and host " + hostInCluster.getUuid() +
-                            ". Skipping it from the capacity check");
+                    logger.debug("Affinity check failed between {} and {} Skipping it from the capacity check", host, hostInCluster);
                     continue;
                 }
                 boolean maxGuestLimit = capacityManager.checkIfHostReachMaxGuestLimit(host);
-                boolean hostHasCPUCapacity = capacityManager.checkIfHostHasCpuCapability(hostInCluster.getId(), serviceOffering.getCpu(), serviceOffering.getSpeed());
-                int cpuRequested = serviceOffering.getCpu() * serviceOffering.getSpeed();
-                long ramRequested = serviceOffering.getRamSize() * 1024L * 1024L;
+                boolean hostHasCPUCapacity = capacityManager.checkIfHostHasCpuCapability(hostInCluster, cpu, speed);
+                int cpuRequested = cpu * speed;
+                long ramRequested = ramSize * 1024L * 1024L;
                 ClusterDetailsVO clusterDetailsCpuOvercommit = clusterDetailsDao.findDetail(cluster.getId(), "cpuOvercommitRatio");
                 ClusterDetailsVO clusterDetailsRamOvercommmt = clusterDetailsDao.findDetail(cluster.getId(), "memoryOvercommitRatio");
                 Float cpuOvercommitRatio = Float.parseFloat(clusterDetailsCpuOvercommit.getValue());
                 Float memoryOvercommitRatio = Float.parseFloat(clusterDetailsRamOvercommmt.getValue());
-                boolean hostHasCapacity = capacityManager.checkIfHostHasCapacity(hostInCluster.getId(), cpuRequested, ramRequested, false,
+                boolean hostHasCapacity = capacityManager.checkIfHostHasCapacity(hostInCluster, cpuRequested, ramRequested, false,
                         cpuOvercommitRatio, memoryOvercommitRatio, false);
                 if (!maxGuestLimit && hostHasCPUCapacity && hostHasCapacity) {
                     canMigrateVm = true;
@@ -647,30 +667,61 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
                 }
             }
             if (!canMigrateVm) {
-                String msg = "VM " + runningVM.getUuid() + " cannot be migrated away from host " + host.getUuid() +
-                        " to any other host in the cluster";
-                s_logger.error(msg);
+                String msg = String.format("%s cannot be migrated away from %s to any other host in the cluster", runningVM, host);
+                logger.error(msg);
                 return new Pair<>(false, msg);
             }
-            sucessfullyCheckedVmMigrations++;
+            successfullyCheckedVmMigrations++;
         }
-        if (sucessfullyCheckedVmMigrations != vmsRunning.size()) {
-            return new Pair<>(false, "Host " + host.getId() + " cannot enter maintenance mode as capacity check failed for hosts in cluster " + cluster.getUuid());
+        if (successfullyCheckedVmMigrations != vmsRunning.size()) {
+            String migrationCheckDetails = String.format("%s cannot enter maintenance mode as capacity check failed for hosts in cluster %s", host, cluster);
+            return new Pair<>(false, migrationCheckDetails);
         }
         return new Pair<>(true, "OK");
+    }
+
+    protected Ternary<Integer, Integer, Integer> getComputeResourcesCpuSpeedAndRamSize(VMInstanceVO runningVM) {
+        ServiceOfferingVO serviceOffering = serviceOfferingDao.findById(runningVM.getServiceOfferingId());
+        Integer cpu = serviceOffering.getCpu();
+        Integer speed = serviceOffering.getSpeed();
+        Integer ramSize = serviceOffering.getRamSize();
+        if (!serviceOffering.isDynamic()) {
+            return new Ternary<>(cpu, speed, ramSize);
+        }
+
+        List<VMInstanceDetailVO> vmDetails = vmInstanceDetailsDao.listDetails(runningVM.getId());
+        if (CollectionUtils.isEmpty(vmDetails)) {
+            return new Ternary<>(cpu, speed, ramSize);
+        }
+
+        for (VMInstanceDetailVO vmDetail : vmDetails) {
+            if (StringUtils.isBlank(vmDetail.getName()) || StringUtils.isBlank(vmDetail.getValue())) {
+                continue;
+            }
+
+            if (cpu == null && VmDetailConstants.CPU_NUMBER.equals(vmDetail.getName())) {
+                cpu = Integer.valueOf(vmDetail.getValue());
+            } else if (speed == null && VmDetailConstants.CPU_SPEED.equals(vmDetail.getName())) {
+                speed = Integer.valueOf(vmDetail.getValue());
+            } else if (ramSize == null && VmDetailConstants.MEMORY.equals(vmDetail.getName())) {
+                ramSize = Integer.valueOf(vmDetail.getValue());
+            }
+        }
+
+        return new Ternary<>(cpu, speed, ramSize);
     }
 
     /**
      * Check hosts tags
      */
-    private boolean checkHostTags(List<String> hostTags, List<String> hostInClusterTags, String offeringTag) {
-        if (CollectionUtils.isEmpty(hostTags) && CollectionUtils.isEmpty(hostInClusterTags)) {
+    private boolean checkHostTags(List<HostTagVO> hostTags, List<HostTagVO> hostInClusterTags, String offeringTag) {
+        if ((CollectionUtils.isEmpty(hostTags) && CollectionUtils.isEmpty(hostInClusterTags)) || StringUtils.isBlank(offeringTag)) {
             return true;
         } else if ((CollectionUtils.isNotEmpty(hostTags) && CollectionUtils.isEmpty(hostInClusterTags)) ||
                 (CollectionUtils.isEmpty(hostTags) && CollectionUtils.isNotEmpty(hostInClusterTags))) {
             return false;
         } else {
-            return hostInClusterTags.contains(offeringTag);
+            return hostInClusterTags.parallelStream().anyMatch(hostTagVO -> offeringTag.equals(hostTagVO.getTag()));
         }
     }
 
@@ -720,10 +771,10 @@ public class RollingMaintenanceManagerImpl extends ManagerBase implements Rollin
         if (host.getResourceState() != ResourceState.Maintenance) {
             String errorMsg = "Timeout: waited " + timeout + "ms for host " + host.getUuid() + "(" + host.getName() + ")" +
                     " to be in Maintenance state, but after timeout it is in " + host.getResourceState().toString() + " state";
-            s_logger.error(errorMsg);
+            logger.error(errorMsg);
             throw new CloudRuntimeException(errorMsg);
         }
-        s_logger.debug("Host " + host.getUuid() + "(" + host.getName() + ") is in maintenance");
+        logger.debug("Host " + host.getUuid() + "(" + host.getName() + ") is in maintenance");
     }
 
     @Override

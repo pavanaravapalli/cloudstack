@@ -19,6 +19,8 @@ package org.apache.cloudstack.api.command.user.vpc;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.cloud.server.ResourceIcon;
+import com.cloud.server.ResourceTag;
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -27,10 +29,10 @@ import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.command.user.UserCmd;
 import org.apache.cloudstack.api.response.ListResponse;
+import org.apache.cloudstack.api.response.ResourceIconResponse;
 import org.apache.cloudstack.api.response.VpcOfferingResponse;
 import org.apache.cloudstack.api.response.VpcResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
-import org.apache.log4j.Logger;
 
 import com.cloud.network.vpc.Vpc;
 import com.cloud.utils.Pair;
@@ -39,7 +41,6 @@ import com.cloud.utils.Pair;
 @APICommand(name = "listVPCs", description = "Lists VPCs", responseObject = VpcResponse.class, responseView = ResponseView.Restricted, entityType = {Vpc.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListVPCsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(ListVPCsCmd.class.getName());
     private static final String s_name = "listvpcsresponse";
 
     /////////////////////////////////////////////////////
@@ -75,6 +76,10 @@ public class ListVPCsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
 
     @Parameter(name = ApiConstants.FOR_DISPLAY, type = CommandType.BOOLEAN, description = "list resources by display flag; only ROOT admin is eligible to pass this parameter", since = "4.4", authorized = {RoleType.Admin})
     private Boolean display;
+
+    @Parameter(name = ApiConstants.SHOW_RESOURCE_ICON, type = CommandType.BOOLEAN,
+            description = "flag to display the resource icon for VPCs")
+    private Boolean showIcon;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -124,6 +129,10 @@ public class ListVPCsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
         return super.getDisplay();
     }
 
+    public Boolean getShowIcon() {
+        return showIcon != null ? showIcon : false;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
@@ -131,9 +140,7 @@ public class ListVPCsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
     @Override
     public void execute() {
         Pair<List<? extends Vpc>, Integer> vpcs =
-            _vpcService.listVpcs(getId(), getVpcName(), getDisplayText(), getSupportedServices(), getCidr(), getVpcOffId(), getState(), getAccountName(), getDomainId(),
-                getKeyword(), getStartIndex(), getPageSizeVal(), getZoneId(), isRecursive(), listAll(), getRestartRequired(), getTags(),
-                getProjectId(), getDisplay());
+            _vpcService.listVpcs(this);
         ListResponse<VpcResponse> response = new ListResponse<VpcResponse>();
         List<VpcResponse> vpcResponses = new ArrayList<VpcResponse>();
         for (Vpc vpc : vpcs.first()) {
@@ -144,6 +151,20 @@ public class ListVPCsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
         response.setResponses(vpcResponses, vpcs.second());
         response.setResponseName(getCommandName());
         setResponseObject(response);
+        if (response != null && response.getCount() > 0 && getShowIcon()) {
+            updateVpcResponse(response.getResponses());
+        }
+    }
+
+    private void updateVpcResponse(List<VpcResponse> response) {
+        for (VpcResponse vpcResponse : response) {
+            ResourceIcon resourceIcon = resourceIconManager.getByResourceTypeAndUuid(ResourceTag.ResourceObjectType.Vpc, vpcResponse.getId());
+            if (resourceIcon == null) {
+                continue;
+            }
+            ResourceIconResponse iconResponse = _responseGenerator.createResourceIconResponse(resourceIcon);
+            vpcResponse.setResourceIconResponse(iconResponse);
+        }
     }
 
     @Override

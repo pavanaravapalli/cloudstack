@@ -16,10 +16,12 @@
 // under the License.
 package org.apache.cloudstack.implicitplanner;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,7 +36,11 @@ import java.util.UUID;
 
 import javax.inject.Inject;
 
-import com.cloud.user.User;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.subsystem.api.storage.DataStoreManager;
+import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
+import org.apache.cloudstack.test.utils.SpringUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -52,12 +58,6 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.support.AnnotationConfigContextLoader;
 
-import org.apache.cloudstack.context.CallContext;
-import org.apache.cloudstack.engine.subsystem.api.storage.DataStoreManager;
-import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
-import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
-import org.apache.cloudstack.test.utils.SpringUtils;
-
 import com.cloud.capacity.Capacity;
 import com.cloud.capacity.CapacityManager;
 import com.cloud.capacity.dao.CapacityDao;
@@ -71,7 +71,6 @@ import com.cloud.deploy.DeploymentPlanner.ExcludeList;
 import com.cloud.deploy.ImplicitDedicationPlanner;
 import com.cloud.exception.InsufficientServerCapacityException;
 import com.cloud.gpu.dao.HostGpuGroupsDao;
-import com.cloud.host.HostVO;
 import com.cloud.host.dao.HostDao;
 import com.cloud.host.dao.HostDetailsDao;
 import com.cloud.host.dao.HostTagsDao;
@@ -88,6 +87,7 @@ import com.cloud.storage.dao.VolumeDao;
 import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
 import com.cloud.user.AccountVO;
+import com.cloud.user.User;
 import com.cloud.user.UserVO;
 import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
@@ -95,7 +95,7 @@ import com.cloud.vm.UserVmVO;
 import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachineProfileImpl;
 import com.cloud.vm.dao.UserVmDao;
-import com.cloud.vm.dao.UserVmDetailsDao;
+import com.cloud.vm.dao.VMInstanceDetailsDao;
 import com.cloud.vm.dao.VMInstanceDao;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -123,7 +123,7 @@ public class ImplicitPlannerTest {
     @Inject
     UserVmDao vmDao;
     @Inject
-    UserVmDetailsDao vmDetailsDao;
+    VMInstanceDetailsDao vmDetailsDao;
     @Inject
     VMInstanceDao vmInstanceDao;
     @Inject
@@ -164,7 +164,7 @@ public class ImplicitPlannerTest {
     public void setUp() {
         ComponentContext.initComponentsLifeCycle();
 
-        acct.setType(Account.ACCOUNT_TYPE_NORMAL);
+        acct.setType(Account.Type.NORMAL);
         acct.setAccountName("user1");
         acct.setDomainId(domainId);
         acct.setId(accountId);
@@ -211,15 +211,7 @@ public class ImplicitPlannerTest {
         // Check cluster 2 and 3 are not in the cluster list.
         // Host 6 and 7 should also be in avoid list.
         assertFalse("Cluster list should not be null/empty", (clusterList == null || clusterList.isEmpty()));
-        boolean foundNeededCluster = false;
-        for (Long cluster : clusterList) {
-            if (cluster != 1) {
-                fail("Found a cluster that shouldn't have been present, cluster id : " + cluster);
-            } else {
-                foundNeededCluster = true;
-            }
-        }
-        assertTrue("Didn't find cluster 1 in the list. It should have been present", foundNeededCluster);
+        assertThat("Found cluster that shouldn't have been present, only cluster 1 should be present", clusterList, everyItem(equalTo(1L)));
 
         Set<Long> hostsInAvoidList = avoids.getHostsToAvoid();
         assertFalse("Host 5 shouldn't have be in the avoid list, but it is present", hostsInAvoidList.contains(5L));
@@ -248,15 +240,7 @@ public class ImplicitPlannerTest {
         // Check cluster 1 and 3 are not in the cluster list.
         // Host 5 and 7 should also be in avoid list.
         assertFalse("Cluster list should not be null/empty", (clusterList == null || clusterList.isEmpty()));
-        boolean foundNeededCluster = false;
-        for (Long cluster : clusterList) {
-            if (cluster != 2) {
-                fail("Found a cluster that shouldn't have been present, cluster id : " + cluster);
-            } else {
-                foundNeededCluster = true;
-            }
-        }
-        assertTrue("Didn't find cluster 2 in the list. It should have been present", foundNeededCluster);
+        assertThat("Found cluster that shouldn't have been present, only cluster 2 should be present", clusterList, everyItem(equalTo(2L)));
 
         Set<Long> hostsInAvoidList = avoids.getHostsToAvoid();
         assertFalse("Host 6 shouldn't have be in the avoid list, but it is present", hostsInAvoidList.contains(6L));
@@ -307,15 +291,7 @@ public class ImplicitPlannerTest {
         // Check cluster 1 and 2 are not in the cluster list.
         // Host 5 and 6 should also be in avoid list.
         assertFalse("Cluster list should not be null/empty", (clusterList == null || clusterList.isEmpty()));
-        boolean foundNeededCluster = false;
-        for (Long cluster : clusterList) {
-            if (cluster != 3) {
-                fail("Found a cluster that shouldn't have been present, cluster id : " + cluster);
-            } else {
-                foundNeededCluster = true;
-            }
-        }
-        assertTrue("Didn't find cluster 3 in the list. It should have been present", foundNeededCluster);
+        assertThat("Found cluster that shouldn't have been present, only cluster 3 should be present", clusterList, everyItem(equalTo(3L)));
 
         Set<Long> hostsInAvoidList = avoids.getHostsToAvoid();
         assertFalse("Host 7 shouldn't have be in the avoid list, but it is present", hostsInAvoidList.contains(7L));
@@ -382,15 +358,15 @@ public class ImplicitPlannerTest {
         clustersWithEnoughCapacity.add(2L);
         clustersWithEnoughCapacity.add(3L);
         when(
-            capacityDao.listClustersInZoneOrPodByHostCapacities(dataCenterId, noOfCpusInOffering * cpuSpeedInOffering, ramInOffering * 1024L * 1024L,
-                Capacity.CAPACITY_TYPE_CPU, true)).thenReturn(clustersWithEnoughCapacity);
+            capacityDao.listClustersInZoneOrPodByHostCapacities(dataCenterId, 12L, noOfCpusInOffering * cpuSpeedInOffering, ramInOffering * 1024L * 1024L,
+                    true)).thenReturn(clustersWithEnoughCapacity);
 
         Map<Long, Double> clusterCapacityMap = new HashMap<Long, Double>();
         clusterCapacityMap.put(1L, 2048D);
         clusterCapacityMap.put(2L, 2048D);
         clusterCapacityMap.put(3L, 2048D);
         Pair<List<Long>, Map<Long, Double>> clustersOrderedByCapacity = new Pair<List<Long>, Map<Long, Double>>(clustersWithEnoughCapacity, clusterCapacityMap);
-        when(capacityDao.orderClustersByAggregateCapacity(dataCenterId, Capacity.CAPACITY_TYPE_CPU, true)).thenReturn(clustersOrderedByCapacity);
+        when(capacityDao.orderClustersByAggregateCapacity(dataCenterId, 12L, Capacity.CAPACITY_TYPE_CPU, true)).thenReturn(clustersOrderedByCapacity);
 
         List<Long> disabledClusters = new ArrayList<Long>();
         List<Long> clustersWithDisabledPods = new ArrayList<Long>();
@@ -409,21 +385,9 @@ public class ImplicitPlannerTest {
         when(serviceOfferingDetailsDao.listDetailsKeyPairs(offeringId)).thenReturn(details);
 
         // Initialize hosts in clusters
-        HostVO host1 = mock(HostVO.class);
-        when(host1.getId()).thenReturn(5L);
-        HostVO host2 = mock(HostVO.class);
-        when(host2.getId()).thenReturn(6L);
-        HostVO host3 = mock(HostVO.class);
-        when(host3.getId()).thenReturn(7L);
-        List<HostVO> hostsInCluster1 = new ArrayList<HostVO>();
-        List<HostVO> hostsInCluster2 = new ArrayList<HostVO>();
-        List<HostVO> hostsInCluster3 = new ArrayList<HostVO>();
-        hostsInCluster1.add(host1);
-        hostsInCluster2.add(host2);
-        hostsInCluster3.add(host3);
-        when(resourceMgr.listAllHostsInCluster(1)).thenReturn(hostsInCluster1);
-        when(resourceMgr.listAllHostsInCluster(2)).thenReturn(hostsInCluster2);
-        when(resourceMgr.listAllHostsInCluster(3)).thenReturn(hostsInCluster3);
+        when(hostDao.listIdsByClusterId(1L)).thenReturn(List.of(5L));
+        when(hostDao.listIdsByClusterId(2L)).thenReturn(List.of(6L));
+        when(hostDao.listIdsByClusterId(3L)).thenReturn(List.of(7L));
 
         // Mock vms on each host.
         long offeringIdForVmsOfThisAccount = 15L;
@@ -525,8 +489,8 @@ public class ImplicitPlannerTest {
         }
 
         @Bean
-        public UserVmDetailsDao userVmDetailsDao() {
-            return Mockito.mock(UserVmDetailsDao.class);
+        public VMInstanceDetailsDao vmInstanceDetailsDao() {
+            return Mockito.mock(VMInstanceDetailsDao.class);
         }
 
         @Bean

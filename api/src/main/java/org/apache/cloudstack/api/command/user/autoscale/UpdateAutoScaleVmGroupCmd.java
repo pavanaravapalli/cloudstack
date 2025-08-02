@@ -19,13 +19,12 @@ package org.apache.cloudstack.api.command.user.autoscale;
 
 import java.util.List;
 
-import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCustomIdCmd;
@@ -42,13 +41,17 @@ import com.cloud.user.Account;
 @APICommand(name = "updateAutoScaleVmGroup", description = "Updates an existing autoscale vm group.", responseObject = AutoScaleVmGroupResponse.class, entityType = {AutoScaleVmGroup.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class UpdateAutoScaleVmGroupCmd extends BaseAsyncCustomIdCmd {
-    public static final Logger s_logger = Logger.getLogger(UpdateAutoScaleVmGroupCmd.class.getName());
 
-    private static final String s_name = "updateautoscalevmgroupresponse";
 
     // ///////////////////////////////////////////////////
     // ////////////// API parameters /////////////////////
     // ///////////////////////////////////////////////////
+
+    @Parameter(name = ApiConstants.NAME,
+            type = CommandType.STRING,
+            description = "the name of the autoscale vmgroup",
+            since = "4.18.0")
+    private String name;
 
     @Parameter(name = ApiConstants.MIN_MEMBERS,
                type = CommandType.INTEGER,
@@ -60,7 +63,7 @@ public class UpdateAutoScaleVmGroupCmd extends BaseAsyncCustomIdCmd {
                description = "the maximum number of members in the vmgroup, The number of instances in the vm group will be equal to or less than this number.")
     private Integer maxMembers;
 
-    @Parameter(name = ApiConstants.INTERVAL, type = CommandType.INTEGER, description = "the frequency at which the conditions have to be evaluated")
+    @Parameter(name = ApiConstants.INTERVAL, type = CommandType.INTEGER, description = "the frequency in which the performance counters to be collected")
     private Integer interval;
 
     @Parameter(name = ApiConstants.SCALEUP_POLICY_IDS,
@@ -113,6 +116,10 @@ public class UpdateAutoScaleVmGroupCmd extends BaseAsyncCustomIdCmd {
         return id;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public Integer getMinMembers() {
         return minMembers;
     }
@@ -148,11 +155,6 @@ public class UpdateAutoScaleVmGroupCmd extends BaseAsyncCustomIdCmd {
     }
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         AutoScaleVmGroup autoScaleVmGroup = _entityMgr.findById(AutoScaleVmGroup.class, getId());
         if (autoScaleVmGroup != null) {
@@ -163,8 +165,8 @@ public class UpdateAutoScaleVmGroupCmd extends BaseAsyncCustomIdCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.AutoScaleVmGroup;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.AutoScaleVmGroup;
     }
 
     @Override

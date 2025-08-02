@@ -18,11 +18,14 @@
  */
 package org.apache.cloudstack.storage.datastore.db;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import javax.naming.ConfigurationException;
 
+import com.cloud.utils.db.Filter;
+import org.apache.commons.collections.CollectionUtils;
 import org.springframework.stereotype.Component;
 
 import org.apache.cloudstack.engine.subsystem.api.storage.ZoneScope;
@@ -38,7 +41,34 @@ public class ImageStoreDaoImpl extends GenericDaoBase<ImageStoreVO, Long> implem
     private SearchBuilder<ImageStoreVO> nameSearch;
     private SearchBuilder<ImageStoreVO> providerSearch;
     private SearchBuilder<ImageStoreVO> regionSearch;
+    private SearchBuilder<ImageStoreVO> storesExceptIdSearch;
+    private SearchBuilder<ImageStoreVO> protocolSearch;
+    private SearchBuilder<ImageStoreVO> zoneProtocolSearch;
 
+    private SearchBuilder<ImageStoreVO> zonesInSearch;
+    private SearchBuilder<ImageStoreVO> IdsSearch;
+
+    public ImageStoreDaoImpl() {
+        super();
+        protocolSearch = createSearchBuilder();
+        protocolSearch.and("protocol", protocolSearch.entity().getProtocol(), SearchCriteria.Op.EQ);
+        protocolSearch.and("role", protocolSearch.entity().getRole(), SearchCriteria.Op.EQ);
+        protocolSearch.done();
+
+        zoneProtocolSearch = createSearchBuilder();
+        zoneProtocolSearch.and("dataCenterId", zoneProtocolSearch.entity().getDcId(), SearchCriteria.Op.EQ);
+        zoneProtocolSearch.and("protocol", zoneProtocolSearch.entity().getProtocol(), SearchCriteria.Op.EQ);
+        zoneProtocolSearch.and("role", zoneProtocolSearch.entity().getRole(), SearchCriteria.Op.EQ);
+        zoneProtocolSearch.done();
+
+        zonesInSearch = createSearchBuilder();
+        zonesInSearch.and("zonesIn", zonesInSearch.entity().getDcId(), SearchCriteria.Op.IN);
+        zonesInSearch.done();
+
+        IdsSearch = createSearchBuilder();
+        IdsSearch.and("ids", IdsSearch.entity().getId(), SearchCriteria.Op.IN);
+        IdsSearch.done();
+    }
     @Override
     public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
         super.configure(name, params);
@@ -58,6 +88,13 @@ public class ImageStoreDaoImpl extends GenericDaoBase<ImageStoreVO, Long> implem
         regionSearch.and("role", regionSearch.entity().getRole(), SearchCriteria.Op.EQ);
         regionSearch.done();
 
+        storesExceptIdSearch = createSearchBuilder();
+        storesExceptIdSearch.and("providerName", storesExceptIdSearch.entity().getProviderName(), SearchCriteria.Op.EQ);
+        storesExceptIdSearch.and("role", storesExceptIdSearch.entity().getRole(), SearchCriteria.Op.EQ);
+        storesExceptIdSearch.and("dataCenterId", storesExceptIdSearch.entity().getDcId(), SearchCriteria.Op.EQ);
+        storesExceptIdSearch.and("id", storesExceptIdSearch.entity().getId(), SearchCriteria.Op.NEQ);
+        storesExceptIdSearch.done();
+
         return true;
     }
 
@@ -73,6 +110,16 @@ public class ImageStoreDaoImpl extends GenericDaoBase<ImageStoreVO, Long> implem
         SearchCriteria<ImageStoreVO> sc = providerSearch.create();
         sc.setParameters("providerName", provider);
         sc.setParameters("role", DataStoreRole.Image);
+        return listBy(sc);
+    }
+
+    @Override
+    public List<ImageStoreVO> listAllStoresInZoneExceptId(Long zoneId, String provider, DataStoreRole role, long id) {
+        SearchCriteria<ImageStoreVO> sc = storesExceptIdSearch.create();
+        sc.setParameters("providerName", provider);
+        sc.setParameters("role", role);
+        sc.setParameters("dataCenterId", zoneId);
+        sc.setParameters("id", id);
         return listBy(sc);
     }
 
@@ -138,6 +185,43 @@ public class ImageStoreDaoImpl extends GenericDaoBase<ImageStoreVO, Long> implem
     public List<ImageStoreVO> listStoresByZoneId(long zoneId) {
         SearchCriteria<ImageStoreVO> sc = createSearchCriteria();
         sc.addAnd("dcId", SearchCriteria.Op.EQ, zoneId);
+        return listBy(sc);
+    }
+
+    @Override
+    public List<ImageStoreVO> findByProtocol(String protocol) {
+        SearchCriteria<ImageStoreVO> sc = protocolSearch.create();
+        sc.setParameters("protocol", protocol);
+        sc.setParameters("role", DataStoreRole.Image);
+        return listBy(sc);
+    }
+
+    @Override
+    public ImageStoreVO findOneByZoneAndProtocol(long dataCenterId, String protocol) {
+        SearchCriteria<ImageStoreVO> sc = zoneProtocolSearch.create();
+        sc.setParameters("dataCenterId", dataCenterId);
+        sc.setParameters("protocol", protocol);
+        sc.setParameters("role", DataStoreRole.Image);
+        Filter filter = new Filter(1);
+        List<ImageStoreVO> results =  listBy(sc, filter);
+        return results.size() == 0 ? null : results.get(0);
+    }
+
+
+    @Override
+    public List<ImageStoreVO> listImageStoresByZoneIds(Long... zoneIds) {
+        SearchCriteria<ImageStoreVO> sc = zonesInSearch.create();
+        sc.setParametersIfNotNull("zonesIn", zoneIds);
+        return listBy(sc);
+    }
+
+    @Override
+    public List<ImageStoreVO> listByIds(List<Long> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return Collections.emptyList();
+        }
+        SearchCriteria<ImageStoreVO> sc = IdsSearch.create();
+        sc.setParameters("ids", ids.toArray());
         return listBy(sc);
     }
 }

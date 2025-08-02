@@ -21,6 +21,8 @@ import java.util.UUID;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
@@ -28,7 +30,9 @@ import javax.persistence.PrimaryKeyJoinColumn;
 import javax.persistence.SecondaryTable;
 import javax.persistence.Table;
 
+import com.cloud.user.Account;
 import com.cloud.utils.db.GenericDao;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
 @Entity
 @Table(name = "instance_group")
@@ -58,7 +62,8 @@ public class InstanceGroupVO implements InstanceGroup {
     private String uuid;
 
     @Column(name = "type", table = "account", insertable = false, updatable = false)
-    private short accountType;
+    @Enumerated(value = EnumType.ORDINAL)
+    private Account.Type accountType;
 
     public InstanceGroupVO(String name, long accountId) {
         this.name = name;
@@ -69,6 +74,12 @@ public class InstanceGroupVO implements InstanceGroup {
     protected InstanceGroupVO() {
         super();
     }
+
+    @Override
+    public String toString() {
+        return String.format("InstanceGroup %s", ReflectionToStringBuilderUtils.reflectOnlySelectedFields(this, "id", "uuid", "name"));
+    }
+
 
     @Override
     public long getId() {
@@ -113,7 +124,7 @@ public class InstanceGroupVO implements InstanceGroup {
     }
 
     @Override
-    public Short getAccountType() {
+    public Account.Type getAccountType() {
         return accountType;
     }
 

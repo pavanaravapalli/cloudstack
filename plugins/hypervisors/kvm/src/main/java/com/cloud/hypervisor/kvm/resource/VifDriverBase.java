@@ -23,12 +23,18 @@ import java.util.Map;
 
 import javax.naming.ConfigurationException;
 
+import com.cloud.agent.properties.AgentProperties;
+import com.cloud.agent.properties.AgentPropertiesFileHandler;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.libvirt.LibvirtException;
 
 import com.cloud.agent.api.to.NicTO;
 import com.cloud.exception.InternalErrorException;
 
 public abstract class VifDriverBase implements VifDriver {
+
+    protected Logger logger = LogManager.getLogger(getClass());
 
     protected LibvirtComputingResource _libvirtComputingResource;
     protected Map<String, String> _pifs;
@@ -41,11 +47,16 @@ public abstract class VifDriverBase implements VifDriver {
         _pifs = (Map<String, String>)params.get("libvirt.host.pifs");
     }
 
+    protected String getControlCidr(String defaultValue) {
+        String controlCidr = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.CONTROL_CIDR);
+        return controlCidr;
+    }
+
     @Override
     public abstract LibvirtVMDef.InterfaceDef plug(NicTO nic, String guestOsType, String nicAdapter, Map<String, String> extraConfig) throws InternalErrorException, LibvirtException;
 
     @Override
-    public abstract void unplug(LibvirtVMDef.InterfaceDef iface);
+    public abstract void unplug(LibvirtVMDef.InterfaceDef iface, boolean deleteBr);
 
     protected LibvirtVMDef.InterfaceDef.NicModel getGuestNicModel(String platformEmulator, String nicAdapter) {
         // if nicAdapter is found in ENUM, use it. Otherwise, match guest OS type as before

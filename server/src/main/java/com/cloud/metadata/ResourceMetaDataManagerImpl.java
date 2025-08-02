@@ -24,6 +24,7 @@ import javax.inject.Inject;
 import javax.naming.ConfigurationException;
 
 import com.cloud.offerings.dao.NetworkOfferingDetailsDao;
+import com.cloud.server.ResourceManagerUtil;
 import org.apache.cloudstack.api.ResourceDetail;
 import org.apache.cloudstack.resourcedetail.ResourceDetailsDao;
 import org.apache.cloudstack.resourcedetail.dao.AutoScaleVmGroupDetailsDao;
@@ -46,7 +47,6 @@ import org.apache.cloudstack.resourcedetail.dao.LBHealthCheckPolicyDetailsDao;
 import org.apache.cloudstack.resourcedetail.dao.GuestOsDetailsDao;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolDetailsDao;
 
-import org.apache.log4j.Logger;
 import org.springframework.stereotype.Component;
 
 import com.cloud.dc.dao.DataCenterDetailsDao;
@@ -66,17 +66,16 @@ import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionStatus;
 import com.cloud.vm.dao.NicDetailsDao;
-import com.cloud.vm.dao.UserVmDetailsDao;
+import com.cloud.vm.dao.VMInstanceDetailsDao;
 
 @Component
 public class ResourceMetaDataManagerImpl extends ManagerBase implements ResourceMetaDataService, ResourceMetaDataManager {
-    public static final Logger s_logger = Logger.getLogger(ResourceMetaDataManagerImpl.class);
     @Inject
     VolumeDetailsDao _volumeDetailDao;
     @Inject
     NicDetailsDao _nicDetailDao;
     @Inject
-    UserVmDetailsDao _userVmDetailDao;
+    VMInstanceDetailsDao _userVmDetailDao;
     @Inject
     DataCenterDetailsDao _dcDetailsDao;
     @Inject
@@ -127,6 +126,8 @@ public class ResourceMetaDataManagerImpl extends ManagerBase implements Resource
     GuestOsDetailsDao _guestOsDetailsDao;
     @Inject
     NetworkOfferingDetailsDao _networkOfferingDetailsDao;
+    @Inject
+    ResourceManagerUtil resourceManagerUtil;
 
     private static Map<ResourceObjectType, ResourceDetailsDao<? extends ResourceDetail>> s_daoMap = new HashMap<ResourceObjectType, ResourceDetailsDao<? extends ResourceDetail>>();
 
@@ -189,7 +190,7 @@ public class ResourceMetaDataManagerImpl extends ManagerBase implements Resource
                     }
 
                     DetailDaoHelper newDetailDaoHelper = new DetailDaoHelper(resourceType);
-                    newDetailDaoHelper.addDetail(_taggedResourceMgr.getResourceId(resourceId, resourceType), key, value, forDisplay);
+                    newDetailDaoHelper.addDetail(resourceManagerUtil.getResourceId(resourceId, resourceType), key, value, forDisplay);
                 }
 
                 return true;
@@ -201,7 +202,7 @@ public class ResourceMetaDataManagerImpl extends ManagerBase implements Resource
     @DB
     @ActionEvent(eventType = EventTypes.EVENT_RESOURCE_DETAILS_DELETE, eventDescription = "deleting resource meta data")
     public boolean deleteResourceMetaData(String resourceId, ResourceObjectType resourceType, String key) {
-        long id = _taggedResourceMgr.getResourceId(resourceId, resourceType);
+        long id = resourceManagerUtil.getResourceId(resourceId, resourceType);
 
         DetailDaoHelper newDetailDaoHelper = new DetailDaoHelper(resourceType);
         if (key != null) {

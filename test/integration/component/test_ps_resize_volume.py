@@ -16,7 +16,7 @@
 # under the License.
 
 """ P1 tests for testing resize volume functionality with primary storage
-    imit constraints on account/domain
+    limit constraints on account/domain
 
     Test Plan: https://cwiki.apache.org/confluence/display/CLOUDSTACK/
     Limit+Resources+to+domain+or+accounts
@@ -28,7 +28,8 @@
 """
 # Import Local Modules
 from nose.plugins.attrib import attr
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.lib.base import (Account,
                              ServiceOffering,
                              VirtualMachine,
@@ -119,12 +120,7 @@ class TestResizeVolume(cloudstackTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            # Cleanup resources used
-            cleanup_resources(cls.api_client, cls._cleanup)
-        except Exception as e:
-            raise Exception("Warning: Exception during cleanup : %s" % e)
-        return
+        super(TestResizeVolume, cls).tearDownClass()
 
     def setUp(self):
         if self.unsupportedStorageType:
@@ -136,13 +132,7 @@ class TestResizeVolume(cloudstackTestCase):
         return
 
     def tearDown(self):
-        try:
-            # Clean up, terminate the created instance, volumes and snapshots
-            cleanup_resources(self.apiclient, self.cleanup)
-            pass
-        except Exception as e:
-            raise Exception("Warning: Exception during cleanup : %s" % e)
-        return
+        super(TestResizeVolume, self).tearDown()
 
     def updateResourceLimits(self, accountLimit=None, domainLimit=None):
         """Update primary storage limits of the parent domain and its
@@ -152,13 +142,13 @@ class TestResizeVolume(cloudstackTestCase):
             if domainLimit:
                 # Update resource limit for domain
                 Resources.updateLimit(self.apiclient, resourcetype=10,
-                                      max=domainLimit,
+                                      max=int(domainLimit),
                                       domainid=self.parent_domain.id)
             if accountLimit:
                 # Update resource limit for domain
                 Resources.updateLimit(self.apiclient,
                                       resourcetype=10,
-                                      max=accountLimit,
+                                      max=int(accountLimit),
                                       account=self.parentd_admin.name,
                                       domainid=self.parent_domain.id)
         except Exception as e:
@@ -171,14 +161,13 @@ class TestResizeVolume(cloudstackTestCase):
                                                services=self.services[
                                                    "domain"],
                                                parentdomainid=self.domain.id)
+            self.cleanup.append(self.parent_domain)
             self.parentd_admin = Account.create(self.apiclient,
                                                 self.services["account"],
                                                 admin=True,
                                                 domainid=self.parent_domain.id)
 
-            # Cleanup the resources created at end of test
             self.cleanup.append(self.parentd_admin)
-            self.cleanup.append(self.parent_domain)
         except Exception as e:
             return [FAIL, e]
         return [PASS, None]
@@ -198,7 +187,6 @@ class TestResizeVolume(cloudstackTestCase):
         # 6. Resize operation should be successful and primary storage count
         #    for account should be updated successfully"""
 
-        # Setting up account and domain hierarchy
         result = self.setupAccounts()
         self.assertEqual(result[0], PASS, result[1])
 
@@ -219,6 +207,7 @@ class TestResizeVolume(cloudstackTestCase):
                 domainid=self.parent_domain.id,
                 serviceofferingid=self.service_offering.id
             )
+            self.cleanup.append(virtualMachine)
 
             volume = Volume.create(
                 apiclient, self.services["volume"],
@@ -226,7 +215,6 @@ class TestResizeVolume(cloudstackTestCase):
                 account=self.parentd_admin.name,
                 domainid=self.parent_domain.id,
                 diskofferingid=self.disk_offering_5_GB.id)
-
             virtualMachine.attach_volume(apiclient, volume=volume)
 
             expectedCount = (templateSize + self.disk_offering_5_GB.disksize)
@@ -266,7 +254,7 @@ class TestResizeVolume(cloudstackTestCase):
         # 3. Deploy a VM without any disk offering (only root disk)
         # 4. Create a volume of 5 GB in the account and attach it to the VM
         # 5. Try to (resize) the volume to 20 GB
-        # 6. Resize opearation should fail"""
+        # 6. Resize operation should fail"""
 
         # Setting up account and domain hierarchy
         result = self.setupAccounts()
@@ -290,6 +278,7 @@ class TestResizeVolume(cloudstackTestCase):
                 domainid=self.parent_domain.id,
                 serviceofferingid=self.service_offering.id
             )
+            self.cleanup.append(virtualMachine)
 
             volume = Volume.create(
                 apiclient, self.services["volume"],
@@ -297,7 +286,6 @@ class TestResizeVolume(cloudstackTestCase):
                 account=self.parentd_admin.name,
                 domainid=self.parent_domain.id,
                 diskofferingid=self.disk_offering_5_GB.id)
-
             virtualMachine.attach_volume(apiclient, volume=volume)
 
             expectedCount = (templateSize + self.disk_offering_5_GB.disksize)
@@ -330,7 +318,7 @@ class TestResizeVolume(cloudstackTestCase):
         # 3. Deploy a VM without any disk offering (only root disk)
         # 4. Create a volume of 5 GB in the account and attach it to the VM
         # 5. Try to (resize) the volume to 20 GB
-        # 6. Resize opearation should fail"""
+        # 6. Resize operation should fail"""
 
         # Setting up account and domain hierarchy
         result = self.setupAccounts()
@@ -354,6 +342,7 @@ class TestResizeVolume(cloudstackTestCase):
                 domainid=self.parent_domain.id,
                 serviceofferingid=self.service_offering.id
             )
+            self.cleanup.append(virtualMachine)
 
             volume = Volume.create(
                 apiclient, self.services["volume"],
@@ -361,7 +350,6 @@ class TestResizeVolume(cloudstackTestCase):
                 account=self.parentd_admin.name,
                 domainid=self.parent_domain.id,
                 diskofferingid=self.disk_offering_5_GB.id)
-
             virtualMachine.attach_volume(apiclient, volume=volume)
 
             expectedCount = (templateSize + self.disk_offering_5_GB.disksize)

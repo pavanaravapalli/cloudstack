@@ -27,9 +27,9 @@ import com.cloud.agent.api.storage.DownloadAnswer;
 import com.cloud.utils.net.Proxy;
 import com.cloud.agent.api.to.S3TO;
 import com.cloud.storage.Storage.ImageFormat;
-import com.cloud.storage.VMTemplateHostVO;
 import com.cloud.storage.template.TemplateDownloader;
 import com.cloud.storage.template.TemplateProp;
+import com.cloud.storage.VMTemplateStorageResourceAssoc.Status;
 import com.cloud.utils.component.Manager;
 
 public interface DownloadManager extends Manager {
@@ -41,17 +41,21 @@ public interface DownloadManager extends Manager {
      * @param hvm  whether the template is a hardware virtual machine
      * @param accountId the accountId of the iso owner (null if public iso)
      * @param descr    description of the template
-     * @param user username used for authentication to the server
-     * @param password password used for authentication to the server
+     * @param userName username used for authentication to the server
+     * @param passwd password used for authentication to the server
      * @param maxDownloadSizeInBytes (optional) max download size for the template, in bytes.
      * @param resourceType signifying the type of resource like template, volume etc.
+     * @param followRedirects whether downloader follows redirections
      * @return job-id that can be used to interrogate the status of the download.
      */
-    public String downloadPublicTemplate(long id, String url, String name, ImageFormat format, boolean hvm, Long accountId, String descr, String cksum,
-        String installPathPrefix, String templatePath, String userName, String passwd, long maxDownloadSizeInBytes, Proxy proxy, ResourceType resourceType);
+    public String downloadPublicTemplate(long id, String url, String name, ImageFormat format, boolean hvm,
+             Long accountId, String descr, String cksum, String installPathPrefix, String templatePath,
+             String userName, String passwd, long maxDownloadSizeInBytes, Proxy proxy, ResourceType resourceType,
+             boolean followRedirects);
 
-    public String downloadS3Template(S3TO s3, long id, String url, String name, ImageFormat format, boolean hvm, Long accountId, String descr, String cksum,
-        String installPathPrefix, String user, String password, long maxTemplateSizeInBytes, Proxy proxy, ResourceType resourceType);
+    public String downloadS3Template(S3TO s3, long id, String url, String name, ImageFormat format, boolean hvm,
+             Long accountId, String descr, String cksum, String installPathPrefix, String user, String password,
+             long maxTemplateSizeInBytes, Proxy proxy, ResourceType resourceType, boolean followRedirects);
 
     Map<String, Processor> getProcessors();
 
@@ -67,7 +71,7 @@ public interface DownloadManager extends Manager {
      * @param jobId job Id
      * @return status of the download job
      */
-    public VMTemplateHostVO.Status getDownloadStatus2(String jobId);
+    public Status getDownloadStatus2(String jobId);
 
     /**
      * Get the download percent of a download job

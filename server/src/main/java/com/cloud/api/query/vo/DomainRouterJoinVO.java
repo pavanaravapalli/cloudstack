@@ -20,20 +20,28 @@ import java.net.URI;
 import java.util.Date;
 
 import javax.persistence.Column;
+import javax.persistence.Convert;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
 import javax.persistence.Id;
 import javax.persistence.Table;
 
+import com.cloud.cpu.CPU;
+import com.cloud.host.Status;
 import com.cloud.hypervisor.Hypervisor;
 import com.cloud.network.Network.GuestType;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.network.router.VirtualRouter;
 import com.cloud.network.router.VirtualRouter.RedundantState;
+import com.cloud.resource.ResourceState;
+import com.cloud.user.Account;
 import com.cloud.utils.db.GenericDao;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VirtualMachine.State;
+
+import org.apache.cloudstack.util.CPUArchConverter;
+import org.apache.cloudstack.util.HypervisorTypeConverter;
 
 @Entity
 @Table(name = "domain_router_view")
@@ -56,7 +64,8 @@ public class DomainRouterJoinVO extends BaseViewVO implements ControlledViewEnti
     private String accountName = null;
 
     @Column(name = "account_type")
-    private short accountType;
+    @Enumerated(value = EnumType.ORDINAL)
+    private Account.Type accountType;
 
     @Column(name = "domain_id")
     private long domainId;
@@ -127,9 +136,19 @@ public class DomainRouterJoinVO extends BaseViewVO implements ControlledViewEnti
     @Column(name = "host_name", nullable = false)
     private String hostName;
 
+    @Column(name = "host_status")
+    private Status hostStatus;
+
+    @Column(name = "host_resource_state")
+    private ResourceState hostResourceState;
+
     @Column(name="hypervisor_type")
-    @Enumerated(value=EnumType.STRING)
+    @Convert(converter = HypervisorTypeConverter.class)
     private Hypervisor.HypervisorType hypervisorType;
+
+    @Column(name="arch")
+    @Convert(converter = CPUArchConverter.class)
+    private CPU.CPUArch arch;
 
     @Column(name = "template_id", updatable = true, nullable = true, length = 17)
     private long templateId;
@@ -249,6 +268,12 @@ public class DomainRouterJoinVO extends BaseViewVO implements ControlledViewEnti
     @Enumerated(value = EnumType.STRING)
     private VirtualRouter.Role role;
 
+    @Column(name = "software_version")
+    private String softwareVersion;
+
+    @Column(name = "mtu")
+    private Integer mtu;
+
     public DomainRouterJoinVO() {
     }
 
@@ -282,7 +307,7 @@ public class DomainRouterJoinVO extends BaseViewVO implements ControlledViewEnti
     }
 
     @Override
-    public short getAccountType() {
+    public Account.Type getAccountType() {
         return accountType;
     }
 
@@ -346,8 +371,20 @@ public class DomainRouterJoinVO extends BaseViewVO implements ControlledViewEnti
         return hostName;
     }
 
+    public Status getHostStatus() {
+        return hostStatus;
+    }
+
+    public ResourceState getHostResourceState() {
+        return hostResourceState;
+    }
+
     public Hypervisor.HypervisorType getHypervisorType() {
         return hypervisorType;
+    }
+
+    public CPU.CPUArch getArch() {
+        return arch;
     }
 
     public Long getClusterId() {
@@ -531,5 +568,13 @@ public class DomainRouterJoinVO extends BaseViewVO implements ControlledViewEnti
     @Override
     public Class<?> getEntityType() {
         return VirtualMachine.class;
+    }
+
+    public String getSoftwareVersion() {
+        return softwareVersion;
+    }
+
+    public Integer getMtu() {
+        return mtu;
     }
 }

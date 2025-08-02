@@ -18,45 +18,56 @@ package org.apache.cloudstack.api.command.user.vm;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-
-import org.apache.cloudstack.api.command.user.UserCmd;
-import org.apache.cloudstack.api.response.SecurityGroupResponse;
-import org.apache.cloudstack.api.response.UserResponse;
-import org.apache.log4j.Logger;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.affinity.AffinityGroupResponse;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiConstants.VMDetails;
-import org.apache.cloudstack.api.BaseListTaggedResourcesCmd;
+import org.apache.cloudstack.api.BaseListRetrieveOnlyResourceCountCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject.ResponseView;
-import org.apache.cloudstack.api.response.HostResponse;
+import org.apache.cloudstack.api.command.user.UserCmd;
+import org.apache.cloudstack.api.response.AutoScaleVmGroupResponse;
+import org.apache.cloudstack.api.response.BackupOfferingResponse;
+import org.apache.cloudstack.api.response.ExtensionResponse;
 import org.apache.cloudstack.api.response.InstanceGroupResponse;
 import org.apache.cloudstack.api.response.IsoVmResponse;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.NetworkResponse;
-import org.apache.cloudstack.api.response.PodResponse;
+import org.apache.cloudstack.api.response.ResourceIconResponse;
+import org.apache.cloudstack.api.response.SecurityGroupResponse;
 import org.apache.cloudstack.api.response.ServiceOfferingResponse;
-import org.apache.cloudstack.api.response.StoragePoolResponse;
 import org.apache.cloudstack.api.response.TemplateResponse;
+import org.apache.cloudstack.api.response.UserDataResponse;
+import org.apache.cloudstack.api.response.UserResponse;
 import org.apache.cloudstack.api.response.UserVmResponse;
 import org.apache.cloudstack.api.response.VpcResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.BooleanUtils;
+import org.apache.commons.lang3.StringUtils;
 
+import com.cloud.cpu.CPU;
 import com.cloud.exception.InvalidParameterValueException;
+import com.cloud.server.ResourceIcon;
+import com.cloud.server.ResourceTag;
+import com.cloud.storage.GuestOS;
 import com.cloud.vm.VirtualMachine;
 
 
 @APICommand(name = "listVirtualMachines", description = "List the virtual machines owned by the account.", responseObject = UserVmResponse.class, responseView = ResponseView.Restricted, entityType = {VirtualMachine.class},
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = true)
-public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
-    public static final Logger s_logger = Logger.getLogger(ListVMsCmd.class.getName());
+public class ListVMsCmd extends BaseListRetrieveOnlyResourceCountCmd implements UserCmd {
 
-    private static final String s_name = "listvirtualmachinesresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -64,9 +75,6 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
 
     @Parameter(name = ApiConstants.GROUP_ID, type = CommandType.UUID, entityType = InstanceGroupResponse.class, description = "the group ID")
     private Long groupId;
-
-    @Parameter(name = ApiConstants.HOST_ID, type = CommandType.UUID, entityType = HostResponse.class, description = "the host ID")
-    private Long hostId;
 
     @Parameter(name = ApiConstants.ID, type = CommandType.UUID, entityType = UserVmResponse.class, description = "the ID of the virtual machine")
     private Long id;
@@ -76,9 +84,6 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
 
     @Parameter(name = ApiConstants.NAME, type = CommandType.STRING, description = "name of the virtual machine (a substring match is made against the parameter value, data for all matching VMs will be returned)")
     private String name;
-
-    @Parameter(name = ApiConstants.POD_ID, type = CommandType.UUID, entityType = PodResponse.class, description = "the pod ID")
-    private Long podId;
 
     @Parameter(name = ApiConstants.STATE, type = CommandType.STRING, description = "state of the virtual machine. Possible values are: Running, Stopped, Present, Destroyed, Expunged. Present is used for the state equal not destroyed.")
     private String state;
@@ -97,18 +102,13 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
     @Parameter(name = ApiConstants.HYPERVISOR, type = CommandType.STRING, description = "the target hypervisor for the template")
     private String hypervisor;
 
-    @Parameter(name = ApiConstants.STORAGE_ID,
-               type = CommandType.UUID,
-               entityType = StoragePoolResponse.class,
-               description = "the storage ID where vm's volumes belong to")
-    private Long storageId;
-
     @Parameter(name = ApiConstants.DETAILS,
                type = CommandType.LIST,
                collectionType = CommandType.STRING,
-               description = "comma separated list of host details requested, "
-                   + "value can be a list of [all, group, nics, stats, secgrp, tmpl, servoff, diskoff, iso, volume, min, affgrp]."
-                   + " If no parameter is passed in, the details will be defaulted to all")
+               description = "comma separated list of vm details requested, "
+                   + "value can be a list of [all, group, nics, stats, secgrp, tmpl, servoff, diskoff, backoff, iso, volume, min, affgrp]."
+                   + " When no parameters are passed, all the details are returned if list.vm.default.details.stats is true (default),"
+                   + " otherwise when list.vm.default.details.stats is false the API response will exclude the stats details.")
     private List<String> viewDetails;
 
     @Parameter(name = ApiConstants.TEMPLATE_ID, type = CommandType.UUID, entityType = TemplateResponse.class, description = "list vms by template")
@@ -129,6 +129,9 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
     @Parameter(name = ApiConstants.SERVICE_OFFERING_ID, type = CommandType.UUID, entityType = ServiceOfferingResponse.class, description = "list by the service offering", since = "4.4")
     private Long serviceOffId;
 
+    @Parameter(name = ApiConstants.BACKUP_OFFERING_ID, type = CommandType.UUID, entityType = BackupOfferingResponse.class, description = "list by the backup offering", since = "4.17")
+    private Long backupOffId;
+
     @Parameter(name = ApiConstants.DISPLAY_VM, type = CommandType.BOOLEAN, description = "list resources by display flag; only ROOT admin is eligible to pass this parameter", since = "4.4", authorized = {RoleType.Admin})
     private Boolean display;
 
@@ -140,6 +143,45 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
 
     @Parameter(name = ApiConstants.HA_ENABLE, type = CommandType.BOOLEAN, description = "list by the High Availability offering; true if filtering VMs with HA enabled; false for VMs with HA disabled", since = "4.15")
     private Boolean haEnabled;
+
+    @Parameter(name = ApiConstants.AUTOSCALE_VMGROUP_ID, type = CommandType.UUID, entityType = AutoScaleVmGroupResponse.class, description = "the ID of AutoScaling VM Group", since = "4.18.0")
+    private Long autoScaleVmGroupId;
+
+    @Parameter(name = ApiConstants.SHOW_RESOURCE_ICON, type = CommandType.BOOLEAN,
+            description = "flag to display the resource icon for VMs", since = "4.16.0.0")
+    private Boolean showIcon;
+
+    @Parameter(name = ApiConstants.ACCUMULATE, type = CommandType.BOOLEAN,
+            description = "Accumulates the VM metrics data instead of returning only the most recent data collected. The default behavior is set by the global configuration vm.stats.increment.metrics.",
+            since = "4.17.0")
+    private Boolean accumulate;
+
+    @Parameter(name = ApiConstants.USER_DATA, type = CommandType.BOOLEAN, description = "Whether to return the VMs' user data or not. By default, user data will not be returned.", since = "4.18.0.0")
+    private Boolean showUserData;
+
+    @Parameter(name = ApiConstants.USER_DATA_ID, type = CommandType.UUID, entityType = UserDataResponse.class, required = false, description = "the instances by userdata", since = "4.20.1")
+    private Long userdataId;
+
+    @Parameter(name = ApiConstants.ARCH, type = CommandType.STRING,
+            description = "CPU arch of the VM",
+            since = "4.20.1")
+    private String arch;
+
+    @Parameter(name = ApiConstants.LEASED, type = CommandType.BOOLEAN,
+            description = "Whether to return only leased instances",
+            since = "4.21.0")
+    private Boolean onlyLeasedInstances = false;
+
+    @Parameter(name = ApiConstants.GPU_ENABLED,
+            type = CommandType.BOOLEAN,
+            description = "Flag to indicate if the VMs should be filtered by GPU support. If set to true, only VMs that support GPU will be returned.",
+            since = "4.21.0")
+    private Boolean gpuEnabled;
+
+    @Parameter(name = ApiConstants.EXTENSION_ID, type = CommandType.UUID,
+            entityType = ExtensionResponse.class, description = "The ID of the Orchestrator extension for the VM",
+            since = "4.21.0")
+    private Long extensionId;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -173,10 +215,18 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
         return serviceOffId;
     }
 
+    public Long getBackupOfferingId() {
+        return backupOffId;
+    }
+
     public Long getZoneId() {
         return zoneId;
     }
 
+    @Parameter(name = ApiConstants.IS_VNF, type = CommandType.BOOLEAN,
+            description = "flag to list vms created from VNF templates (as known as VNF appliances) or not; true if need to list VNF appliances, false otherwise.",
+            since = "4.19.0")
+    private Boolean isVnf;
 
     public Long getNetworkId() {
         return networkId;
@@ -207,18 +257,6 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
         return keypair;
     }
 
-    public Long getHostId() {
-        return hostId;
-    }
-
-    public Long getPodId() {
-        return podId;
-    }
-
-    public Long getStorageId() {
-        return storageId;
-    }
-
     public Long getSecurityGroupId() {
         return securityGroupId;
     }
@@ -227,48 +265,168 @@ public class ListVMsCmd extends BaseListTaggedResourcesCmd implements UserCmd {
         return haEnabled;
     }
 
+    public Boolean getShowUserData() {
+        return this.showUserData;
+    }
+
+    public Long getAutoScaleVmGroupId() {
+        return autoScaleVmGroupId;
+    }
+
+    protected boolean isViewDetailsEmpty() {
+        return CollectionUtils.isEmpty(viewDetails);
+    }
+
+    public Long getUserdataId() {
+        return userdataId;
+    }
+
     public EnumSet<VMDetails> getDetails() throws InvalidParameterValueException {
-        EnumSet<VMDetails> dv;
-        if (viewDetails == null || viewDetails.size() <= 0) {
-            dv = EnumSet.of(VMDetails.all);
-        } else {
-            try {
-                ArrayList<VMDetails> dc = new ArrayList<VMDetails>();
-                for (String detail : viewDetails) {
-                    dc.add(VMDetails.valueOf(detail));
-                }
-                dv = EnumSet.copyOf(dc);
-            } catch (IllegalArgumentException e) {
-                throw new InvalidParameterValueException("The details parameter contains a non permitted value. The allowed values are " + EnumSet.allOf(VMDetails.class));
+        if (isViewDetailsEmpty()) {
+            if (_queryService.ReturnVmStatsOnVmList.value()) {
+                return EnumSet.of(VMDetails.all);
             }
+
+            Set<VMDetails> allDetails = new HashSet<>(Set.of(VMDetails.values()));
+            allDetails.remove(VMDetails.stats);
+            allDetails.remove(VMDetails.all);
+            return EnumSet.copyOf(allDetails);
         }
-        return dv;
+
+        try {
+            Set<VMDetails> dc = new HashSet<>();
+            for (String detail : viewDetails) {
+                dc.add(VMDetails.valueOf(detail));
+            }
+
+            return EnumSet.copyOf(dc);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidParameterValueException("The details parameter contains a non permitted value. The allowed values are " + EnumSet.allOf(VMDetails.class));
+        }
     }
 
     @Override
     public Boolean getDisplay() {
-        if (display != null) {
-            return display;
-        }
-        return super.getDisplay();
+        return BooleanUtils.toBooleanDefaultIfNull(display, super.getDisplay());
     }
+
+    public Boolean getShowIcon() {
+        return BooleanUtils.toBooleanDefaultIfNull(showIcon, false);
+    }
+
+    public Boolean getAccumulate() {
+        return accumulate;
+    }
+
+    public Boolean getVnf() {
+        return isVnf;
+    }
+
+    public CPU.CPUArch getArch() {
+        return StringUtils.isBlank(arch) ? null : CPU.CPUArch.fromType(arch);
+    }
+
+    public boolean getOnlyLeasedInstances() {
+        return BooleanUtils.toBoolean(onlyLeasedInstances);
+    }
+
+    public Boolean getGpuEnabled() {
+        return gpuEnabled;
+    }
+
+    public Long getExtensionId() {
+        return extensionId;
+    }
+
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
-    @Override
-    public String getCommandName() {
-        return s_name;
-    }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.VirtualMachine;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
     }
 
     @Override
     public void execute() {
         ListResponse<UserVmResponse> response = _queryService.searchForUserVMs(this);
+        if (response != null && response.getCount() > 0 && getShowIcon()) {
+            updateVMResponse(response.getResponses());
+        }
         response.setResponseName(getCommandName());
         setResponseObject(response);
+    }
+
+    protected Map<String, ResourceIcon> getResourceIconsUsingOsCategory(List<UserVmResponse> responses) {
+        Set<String> guestOsIds = responses.stream().map(UserVmResponse::getGuestOsId).collect(Collectors.toSet());
+        List<GuestOS> guestOSList = _entityMgr.listByUuids(GuestOS.class, guestOsIds);
+        Map<String, GuestOS> guestOSMap = guestOSList.stream()
+                .collect(Collectors.toMap(GuestOS::getUuid, Function.identity()));
+        Set<Long> guestOsCategoryIds = guestOSMap.values().stream()
+                .map(GuestOS::getCategoryId)
+                .collect(Collectors.toSet());
+        Map<Long, ResourceIcon> guestOsCategoryIcons =
+                resourceIconManager.getByResourceTypeAndIds(ResourceTag.ResourceObjectType.GuestOsCategory,
+                        guestOsCategoryIds);
+        Map<String, ResourceIcon> vmIcons = new HashMap<>();
+        for (UserVmResponse response : responses) {
+            GuestOS guestOS = guestOSMap.get(response.getGuestOsId());
+            if (guestOS != null) {
+                vmIcons.put(response.getId(), guestOsCategoryIcons.get(guestOS.getCategoryId()));
+            }
+        }
+        return vmIcons;
+    }
+
+    protected Map<String, ResourceIcon> getResourceIconsForUsingTemplateIso(List<UserVmResponse> responses) {
+        Map<String, String> vmTemplateIsoIdMap = new HashMap<>();
+        Set<String> templateUuids = new HashSet<>();
+        Set<String> isoUuids = new HashSet<>();
+        for (UserVmResponse vmResponse : responses) {
+            if (vmResponse.getTemplateId() != null) {
+                templateUuids.add(vmResponse.getTemplateId());
+                vmTemplateIsoIdMap.put(vmResponse.getId(), vmResponse.getTemplateId());
+            }
+            if (vmResponse.getIsoId() != null) {
+                isoUuids.add(vmResponse.getIsoId());
+                vmTemplateIsoIdMap.put(vmResponse.getId(), vmResponse.getIsoId());
+            }
+        }
+        Map<String, ResourceIcon> templateOrIsoIcons = resourceIconManager.getByResourceTypeAndUuids(ResourceTag.ResourceObjectType.Template, templateUuids);
+        templateOrIsoIcons.putAll(resourceIconManager.getByResourceTypeAndUuids(ResourceTag.ResourceObjectType.ISO, isoUuids));
+        Map<String, ResourceIcon> vmIcons = new HashMap<>();
+        List<UserVmResponse> noTemplateIsoIconResponses = new ArrayList<>();
+        for (UserVmResponse response : responses) {
+            String uuid = vmTemplateIsoIdMap.get(response.getId());
+            if (StringUtils.isNotBlank(uuid) && templateOrIsoIcons.containsKey(uuid)) {
+                vmIcons.put(response.getId(),
+                        templateOrIsoIcons.get(vmTemplateIsoIdMap.get(response.getId())));
+                continue;
+            }
+            noTemplateIsoIconResponses.add(response);
+        }
+        vmIcons.putAll(getResourceIconsUsingOsCategory(noTemplateIsoIconResponses));
+        return vmIcons;
+    }
+
+    protected void updateVMResponse(List<UserVmResponse> responses) {
+        if (CollectionUtils.isEmpty(responses)) {
+            return;
+        }
+        Set<String> vmUuids = responses.stream().map(UserVmResponse::getId).collect(Collectors.toSet());
+        Map<String, ResourceIcon> vmIcons = resourceIconManager.getByResourceTypeAndUuids(ResourceTag.ResourceObjectType.UserVm, vmUuids);
+        List<UserVmResponse> noVmIconResponses = responses
+                .stream()
+                .filter(r -> !vmIcons.containsKey(r.getId()))
+                .collect(Collectors.toList());
+        vmIcons.putAll(getResourceIconsForUsingTemplateIso(noVmIconResponses));
+        for (UserVmResponse vmResponse : responses) {
+            ResourceIcon icon = vmIcons.get(vmResponse.getId());
+            if (icon == null) {
+                continue;
+            }
+            ResourceIconResponse iconResponse = _responseGenerator.createResourceIconResponse(icon);
+            vmResponse.setResourceIconResponse(iconResponse);
+        }
     }
 }

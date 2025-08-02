@@ -16,6 +16,7 @@
 // under the License.
 package com.cloud.agent;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -26,7 +27,6 @@ import com.cloud.utils.backoff.BackoffAlgorithm;
 
 public interface IAgentShell {
     String hostLbAlgorithmSeparator = "@";
-    String preferredHostIntervalKey = "host.lb.check.interval";
 
     Map<String, Object> getCmdLineProperties();
 
@@ -64,11 +64,21 @@ public interface IAgentShell {
 
     String[] getHosts();
 
+    void setAvoidHosts(List<String> hosts);
+
+    List<String> getAvoidHosts();
+
     long getLbCheckerInterval(Long receivedLbInterval);
 
-    void updateConnectedHost();
+    void updateConnectedHost(String connectedHost);
 
     String getConnectedHost();
 
     void launchNewAgent(ServerResource resource) throws ConfigurationException;
+
+    boolean isConnectionTransfer();
+
+    void setConnectionTransfer(boolean connectionTransfer);
+
+    Integer getSslHandshakeTimeout();
 }

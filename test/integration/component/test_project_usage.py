@@ -18,7 +18,8 @@
 """
 #Import Local Modules
 from nose.plugins.attrib import attr
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.cloudstackAPI import deleteVolume
 from marvin.lib.utils import (cleanup_resources, validateList)
 from marvin.lib.base import (Project,
@@ -870,7 +871,7 @@ class TestTemplateUsage(cloudstackTestCase):
 
             time.sleep(self.services["sleep"])
             timeout = timeout - 1
-            
+
         #Verify template response to check whether template added successfully
         self.assertEqual(
                         isinstance(list_template_response, list),
@@ -890,9 +891,9 @@ class TestTemplateUsage(cloudstackTestCase):
                             True,
                             "Template state is not ready, it is %s" % template_response.isready
                         )
-        
+
         self.debug("Created template with ID: %s" % template.id)
-        
+
         # Delete template
         template.delete(self.apiclient)
         self.debug("Deleted template with ID: %s" % template.id)
@@ -1706,17 +1707,10 @@ class TestVpnUsage(cloudstackTestCase):
                                 listall=True
                                 )
         if isinstance(networks, list):
-            network = networks[0]
+            cls.network = networks[0]
         else:
             raise Exception("List networks call failed")
 
-        cls.public_ip = PublicIPAddress.create(
-                                           cls.api_client,
-                                           zoneid=cls.zone.zoneid,
-                                           services=cls.services["server"],
-                                           networkid=network.id,
-                                           projectid=cls.project.id
-                                           )
         cls._cleanup = [
                         cls.project,
                         cls.service_offering,
@@ -1759,12 +1753,20 @@ class TestVpnUsage(cloudstackTestCase):
         #    this account in cloud.usage_event table
         # 4. Delete this account.
 
-        self.debug("Created VPN with public IP: %s" %
-                                    self.public_ip.ipaddress.id)
-        #Assign VPN to Public IP
+        # Listing source NAT IP of newly added network
+        ipAddresses = PublicIPAddress.list(
+            self.apiclient,
+            associatednetworkid=self.network.id,
+            projectid=self.project.id,
+            issourcenat=True)
+
+        sourceNatIP = ipAddresses[0]
+        self.debug("Created VPN with source NAT IP: %s" %
+                                    sourceNatIP.id)
+        #Assign VPN to source NAT IP
         vpn = Vpn.create(
                         self.apiclient,
-                        self.public_ip.ipaddress.id,
+                        sourceNatIP.id,
                         projectid=self.project.id
                         )
 

@@ -18,29 +18,24 @@
  */
 package com.cloud.utils;
 
+import com.cloud.utils.crypt.CloudStackEncryptor;
+import com.cloud.utils.exception.CloudRuntimeException;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-
-import org.apache.commons.codec.binary.Base64;
-import org.apache.log4j.Logger;
-import org.jasypt.encryption.pbe.PBEStringEncryptor;
-import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
-
-import com.cloud.utils.exception.CloudRuntimeException;
-
 public class EncryptionUtil {
-    public static final Logger s_logger = Logger.getLogger(EncryptionUtil.class.getName());
-    private static PBEStringEncryptor encryptor;
+    protected static Logger LOGGER = LogManager.getLogger(EncryptionUtil.class);
+    private static CloudStackEncryptor encryptor;
 
     private static void initialize(String key) {
-        StandardPBEStringEncryptor standardPBEStringEncryptor = new StandardPBEStringEncryptor();
-        standardPBEStringEncryptor.setAlgorithm("PBEWITHSHA1ANDDESEDE");
-        standardPBEStringEncryptor.setPassword(key);
-        encryptor = standardPBEStringEncryptor;
+        encryptor = new CloudStackEncryptor(key, null, EncryptionUtil.class);
     }
 
     public static String encodeData(String data, String key) {
@@ -66,7 +61,7 @@ public class EncryptionUtil {
             final byte[] encryptedBytes = mac.doFinal();
             return Base64.encodeBase64String(encryptedBytes);
         } catch (NoSuchAlgorithmException | InvalidKeyException | UnsupportedEncodingException e) {
-            s_logger.error("exception occurred which encoding the data." + e.getMessage());
+            LOGGER.error("exception occurred which encoding the data." + e.getMessage());
             throw new CloudRuntimeException("unable to generate signature", e);
         }
     }

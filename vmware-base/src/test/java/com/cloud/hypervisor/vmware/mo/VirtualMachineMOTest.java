@@ -19,6 +19,7 @@ package com.cloud.hypervisor.vmware.mo;
 
 import com.cloud.hypervisor.vmware.util.VmwareClient;
 import com.cloud.hypervisor.vmware.util.VmwareContext;
+import com.cloud.utils.exception.CloudRuntimeException;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualLsiLogicController;
@@ -27,19 +28,20 @@ import com.vmware.vim25.VirtualSCSIController;
 import com.vmware.vim25.VirtualSCSISharing;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -54,12 +56,14 @@ public class VirtualMachineMOTest {
 
     VirtualMachineMO vmMo;
 
+    AutoCloseable closeable;
+
     private List<VirtualDevice> getVirtualScSiDeviceList(Class<?> cls) {
 
         List<VirtualDevice> deviceList = new ArrayList<>();
         try {
 
-            VirtualSCSIController scsiController = (VirtualSCSIController)cls.newInstance();
+            VirtualSCSIController scsiController = (VirtualSCSIController)cls.getDeclaredConstructor().newInstance();
             scsiController.setSharedBus(VirtualSCSISharing.NO_SHARING);
             scsiController.setBusNumber(0);
             scsiController.setKey(1);
@@ -74,7 +78,7 @@ public class VirtualMachineMOTest {
 
     @Before
     public void setup() {
-        MockitoAnnotations.initMocks(this);
+        closeable = MockitoAnnotations.openMocks(this);
         vmMo = new VirtualMachineMO(context, mor);
         when(context.getVimClient()).thenReturn(client);
     }
@@ -87,12 +91,9 @@ public class VirtualMachineMOTest {
     public static void tearDownAfterClass() throws Exception {
     }
 
-    @Before
-    public void setUp() throws Exception {
-    }
-
     @After
     public void tearDown() throws Exception {
+        closeable.close();
     }
 
     @Test
@@ -116,5 +117,22 @@ public class VirtualMachineMOTest {
             fail("Received exception when success expected: " + e.getMessage());
         }
 
+    }
+
+    @Test
+    public void testGetVmxFormattedVirtualHardwareVersionOneDigit() {
+        String vmxHwVersion = VirtualMachineMO.getVmxFormattedVirtualHardwareVersion(8);
+        Assert.assertEquals("vmx-08", vmxHwVersion);
+    }
+
+    @Test
+    public void testGetVmxFormattedVirtualHardwareVersionTwoDigits() {
+        String vmxHwVersion = VirtualMachineMO.getVmxFormattedVirtualHardwareVersion(11);
+        Assert.assertEquals("vmx-11", vmxHwVersion);
+    }
+
+    @Test(expected = CloudRuntimeException.class)
+    public void testGetVmxFormattedVirtualHardwareVersionInvalid() {
+        VirtualMachineMO.getVmxFormattedVirtualHardwareVersion(-1);
     }
 }

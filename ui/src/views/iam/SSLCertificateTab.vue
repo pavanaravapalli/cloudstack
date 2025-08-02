@@ -28,41 +28,43 @@
           :pagination="false"
           v-if="!quickview"
         >
-          <span slot="action" slot-scope="text, record" class="cert-button-action">
-            <a-tooltip placement="top">
-              <template slot="title">
-                {{ $t('label.quickview') }}
-              </template>
-              <a-button type="primary" shape="circle" icon="eye" size="small" @click="onQuickView(record.id)" />
-            </a-tooltip>
-            <a-tooltip placement="top">
-              <template slot="title">
-                {{ $t('label.delete.sslcertificate') }}
-              </template>
-              <a-button
-                :disabled="!('deleteSslCert' in $store.getters.apis)"
-                type="danger"
-                shape="circle"
-                icon="delete"
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'actions'" class="cert-button-action">
+              <tooltip-button
+                tooltipPlacement="top"
+                :tooltip="$t('label.quickview')"
+                type="primary"
+                icon="eye-outlined"
                 size="small"
-                @click="onShowConfirm(record)"/>
-            </a-tooltip>
-          </span>
+                @onClick="onQuickView(record.id)" />
+              <tooltip-button
+                tooltipPlacement="top"
+                :tooltip="$t('label.delete.sslcertificate')"
+                :disabled="!('deleteSslCert' in $store.getters.apis)"
+                type="primary"
+                :danger="true"
+                icon="delete-outlined"
+                size="small"
+                @onClick="onShowConfirm(record)" />
+            </template>
+          </template>
         </a-table>
 
         <a-list size="small" :dataSource="detailColumn" v-if="quickview">
           <div class="close-quickview">
-            <a-button @click="() => { this.quickview = false }">{{ $t('label.close') }}</a-button>
+            <a-button @click="() => { quickview = false }">{{ $t('label.close') }}</a-button>
           </div>
-          <a-list-item slot="renderItem" slot-scope="item" v-if="item in detail">
-            <div>
-              <strong>{{ $t(item) }}</strong>
-              <br/>
-              <div class="list-item-content">
-                {{ detail[item] }}
-              </div>
-            </div>
-          </a-list-item>
+          <template #renderItem="{item}">
+            <a-list-item v-if="item in detail">
+                <div>
+                  <strong>{{ $t(item) }}</strong>
+                  <br/>
+                  <div class="list-item-content">
+                    {{ detail[item] }}
+                  </div>
+                </div>
+            </a-list-item>
+          </template>
         </a-list>
       </a-col>
     </a-row>
@@ -70,10 +72,14 @@
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI, postAPI } from '@/api'
+import TooltipButton from '@/components/widgets/TooltipButton'
 
 export default {
   name: 'SSLCertificate',
+  components: {
+    TooltipButton
+  },
   data () {
     return {
       columns: [],
@@ -108,53 +114,53 @@ export default {
         this.fetchData()
       }
     },
-    resource (newValue, oldValue) {
-      if (Object.keys(newValue).length > 0 &&
-        newValue.id &&
-        this.tab === 'certificate'
-      ) {
-        this.quickview = false
-        this.fetchData()
+    resource: {
+      deep: true,
+      handler (newValue) {
+        if (Object.keys(newValue).length > 0 &&
+          newValue.id &&
+          this.tab === 'certificate'
+        ) {
+          this.quickview = false
+          this.fetchData()
+        }
       }
     }
   },
   created () {
     this.columns = [
       {
+        key: 'name',
         title: this.$t('label.name'),
-        dataIndex: 'name',
-        scopedSlots: { customRender: 'name' }
+        dataIndex: 'name'
       },
       {
+        key: 'id',
         title: this.$t('label.certificateid'),
         dataIndex: 'id',
-        width: 450,
-        scopedSlots: { customRender: 'id' }
+        width: 450
       },
       {
-        title: this.$t('label.action'),
-        dataIndex: 'action',
+        key: 'actions',
+        title: this.$t('label.actions'),
+        dataIndex: 'actions',
         fixed: 'right',
-        width: 80,
-        scopedSlots: { customRender: 'action' }
+        width: 80
       }
     ]
     this.detailColumn = ['name', 'certificate', 'certchain']
-  },
-  mounted () {
     this.fetchData()
   },
   methods: {
     fetchData () {
       const params = {}
-      params.listAll = true
       params.page = this.page
       params.pageSize = this.pageSize
       params.accountid = this.resource.id
 
       this.loading = true
 
-      api('listSslCerts', params).then(json => {
+      getAPI('listSslCerts', params).then(json => {
         const listSslResponse = json.listsslcertsresponse.sslcert
 
         // check exists json response
@@ -185,7 +191,7 @@ export default {
       const message = `${this.$t('label.delete.certificate')} ${this.$t('label.in.progress.for')} ${row.name}`
       const loading = this.$message.loading(message, 0)
 
-      api('deleteSslCert', params).then(json => {
+      postAPI('deleteSslCert', params).then(json => {
         const jsonResponse = json.deletesslcertresponse
 
         // hide loading
@@ -210,7 +216,7 @@ export default {
       const title = `${this.$t('label.deleteconfirm')} ${this.$t('label.certificate')}`
 
       this.$confirm({
-        title: title,
+        title,
         okText: this.$t('label.ok'),
         okType: 'danger',
         cancelText: this.$t('label.cancel'),
@@ -224,7 +230,7 @@ export default {
 </script>
 
 <style scoped>
-/deep/.ant-table-fixed-right {
+:deep(.ant-table-fixed-right) {
   z-index: 5;
 }
 

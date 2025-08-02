@@ -19,9 +19,11 @@ package org.apache.cloudstack.api.command;
 
 import com.cloud.user.Account;
 import com.cloud.user.AccountService;
+import com.cloud.user.DomainService;
 import com.cloud.user.User;
 import com.cloud.user.UserAccountVO;
 import org.apache.cloudstack.acl.RoleType;
+import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.response.LinkAccountToLdapResponse;
 import org.apache.cloudstack.ldap.LdapManager;
 import org.apache.cloudstack.ldap.LdapUser;
@@ -29,13 +31,13 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
-import static org.powermock.api.mockito.PowerMockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class LinkAccountToLdapCmdTest implements LdapConfigurationChanger {
@@ -44,6 +46,8 @@ public class LinkAccountToLdapCmdTest implements LdapConfigurationChanger {
     LdapManager ldapManager;
     @Mock
     AccountService accountService;
+    @Mock
+    DomainService domainService;
 
     LinkAccountToLdapCmd linkAccountToLdapCmd;
 
@@ -52,15 +56,16 @@ public class LinkAccountToLdapCmdTest implements LdapConfigurationChanger {
         linkAccountToLdapCmd = new LinkAccountToLdapCmd();
         setHiddenField(linkAccountToLdapCmd, "_ldapManager", ldapManager);
         setHiddenField(linkAccountToLdapCmd, "_accountService", accountService);
+        setHiddenField(linkAccountToLdapCmd, "_domainService", domainService);
     }
 
     @Test
     public void execute() throws Exception {
-        //      test with valid params and with admin who doesnt exist in cloudstack
+        //      test with valid params and with admin who doesn't exist in cloudstack
         long domainId = 1;
         String type = "GROUP";
         String ldapDomain = "CN=test,DC=ccp,DC=Citrix,DC=com";
-        short accountType = Account.ACCOUNT_TYPE_DOMAIN_ADMIN;
+        Account.Type accountType = Account.Type.DOMAIN_ADMIN;
         String username = "admin";
         long accountId = 24;
         String accountName = "test";
@@ -69,11 +74,11 @@ public class LinkAccountToLdapCmdTest implements LdapConfigurationChanger {
         setHiddenField(linkAccountToLdapCmd, "admin", username);
         setHiddenField(linkAccountToLdapCmd, "type", type);
         setHiddenField(linkAccountToLdapCmd, "domainId", domainId);
-        setHiddenField(linkAccountToLdapCmd, "accountType", accountType);
+        setHiddenField(linkAccountToLdapCmd, "accountType", accountType.ordinal());
         setHiddenField(linkAccountToLdapCmd, "accountName", accountName);
 
 
-        LinkAccountToLdapResponse response = new LinkAccountToLdapResponse(String.valueOf(domainId), type, ldapDomain, (short)accountType, username, accountName);
+        LinkAccountToLdapResponse response = new LinkAccountToLdapResponse(String.valueOf(domainId), type, ldapDomain, accountType.ordinal(), username, accountName);
         when(ldapManager.linkAccountToLdap(linkAccountToLdapCmd)).thenReturn(response);
         when(ldapManager.getUser(username, type, ldapDomain, 1L))
                 .thenReturn(new LdapUser(username, "admin@ccp.citrix.com", "Admin", "Admin", ldapDomain, "ccp", false, null));
@@ -82,12 +87,12 @@ public class LinkAccountToLdapCmdTest implements LdapConfigurationChanger {
         UserAccountVO userAccount =  new UserAccountVO();
         userAccount.setAccountId(24);
         when(accountService.createUserAccount(eq(username), eq(""), eq("Admin"), eq("Admin"), eq("admin@ccp.citrix.com"), isNull(String.class),
-                eq(username), eq(Account.ACCOUNT_TYPE_DOMAIN_ADMIN), eq(RoleType.DomainAdmin.getId()), eq(domainId), isNull(String.class),
+                eq(username), eq(Account.Type.DOMAIN_ADMIN), eq(RoleType.DomainAdmin.getId()), eq(domainId), isNull(String.class),
                 (java.util.Map<String,String>)isNull(), anyString(), anyString(), eq(User.Source.LDAP))).thenReturn(userAccount);
 
         linkAccountToLdapCmd.execute();
         LinkAccountToLdapResponse result = (LinkAccountToLdapResponse)linkAccountToLdapCmd.getResponseObject();
-        assertEquals("objectName", linkAccountToLdapCmd.APINAME, result.getObjectName());
+        assertEquals("objectName", BaseCmd.getCommandNameByClass(LinkAccountToLdapCmd.class), result.getObjectName());
         assertEquals("commandName", linkAccountToLdapCmd.getCommandName(), result.getResponseName());
         assertEquals("domainId", String.valueOf(domainId), result.getDomainId());
         assertEquals("type", type, result.getType());

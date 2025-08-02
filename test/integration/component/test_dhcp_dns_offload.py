@@ -16,7 +16,8 @@
 # under the License.
 """ Tests for DHCP DNS offload feature
 """
-from marvin.cloudstackTestCase import cloudstackTestCase, unittest
+from marvin.cloudstackTestCase import cloudstackTestCase
+import unittest
 from marvin.lib.utils import (random_gen, validateList, cleanup_resources, get_hypervisor_type)
 from marvin.lib.base import (Account,
                              NIC,
@@ -321,7 +322,7 @@ class TestDeployVMs(cloudstackTestCase):
         self.assertEqual(validateList(qresultset)[0], PASS, "sql query returned invalid response")
         self.assertEqual(
             metadata["vm-id.txt"][0],
-            unicode(qresultset[0][0]),
+            str(qresultset[0][0]),
             "vm id in metadata does not match with the vm id from cloud db"
         )
         return
@@ -2123,4 +2124,3 @@ class TestDeployVMs(cloudstackTestCase):
                 self.debug("Success: Updating dhcp config params with invalid values is not allowed\
                            and throws following message: %s" % e)
         return
-

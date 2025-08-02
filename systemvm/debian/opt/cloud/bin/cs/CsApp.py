@@ -16,8 +16,8 @@
 # specific language governing permissions and limitations
 # under the License.
 import os
-from CsFile import CsFile
-import CsHelper
+from .CsFile import CsFile
+from . import CsHelper
 
 
 class CsApp:
@@ -34,7 +34,7 @@ class CsApache(CsApp):
     """ Set up Apache """
 
     def remove(self):
-        file = "/etc/apache2/sites-enabled/vhost-%s.conf" % self.dev
+        file = "/etc/apache2/sites-enabled/vhost-%s.conf" % self.ip
         if os.path.isfile(file):
             os.remove(file)
             CsHelper.service("apache2", "restart")
@@ -58,16 +58,6 @@ class CsApache(CsApp):
         if file.is_changed():
             file.commit()
             CsHelper.execute2("systemctl restart apache2", False)
-
-        self.fw.append([
-            "", "front",
-            "-A INPUT -i %s -d %s/32 -p tcp -m tcp -m state --state NEW --dport 80 -j ACCEPT" % (self.dev, self.ip)
-        ])
-
-        self.fw.append([
-            "", "front",
-            "-A INPUT -i %s -d %s/32 -p tcp -m tcp -m state --state NEW --dport 443 -j ACCEPT" % (self.dev, self.ip)
-        ])
 
 
 class CsPasswdSvc():

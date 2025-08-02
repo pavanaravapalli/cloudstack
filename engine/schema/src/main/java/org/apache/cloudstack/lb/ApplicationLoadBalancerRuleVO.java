@@ -30,6 +30,7 @@ import org.apache.cloudstack.network.lb.ApplicationLoadBalancerRule;
 import com.cloud.network.rules.FirewallRuleVO;
 import com.cloud.utils.net.Ip;
 import com.cloud.utils.net.NetUtils;
+import org.apache.cloudstack.utils.reflectiontostringbuilderutils.ReflectionToStringBuilderUtils;
 
 /**
  * This VO represent Internal Load Balancer rule.
@@ -37,7 +38,7 @@ import com.cloud.utils.net.NetUtils;
  *
  */
 @Entity
-@Table(name = ("load_balancing_rules"))
+@Table(name = "load_balancing_rules")
 @DiscriminatorValue(value = "LoadBalancing")
 @PrimaryKeyJoinColumn(name = "id")
 public class ApplicationLoadBalancerRuleVO extends FirewallRuleVO implements ApplicationLoadBalancerRule {
@@ -70,6 +71,9 @@ public class ApplicationLoadBalancerRuleVO extends FirewallRuleVO implements App
     @Column(name = "scheme")
     Scheme scheme;
 
+    @Column(name = "cidr_list")
+    String cidrList = null;
+
     public ApplicationLoadBalancerRuleVO() {
     }
 
@@ -85,6 +89,13 @@ public class ApplicationLoadBalancerRuleVO extends FirewallRuleVO implements App
         this.sourceIp = sourceIp;
         this.sourceIpNetworkId = sourceIpNtwkId;
         this.scheme = scheme;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("ApplicationLoadBalancerRule %s",
+                ReflectionToStringBuilderUtils.reflectOnlySelectedFields(
+                        this, "id", "uuid", "name", "purpose", "state"));
     }
 
     @Override
@@ -135,6 +146,11 @@ public class ApplicationLoadBalancerRuleVO extends FirewallRuleVO implements App
     @Override
     public int getInstancePort() {
         return defaultPortStart;
+    }
+
+    @Override
+    public String getCidrList(){
+        return cidrList;
     }
 
 }

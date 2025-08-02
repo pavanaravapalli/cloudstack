@@ -21,17 +21,21 @@
       <a-row>
         <a-col :span="24" style="padding-left: 12px">
           <breadcrumb>
-            <a-tooltip placement="bottom" slot="end">
-              <template slot="title">{{ $t('label.refresh') }}</template>
-              <a-button
-                style="margin-top: 4px"
-                :loading="loading"
-                shape="round"
-                size="small"
-                icon="reload"
-                @click="fetchData()"
-              >{{ $t('label.refresh') }}</a-button>
-            </a-tooltip>
+            <template #end>
+              <a-tooltip placement="bottom">
+                <template #title>{{ $t('label.refresh') }}</template>
+                <a-button
+                  style="margin-top: 4px"
+                  :loading="loading"
+                  shape="round"
+                  size="small"
+                  @click="fetchData()"
+                >
+                <template #icon><ReloadOutlined /></template>
+                {{ $t('label.refresh') }}
+              </a-button>
+              </a-tooltip>
+            </template>
           </breadcrumb>
         </a-col>
       </a-row>
@@ -42,13 +46,13 @@
         :columns="columns"
         :items="items"
         :loading="loading"
-        @refresh="this.fetchData" />
+        @refresh="fetchData" />
     </div>
   </div>
 </template>
 
 <script>
-import { api } from '@/api'
+import { getAPI } from '@/api'
 import { genericCompare } from '@/utils/sort.js'
 import Breadcrumb from '@/components/widgets/Breadcrumb'
 import ListView from '@/components/view/ListView.vue'
@@ -73,11 +77,11 @@ export default {
       columns: []
     }
   },
-  mounted () {
+  created () {
     this.fetchData()
   },
   watch: {
-    '$i18n.locale' (to, from) {
+    '$i18n.global.locale' (to, from) {
       if (to !== from) {
         this.fetchData()
       }
@@ -96,7 +100,7 @@ export default {
     callListHostsWithPage (hypervisor, currentPage) {
       this.loading = true
       const pageSize = 100
-      api('listHosts', {
+      getAPI('listHosts', {
         type: 'routing',
         details: 'min',
         hypervisor: hypervisor,
@@ -131,18 +135,18 @@ export default {
       this.columns.push({
         dataIndex: 'name',
         title: this.$t('label.hypervisor'),
-        sorter: function (a, b) { return genericCompare(a[this.dataIndex] || '', b[this.dataIndex] || '') }
+        sorter: (a, b) => genericCompare(a?.name || '', b?.name || '')
       })
 
       this.columns.push({
         dataIndex: 'hosts',
         title: this.$t('label.hosts'),
-        sorter: function (a, b) { return genericCompare(a[this.dataIndex] || '', b[this.dataIndex] || '') }
+        sorter: (a, b) => genericCompare(a?.hosts || '', b?.hosts || '')
       })
       this.columns.push({
         dataIndex: 'cpusockets',
         title: this.$t('label.cpu.sockets'),
-        sorter: function (a, b) { return genericCompare(a[this.dataIndex] || '', b[this.dataIndex] || '') }
+        sorter: (a, b) => genericCompare(a?.cpusockets || '', b?.cpusockets || '')
       })
 
       this.items = []

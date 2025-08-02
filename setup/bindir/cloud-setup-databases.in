@@ -67,11 +67,12 @@ class DBDeployer(object):
     dbDotProperties = {}
     dbDotPropertiesIndex = 0
     encryptionKeyFile = '@MSCONF@/key'
-    encryptionJarPath = '@COMMONLIBDIR@/lib/jasypt-1.9.3.jar'
+    encryptionJarPath = '@COMMONLIBDIR@/lib/cloudstack-utils.jar'
     success = False
     magicString = 'This_is_a_magic_string_i_think_no_one_will_duplicate'
     tmpMysqlFile = os.path.join(os.path.expanduser('~/'), 'cloudstackmysql.tmp.sql')
     mysqlBinPath = None
+    skipUsersAutoCreation = False
 
     def preRun(self):
         def backUpDbDotProperties():
@@ -128,6 +129,12 @@ class DBDeployer(object):
         (value, index) = self.dbDotProperties[key]
         return value
 
+    def areCloudDatabasesCreated(self):
+        cmd = "SELECT CASE WHEN COUNT(DISTINCT SCHEMA_NAME) >= 1 THEN 1 ELSE 0 END AS schema_exists \
+              FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME IN ('cloud', 'cloud_usage');"
+        databases = self.runMysql(cmd, "databases", self.rootuser != None)
+        return databases.replace("schema_exists", "").strip() == "1"
+
     def runMysql(self, text, table, isRoot=False):
         kwargs = {}
         if not isRoot:
@@ -146,11 +153,11 @@ class DBDeployer(object):
         try:
             mysqlCmds = [mysqlPath, '--user=%s'%kwargs['user'], '--host=%s'%kwargs['host'], '--port=%s'%kwargs['port']]
             if 'passwd' in kwargs:
-                mysqlCmds.append('--password=%s'%kwargs['passwd'])
+                mysqlCmds.append('--password=\'%s\''%kwargs['passwd'])
             open(self.tmpMysqlFile, 'w').write(text)
             mysqlCmds.append('<')
             mysqlCmds.append(self.tmpMysqlFile)
-            runCmd(mysqlCmds)
+            return runCmd(mysqlCmds)
 
         except Exception as e:
             err = '''Encountering an error when executing mysql script
@@ -188,7 +195,7 @@ for full help
         sys.exit(1)
 
     def setupDBSchema(self):
-        if not self.rootuser:
+        if not self.options.schemaonly and not self.rootuser:
             self.info("No mysql root user specified, will not create Cloud DB schema\n", None)
             return
 
@@ -219,13 +226,36 @@ for full help
                     ""),
             )
 
-        for f in ["create-database","create-schema", "create-database-premium","create-schema-premium"]:
+        queriesToSkip = (
+            ("CREATE USER cloud@`localhost` identified by 'cloud';", ""),
+            ("CREATE USER cloud@`%` identified by 'cloud';", ""),
+            ("GRANT ALL ON cloud.* to cloud@`localhost`;", ""),
+            ("GRANT ALL ON cloud.* to cloud@`%`;", ""),
+            ("GRANT ALL ON cloud_usage.* to cloud@`localhost`;", ""),
+            ("GRANT ALL ON cloud_usage.* to cloud@`%`;", ""),
+            ("GRANT process ON *.* TO cloud@`localhost`;", ""),
+            ("GRANT process ON *.* TO cloud@`%`;", ""),
+            ("DROP USER 'cloud'@'localhost' ;", "DO NULL;"),
+            ("DROP USER 'cloud'@'%' ;", "DO NULL;")
+        )
+
+        if self.areCloudDatabasesCreated() and not self.options.forcerecreate:
+            self.errorAndExit("Aborting script as the databases (cloud, cloud_usage) already exist.\n" \
+                              "Please use the --force-recreate parameter if you want to recreate the schemas.")
+
+        scriptsToRun = ["create-database","create-schema", "create-database-premium","create-schema-premium"]
+        if self.options.schemaonly:
+            scriptsToRun = ["create-schema", "create-schema-premium"]
+
+        for f in scriptsToRun:
             p = os.path.join(self.dbFilesPath,"%s.sql"%f)
             if not os.path.exists(p): continue
             text = open(p).read()
+            if self.options.skipUsersAutoCreation:
+                for t, r in queriesToSkip: text = text.replace(t,r)
             for t, r in replacements: text = text.replace(t,r)
             self.info("Applying %s"%p)
-            self.runMysql(text, p, True)
+            self.runMysql(text, p, self.rootuser != None)
             self.info(None, True)
 
         if self.serversetup:
@@ -248,21 +278,21 @@ for full help
             p = os.path.join(self.dbFilesPath, 'server-setup.sql')
             text = open(p).read()
             self.info("Applying %s"%p)
-            self.runMysql(text, p, True)
+            self.runMysql(text, p, self.rootuser != None)
             self.info(None, True)
 
         for f in ["templates"]:
             p = os.path.join(self.dbFilesPath,"%s.sql"%f)
             text = open(p).read()
             self.info("Applying %s"%p)
-            self.runMysql(text, p, True)
+            self.runMysql(text, p, self.rootuser != None)
             self.info(None, True)
 
         p = os.path.join(self.dbFilesPath,"schema-level.sql")
         if os.path.isfile(p):
             text = open(p).read()
             self.info("Applying %s"%p)
-            self.runMysql(text, p, True)
+            self.runMysql(text, p, self.rootuser != None)
             self.info(None, True)
 
     def prepareDBFiles(self):
@@ -387,19 +417,27 @@ for example:
         checkSELinux()
 
     def processEncryptionStuff(self):
-        def encrypt(input):
-            cmd = ['java','-Djava.security.egd=file:/dev/urandom','-classpath','"' + self.encryptionJarPath + '"','org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI', 'encrypt.sh', 'input=%s'%input, 'password=%s'%self.mgmtsecretkey,'verbose=false']
+        def encrypt(value):
+            cmd = ['java','-classpath','"' + self.encryptionJarPath + '"','com.cloud.utils.crypt.EncryptionCLI','-i','"' + value + '"', '-p', '"' +
+                   self.mgmtsecretkey + '"', self.encryptorVersion]
             return str(runCmd(cmd)).strip('\r\n')
 
         def saveMgmtServerSecretKey():
             if self.encryptiontype == 'file':
-                open(self.encryptionKeyFile, 'w').write(self.mgmtsecretkey)
+                try:
+                    open(self.encryptionKeyFile, 'w').write(self.mgmtsecretkey)
+                except IOError as e:
+                    msg = "Failed to save management server secret key file %s due to %s, also please check the default umask"%(self.encryptionKeyFile, e.strerror)
+                    self.errorAndExit(msg)
+                os.chmod(self.encryptionKeyFile, 0o640)
+                shutil.chown(self.encryptionKeyFile, user=None, group="cloud")
 
         def formatEncryptResult(value):
             return 'ENC(%s)'%value
 
         def encryptDBSecretKey():
             self.putDbProperty('db.cloud.encrypt.secret', formatEncryptResult(encrypt(self.dbsecretkey)))
+            self.putDbProperty("db.cloud.encryptor.version", self.options.encryptorVersion)
 
         def encryptDBPassword():
             dbPassword = self.getDbProperty('db.cloud.password')
@@ -442,7 +480,12 @@ for example:
                 self.info("Using specified cluster management server node IP %s" % self.options.mshostip, True)
 
             self.encryptiontype = self.options.encryptiontype
-            self.mgmtsecretkey = self.options.mgmtsecretkey
+            if self.encryptiontype == "env":
+                self.mgmtsecretkey = os.getenv("CLOUD_SECRET_KEY")
+                if not self.mgmtsecretkey:
+                    self.errorAndExit("Please set environment variable CLOUD_SECRET_KEY if the encryption type is 'env'")
+            else:
+                self.mgmtsecretkey = self.options.mgmtsecretkey
             self.dbsecretkey = self.options.dbsecretkey
             self.isDebug = self.options.debug
             if self.options.dbConfPath:
@@ -455,6 +498,13 @@ for example:
               self.encryptionJarPath = self.options.encryptionJarPath
             if self.options.mysqlbinpath:
               self.mysqlBinPath = self.options.mysqlbinpath
+            if self.options.skipUsersAutoCreation:
+                self.skipUsersAutoCreation = self.options.skipUsersAutoCreation
+
+            if self.options.encryptorVersion:
+              self.encryptorVersion = "--encryptorversion %s" % self.options.encryptorVersion
+            else:
+              self.encryptorVersion = ""
 
         def parseUserAndPassword(cred):
             stuff = cred.split(':')
@@ -514,19 +564,23 @@ for example:
             self.info("Mysql server port:%s"%self.port, True)
 
         def validateParameters():
-            if self.encryptiontype != 'file' and self.encryptiontype != 'web':
-                self.errorAndExit('Wrong encryption type %s, --encrypt-type can only be "file" or "web'%self.encryptiontype)
+            if self.options.schemaonly and self.rootuser != None:
+                self.errorAndExit("--schema-only and --deploy-as cannot be passed together\n")
+            if self.encryptiontype != 'file' and self.encryptiontype != 'web' and self.encryptiontype != 'env':
+                self.errorAndExit('Wrong encryption type %s, --encrypt-type can only be "file" or "web" or "env"' % self.encryptiontype)
 
     #---------------------- option parsing and command line checks ------------------------
-        usage = """%prog user:[password]@mysqlhost:[port] [--deploy-as=rootuser:[rootpassword]] [--auto=/path/to/server-setup.xml] [-e ENCRYPTIONTYPE] [-m MGMTSECRETKEY] [-k DBSECRETKEY] [--debug]
+        usage = """%prog user:[password]@mysqlhost:[port] [--deploy-as=rootuser:[rootpassword]] [--auto=/path/to/server-setup.xml] [-e ENCRYPTIONTYPE] [-m MGMTSECRETKEY] [-k DBSECRETKEY] [-g ENCRYPTORVERSION] [--debug]
 
     This command sets up the CloudStack Management Server and CloudStack Usage Server database configuration (connection credentials and host information) based on the first argument.
 
-    If the the --deploy-as option is present, this command will also connect to the database using the administrative credentials specified as the value for the --deploy-as argument, construct the database environment needed to run the CloudStack Management Server, and alter the password specified for the user in the first argument.  In this case, the user name specified in --deploy-as= cannot be the same as the user name specified for the connection credentials that the CloudStack Management Server will be set up with.
+    If the --deploy-as option is present, this command will also connect to the database using the administrative credentials specified as the value for the --deploy-as argument, construct the database environment needed to run the CloudStack Management Server, and alter the password specified for the user in the first argument.  In this case, the user name specified in --deploy-as= cannot be the same as the user name specified for the connection credentials that the CloudStack Management Server will be set up with.
 
     If a server-setup.xml cloud setup information file is specified with the --auto option, this command will also construct a customized database environment according to the cloud setup information in the file.
 
     The port and the password are optional and can be left out..  If host is omitted altogether, it will default to localhost.
+
+    The encryptor version is optional. The options are V1 and V2. If it is not set, the default encryptor will be used.
 
     Examples:
 
@@ -543,10 +597,13 @@ for example:
         with password 'nonsense', and recreates the databases, creating
         the user alex with password 'founder' as necessary
 
-    %prog alex:founder@1.2.3.4 --deploy-as=root:nonsense -e file -m password -k dbpassword
+    %prog alex:founder@1.2.3.4 --deploy-as=root:nonsense -e file -m password -k dbpassword -g V2
         In addition actions performing in above example, using 'password' as management server encryption key
         and 'dbpassword' as database encryption key, saving management server encryption key to a file as the
         encryption type specified by -e is file.
+        The credentials in @MSCONF@/db.properties are encrypted by encryptor V2 (AeadBase64Encryptor).
+        The db.cloud.encryptor.version is also set to V2. Sensitive values in cloudstack databases will be
+        encrypted by the encryptor V2 using the database encryption key.
 
     %prog alena:tests@5.6.7.8 --deploy-as=root:nonsense --auto=/root/server-setup.xml
         sets alena up as the MySQL user, then connects as the root user
@@ -559,10 +616,18 @@ for example:
                           help="If enabled, print the commands it will run as they run")
         self.parser.add_option("-d", "--deploy-as", action="store", type="string", dest="rootcreds", default="",
                           help="Colon-separated user name and password of a MySQL user with administrative privileges")
+        self.parser.add_option("-s", "--schema-only", action="store_true", dest="schemaonly", default=False,
+                          help="Creates the db schema without having to pass root credentials - " \
+                               "Please note: The databases (cloud, cloud_usage) and user (cloud) has to be configured " \
+                               "manually prior to running this script when using this flag.")
+        self.parser.add_option("--force-recreate", action="store_true", dest="forcerecreate", default=False,
+                               help="Force recreation of the existing DB schemas. This option is disabled by default." \
+                               "Please note: The databases (cloud, cloud_usage) and its tables data will be lost and recreated.")
+
         self.parser.add_option("-a", "--auto", action="store", type="string", dest="serversetup", default="",
                           help="Path to an XML file describing an automated unattended cloud setup")
         self.parser.add_option("-e", "--encrypt-type", action="store", type="string", dest="encryptiontype", default="file",
-                          help="Encryption method used for db password encryption. Valid values are file, web. Default is file.")
+                          help="Encryption method used for db password encryption. Valid values are file, web and env. Default is file.")
         self.parser.add_option("-m", "--managementserver-secretkey", action="store", type="string", dest="mgmtsecretkey", default="password",
                           help="Secret key used to encrypt confidential parameters in db.properties. A string, default is password")
         self.parser.add_option("-k", "--database-secretkey", action="store", type="string", dest="dbsecretkey", default="password",
@@ -573,10 +638,14 @@ for example:
                           help="Region Id for the management server cluster")
         self.parser.add_option("-c", "--db-conf-path", action="store", dest="dbConfPath", help="The path to find db.properties which hold db properties")
         self.parser.add_option("-f", "--db-files-path", action="store", dest="dbFilesPath", help="The path to find sql files to create initial database(s)")
-        self.parser.add_option("-j", "--encryption-jar-path", action="store", dest="encryptionJarPath", help="The path to the jasypt library to be used to encrypt the values in db.properties")
+        self.parser.add_option("-j", "--encryption-jar-path", action="store", dest="encryptionJarPath", help="The cloudstack jar to be used to encrypt the values in db.properties")
         self.parser.add_option("-n", "--encryption-key-file", action="store", dest="encryptionKeyFile", help="The name of the file in which encryption key to be generated")
+        self.parser.add_option("-g", "--encryptor-version", action="store", dest="encryptorVersion", default="V2",
+                               help="The encryptor version to be used to encrypt the values in db.properties")
         self.parser.add_option("-b", "--mysql-bin-path", action="store", dest="mysqlbinpath", help="The mysql installed bin path")
-
+        self.parser.add_option("-u", "--skip-users-auto-creation", action="store_true", dest="skipUsersAutoCreation",
+                               help="Indicates whether to skip the auto-creation of users in the database. Use this flag when your database users " \
+                                    "are already configured and you only want to populate the db.properties file.")
         (self.options, self.args) = self.parser.parse_args()
         parseCasualCredit()
         parseOtherOptions()

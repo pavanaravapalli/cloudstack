@@ -17,60 +17,6 @@
 
 package com.cloud.vm;
 
-import static org.hamcrest.Matchers.instanceOf;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyFloat;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import org.apache.cloudstack.acl.ControlledEntity;
-import org.apache.cloudstack.acl.SecurityChecker.AccessType;
-import org.apache.cloudstack.api.BaseCmd;
-import org.apache.cloudstack.api.command.admin.vm.AssignVMCmd;
-import org.apache.cloudstack.api.command.user.vm.RestoreVMCmd;
-import org.apache.cloudstack.api.command.user.vm.ScaleVMCmd;
-import org.apache.cloudstack.api.command.user.vm.UpdateVmNicIpCmd;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
-import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationService;
-import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
-import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
-import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreDao;
-import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreVO;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.Spy;
-import org.mockito.junit.MockitoJUnitRunner;
-
 import com.cloud.capacity.CapacityManager;
 import com.cloud.configuration.ConfigurationManager;
 import com.cloud.dc.DataCenter.NetworkType;
@@ -78,7 +24,6 @@ import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.VlanVO;
 import com.cloud.dc.dao.DataCenterDao;
 import com.cloud.dc.dao.VlanDao;
-import com.cloud.deploy.DeployDestination;
 import com.cloud.event.dao.UsageEventDao;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.PermissionDeniedException;
@@ -99,7 +44,6 @@ import com.cloud.offerings.NetworkOfferingVO;
 import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.service.dao.ServiceOfferingDao;
-import com.cloud.storage.Storage;
 import com.cloud.storage.VMTemplateVO;
 import com.cloud.storage.VolumeVO;
 import com.cloud.storage.dao.VMTemplateDao;
@@ -122,6 +66,55 @@ import com.cloud.vm.dao.UserVmDao;
 import com.cloud.vm.dao.VMInstanceDao;
 import com.cloud.vm.snapshot.VMSnapshotVO;
 import com.cloud.vm.snapshot.dao.VMSnapshotDao;
+import org.apache.cloudstack.acl.ControlledEntity;
+import org.apache.cloudstack.acl.SecurityChecker.AccessType;
+import org.apache.cloudstack.api.command.admin.vm.AssignVMCmd;
+import org.apache.cloudstack.api.command.user.vm.RestoreVMCmd;
+import org.apache.cloudstack.api.command.user.vm.ScaleVMCmd;
+import org.apache.cloudstack.api.command.user.vm.UpdateVmNicIpCmd;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationService;
+import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
+import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreDao;
+import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreVO;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnitRunner;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.hamcrest.Matchers.instanceOf;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyFloat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class UserVmManagerTest {
@@ -226,7 +219,7 @@ public class UserVmManagerTest {
     public void setup() {
         doReturn(8L).when(_vmMock).getAccountId();
         lenient().when(_userDao.findById(anyLong())).thenReturn(_userMock);
-        lenient().doReturn(Account.State.enabled).when(_account).getState();
+        lenient().doReturn(Account.State.ENABLED).when(_account).getState();
         lenient().when(_vmMock.getId()).thenReturn(314L);
         lenient().when(_vmInstance.getId()).thenReturn(1L);
         lenient().when(_vmInstance.getServiceOfferingId()).thenReturn(2L);
@@ -300,7 +293,7 @@ public class UserVmManagerTest {
         lenient().when(_vmInstanceDao.findById(anyLong())).thenReturn(_vmInstance);
 
         // UserContext.current().setEventDetails("Vm Id: "+getId());
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short)0, "uuid");
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, "uuid");
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         //AccountVO(String accountName, long domainId, String networkDomain, short type, int regionId)
         lenient().doReturn(VirtualMachine.State.Running).when(_vmInstance).getState();
@@ -342,7 +335,7 @@ public class UserVmManagerTest {
         lenient().when(_offeringDao.findById(anyLong())).thenReturn((ServiceOfferingVO)so1);
         lenient().when(_offeringDao.findByIdIncludingRemoved(anyLong(), anyLong())).thenReturn((ServiceOfferingVO)so1);
 
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, account);
         try {
@@ -384,7 +377,7 @@ public class UserVmManagerTest {
 
         //when(_vmDao.findById(anyLong())).thenReturn(_vmMock);
 
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, account);
         try {
@@ -426,14 +419,14 @@ public class UserVmManagerTest {
         doReturn(VirtualMachine.State.Running).when(_vmInstance).getState();
 
         //when(ApiDBUtils.getCpuOverprovisioningFactor()).thenReturn(3f);
-        when(_capacityMgr.checkIfHostHasCapacity(anyLong(), anyInt(), anyLong(), anyBoolean(), anyFloat(), anyFloat(), anyBoolean())).thenReturn(false);
+        when(_capacityMgr.checkIfHostHasCapacity(any(), anyInt(), anyLong(), anyBoolean(), anyFloat(), anyFloat(), anyBoolean())).thenReturn(false);
         when(_itMgr.reConfigureVm(_vmInstance.getUuid(), so2, so1, new HashMap<String, String>(), false)).thenReturn(_vmInstance);
 
         doReturn(true).when(_itMgr).upgradeVmDb(anyLong(), so1, so2);
 
         when(_vmDao.findById(anyLong())).thenReturn(_vmMock);
 
-        Account account = new AccountVO("testaccount", 1L, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account account = new AccountVO("testaccount", 1L, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, account);
         try {
@@ -454,7 +447,7 @@ public class UserVmManagerTest {
         boolean ha = false;
         boolean useLocalStorage = false;
 
-        ServiceOfferingVO serviceOffering = new ServiceOfferingVO(name, cpu, ramSize, speed, null, null, ha, displayText, Storage.ProvisioningType.THIN, useLocalStorage, false, null, false, null,
+        ServiceOfferingVO serviceOffering = new ServiceOfferingVO(name, cpu, ramSize, speed, null, null, ha, displayText, false, null,
                 false);
         return serviceOffering;
     }
@@ -478,13 +471,13 @@ public class UserVmManagerTest {
         domainIdField.set(cmd, 1L);
 
         // caller is of type 0
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
 
         CallContext.register(user, caller);
         try {
 
-            _userVmMgr.moveVMToUser(cmd);
+            _userVmMgr.moveVmToUser(cmd);
         } finally {
             CallContext.unregister();
         }
@@ -510,16 +503,16 @@ public class UserVmManagerTest {
         domainIdField.set(cmd, 1L);
 
         // caller is of type 0
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)1, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.ADMIN, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
 
-        AccountVO oldAccount = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        AccountVO oldAccount = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         oldAccount.setId(1L);
 
-        AccountVO newAccount = new AccountVO("testaccount", 1, "networkdomain", (short)1, UUID.randomUUID().toString());
+        AccountVO newAccount = new AccountVO("testaccount", 1, "networkdomain", Account.Type.ADMIN, UUID.randomUUID().toString());
         newAccount.setId(2L);
 
-        UserVmVO vm = new UserVmVO(10L, "test", "test", 1L, HypervisorType.Any, 1L, false, false, 1L, 1L, 1, 5L, "test", "test", 1L);
+        UserVmVO vm = new UserVmVO(10L, "test", "test", 1L, HypervisorType.Any, 1L, false, false, 1L, 1L, 1, 5L, "test", null, null, "test");
         vm.setState(VirtualMachine.State.Stopped);
         when(_vmDao.findById(anyLong())).thenReturn(vm);
 
@@ -534,7 +527,7 @@ public class UserVmManagerTest {
         when(_accountMgr.isRootAdmin(anyLong())).thenReturn(true);
 
         try {
-            _userVmMgr.moveVMToUser(cmd);
+            _userVmMgr.moveVmToUser(cmd);
         } finally {
             CallContext.unregister();
         }
@@ -575,11 +568,9 @@ public class UserVmManagerTest {
         when(_dcMock.getNetworkType()).thenReturn(NetworkType.Advanced);
 
         when(_ipAddrMgr.allocateGuestIP(Mockito.eq(_networkMock), anyString())).thenReturn("10.10.10.10");
-        doNothing().when(_networkMgr).implementNetworkElementsAndResources(Mockito.any(DeployDestination.class), Mockito.any(ReservationContext.class), Mockito.eq(_networkMock),
-                Mockito.eq(_networkOfferingMock));
         when(_nicDao.persist(any(NicVO.class))).thenReturn(nic);
 
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, caller);
         try {
@@ -604,6 +595,7 @@ public class UserVmManagerTest {
 
         NicVO nic = new NicVO("nic", 1L, 2L, VirtualMachine.Type.User);
         when(_nicDao.findById(anyLong())).thenReturn(nic);
+        nic.setIPv4Address("10.10.10.9");
         when(_vmDao.findById(anyLong())).thenReturn(_vmMock);
         when(_networkDao.findById(anyLong())).thenReturn(_networkMock);
         doReturn(9L).when(_networkMock).getNetworkOfferingId();
@@ -630,12 +622,12 @@ public class UserVmManagerTest {
         when(vlan.getVlanNetmask()).thenReturn("255.255.255.0");
 
         when(_ipAddrMgr.allocatePublicIpForGuestNic(Mockito.eq(_networkMock), nullable(Long.class), Mockito.eq(_accountMock), anyString())).thenReturn("10.10.10.10");
-        lenient().when(_ipAddressDao.findByIpAndSourceNetworkId(anyLong(), anyString())).thenReturn(null);
+        when(_ipAddressDao.findByIpAndSourceNetworkId(anyLong(), eq("10.10.10.10"))).thenReturn(newIp);
+        when(_ipAddressDao.findByIpAndSourceNetworkId(anyLong(), eq("10.10.10.9"))).thenReturn(null);
         when(_nicDao.persist(any(NicVO.class))).thenReturn(nic);
-        when(_ipAddressDao.findByIpAndDcId(anyLong(), anyString())).thenReturn(newIp);
         when(_vlanDao.findById(anyLong())).thenReturn(vlan);
 
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, caller);
         try {
@@ -673,7 +665,7 @@ public class UserVmManagerTest {
         when(_networkModel.listNetworkOfferingServices(anyLong())).thenReturn(services);
         when(_vmMock.getState()).thenReturn(State.Running);
 
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, caller);
         try {
@@ -720,7 +712,7 @@ public class UserVmManagerTest {
 
         when(_ipAddrMgr.allocateGuestIP(Mockito.eq(_networkMock), anyString())).thenReturn(null);
 
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, caller);
         try {
@@ -767,7 +759,7 @@ public class UserVmManagerTest {
 
         lenient().when(_ipAddrMgr.allocatePublicIpForGuestNic(Mockito.eq(_networkMock), anyLong(), Mockito.eq(_accountMock), anyString())).thenReturn(null);
 
-        Account caller = new AccountVO("testaccount", 1, "networkdomain", (short)0, UUID.randomUUID().toString());
+        Account caller = new AccountVO("testaccount", 1, "networkdomain", Account.Type.NORMAL, UUID.randomUUID().toString());
         UserVO user = new UserVO(1, "testuser", "password", "firstname", "lastName", "email", "timezone", UUID.randomUUID().toString(), User.Source.UNKNOWN);
         CallContext.register(user, caller);
         try {
@@ -780,7 +772,6 @@ public class UserVmManagerTest {
     @Test
     public void testApplyUserDataInNetworkWithoutUserDataSupport() throws Exception {
         UserVm userVm = mock(UserVm.class);
-        when(userVm.getId()).thenReturn(1L);
 
         when(_nicMock.getNetworkId()).thenReturn(2L);
         when(_networkMock.getNetworkOfferingId()).thenReturn(3L);
@@ -844,27 +835,5 @@ public class UserVmManagerTest {
         when(_vmMock.getDetail(any(String.class))).thenReturn(null);
         _userVmMgr.persistDeviceBusInfo(_vmMock, "lsilogic");
         verify(_vmDao, times(1)).saveDetails(any(UserVmVO.class));
-    }
-
-    @Test
-    public void testValideBase64WithoutPadding() {
-        // fo should be encoded in base64 either as Zm8 or Zm8=
-        String encodedUserdata = "Zm8";
-        String encodedUserdataWithPadding = "Zm8=";
-
-        // Verify that we accept both but return the padded version
-        assertTrue("validate return the value with padding", encodedUserdataWithPadding.equals(_userVmMgr.validateUserData(encodedUserdata, BaseCmd.HTTPMethod.GET)));
-        assertTrue("validate return the value with padding", encodedUserdataWithPadding.equals(_userVmMgr.validateUserData(encodedUserdataWithPadding, BaseCmd.HTTPMethod.GET)));
-    }
-
-    @Test
-    public void testValidateUrlEncodedBase64() throws UnsupportedEncodingException {
-        // fo should be encoded in base64 either as Zm8 or Zm8=
-        String encodedUserdata = "Zm+8/w8=";
-        String urlEncodedUserdata = java.net.URLEncoder.encode(encodedUserdata, "UTF-8");
-
-        // Verify that we accept both but return the padded version
-        assertEquals("validate return the value with padding", encodedUserdata, _userVmMgr.validateUserData(encodedUserdata, BaseCmd.HTTPMethod.GET));
-        assertEquals("validate return the value with padding", encodedUserdata, _userVmMgr.validateUserData(urlEncodedUserdata, BaseCmd.HTTPMethod.GET));
     }
 }

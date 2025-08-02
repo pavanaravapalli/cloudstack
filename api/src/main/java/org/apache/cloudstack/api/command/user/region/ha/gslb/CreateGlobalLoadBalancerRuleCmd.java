@@ -20,7 +20,7 @@ package org.apache.cloudstack.api.command.user.region.ha.gslb;
 import javax.inject.Inject;
 
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCreateCmd;
@@ -30,7 +30,6 @@ import org.apache.cloudstack.api.response.DomainResponse;
 import org.apache.cloudstack.api.response.GlobalLoadBalancerResponse;
 import org.apache.cloudstack.api.response.RegionResponse;
 import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
 
 import com.cloud.event.EventTypes;
 import com.cloud.exception.ResourceAllocationException;
@@ -42,9 +41,7 @@ import com.cloud.region.ha.GlobalLoadBalancingRulesService;
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class CreateGlobalLoadBalancerRuleCmd extends BaseAsyncCreateCmd {
 
-    public static final Logger s_logger = Logger.getLogger(CreateGlobalLoadBalancerRuleCmd.class.getName());
 
-    private static final String s_name = "creategloballoadbalancerruleresponse";
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
@@ -141,11 +138,6 @@ public class CreateGlobalLoadBalancerRuleCmd extends BaseAsyncCreateCmd {
     /////////////////////////////////////////////////////
 
     @Override
-    public String getCommandName() {
-        return s_name;
-    }
-
-    @Override
     public void execute() throws ResourceAllocationException, ResourceUnavailableException {
         GlobalLoadBalancerRule rule = _entityMgr.findById(GlobalLoadBalancerRule.class, getEntityId());
         if (rule != null) {
@@ -163,7 +155,7 @@ public class CreateGlobalLoadBalancerRuleCmd extends BaseAsyncCreateCmd {
             this.setEntityUuid(gslbRule.getUuid());
             CallContext.current().setEventDetails("Rule Id: " + getEntityId());
         } catch (Exception ex) {
-            s_logger.warn("Exception: ", ex);
+            logger.warn("Exception: ", ex);
             throw new ServerApiException(ApiErrorCode.PARAM_ERROR, ex.getMessage());
         } finally {
 
@@ -182,8 +174,8 @@ public class CreateGlobalLoadBalancerRuleCmd extends BaseAsyncCreateCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.GlobalLoadBalancerRule;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.GlobalLoadBalancerRule;
     }
 
     @Override

@@ -233,12 +233,12 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
         self.assertEqual(
                     isinstance(routers, list),
                     True,
-                    "list router should return Master and backup routers"
+                    "list router should return Primary and backup routers"
                     )
         self.assertEqual(
                     len(routers),
                     2,
-                    "Length of the list router should be 2 (Backup & master)"
+                    "Length of the list router should be 2 (Backup & Primary)"
                     )
 
         public_ips = list_publicIP(
@@ -287,8 +287,8 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
                          )
 
         expected = 1
-        ssh_command = "wget -t 1 -T 5 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -307,8 +307,8 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
                                  )
 
         expected = 0
-        ssh_command = "wget -t 1 -T 1 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -398,12 +398,12 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
         self.assertEqual(
                     isinstance(routers, list),
                     True,
-                    "list router should return Master and backup routers"
+                    "list router should return Primary and backup routers"
                     )
         self.assertEqual(
                     len(routers),
                     2,
-                    "Length of the list router should be 2 (Backup & master)"
+                    "Length of the list router should be 2 (Backup & Primary)"
                     )
 
         public_ips = list_publicIP(
@@ -451,8 +451,8 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
                          )
 
         expected = 0
-        ssh_command = "wget -t 1 -T 1 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -480,8 +480,8 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
                                  )
 
         expected = 1
-        ssh_command = "wget -t 1 -T 5 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -573,15 +573,15 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
         self.assertEqual(
                     isinstance(routers, list),
                     True,
-                    "list router should return Master and backup routers"
+                    "list router should return Primary and backup routers"
                     )
         self.assertEqual(
                     len(routers),
                     2,
-                    "Length of the list router should be 2 (Backup & master)"
+                    "Length of the list router should be 2 (Backup & Primary)"
                     )
 
-        vals = ["MASTER", "BACKUP", "UNKNOWN"]
+        vals = ["PRIMARY", "BACKUP", "UNKNOWN"]
         cnts = [0, 0, 0]
 
         result = "UNKNOWN"
@@ -628,12 +628,12 @@ class TestRedundantIsolateNetworks(cloudstackTestCase):
                         self.skipTest(
                             "Marvin configuration has no host credentials to\
                                     check router services")
-            
+
                 if result.count(vals[0]) == 1:
                     cnts[vals.index(vals[0])] += 1
 
-        if cnts[vals.index('MASTER')] != 1:
-            self.fail("No Master or too many master routers found %s" % cnts[vals.index('MASTER')])
+        if cnts[vals.index('PRIMARY')] != 1:
+            self.fail("No Primary or too many primary routers found %s" % cnts[vals.index('PRIMARY')])
 
         return
 
@@ -647,7 +647,7 @@ class TestIsolatedNetworks(cloudstackTestCase):
         cls.stream_handler = logging.StreamHandler()
         cls.logger.setLevel(logging.DEBUG)
         cls.logger.addHandler(cls.stream_handler)
-        
+
         cls.testClient = super(TestIsolatedNetworks, cls).getClsTestClient()
         cls.api_client = cls.testClient.getApiClient()
 
@@ -840,8 +840,8 @@ class TestIsolatedNetworks(cloudstackTestCase):
                          )
 
         expected = 1
-        ssh_command = "wget -t 1 -T 5 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -860,8 +860,8 @@ class TestIsolatedNetworks(cloudstackTestCase):
                                  )
 
         expected = 0
-        ssh_command = "wget -t 1 -T 1 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -995,8 +995,8 @@ class TestIsolatedNetworks(cloudstackTestCase):
                          )
 
         expected = 0
-        ssh_command = "wget -t 1 -T 1 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(
@@ -1015,8 +1015,8 @@ class TestIsolatedNetworks(cloudstackTestCase):
                                  )
 
         expected = 1
-        ssh_command = "wget -t 1 -T 5 www.google.com"
-        check_string = "HTTP request sent, awaiting response... 200 OK"
+        ssh_command = "curl -v -m 1 -o index.html -sL www.google.com"
+        check_string = "200 OK"
         result = check_router_command(virtual_machine, nat_rule.ipaddress, ssh_command, check_string, self)
 
         self.assertEqual(

@@ -30,7 +30,7 @@ import com.cloud.uservm.UserVm;
 import com.cloud.vm.VirtualMachine;
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
@@ -40,11 +40,10 @@ import org.apache.cloudstack.api.response.UnmanageVMInstanceResponse;
 import org.apache.cloudstack.api.response.UserVmResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.vm.UnmanagedVMsManager;
-import org.apache.log4j.Logger;
 
 import javax.inject.Inject;
 
-@APICommand(name = UnmanageVMInstanceCmd.API_NAME,
+@APICommand(name = "unmanageVirtualMachine",
         description = "Unmanage a guest virtual machine.",
         entityType = {VirtualMachine.class},
         responseObject = UnmanageVMInstanceResponse.class,
@@ -53,8 +52,6 @@ import javax.inject.Inject;
         since = "4.15.0")
 public class UnmanageVMInstanceCmd extends BaseAsyncCmd {
 
-    public static final Logger LOGGER = Logger.getLogger(UnmanageVMInstanceCmd.class);
-    public static final String API_NAME = "unmanageVirtualMachine";
 
     @Inject
     private UnmanagedVMsManager unmanagedVMsManager;
@@ -110,11 +107,6 @@ public class UnmanageVMInstanceCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public String getCommandName() {
-        return API_NAME.toLowerCase() + BaseAsyncCmd.RESPONSE_SUFFIX;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         UserVm vm = _responseGenerator.findUserVmById(vmId);
         if (vm != null) {
@@ -124,12 +116,12 @@ public class UnmanageVMInstanceCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.VirtualMachine;
+    public ApiCommandResourceType getApiResourceType() {
+        return ApiCommandResourceType.VirtualMachine;
     }
 
     @Override
-    public Long getInstanceId() {
+    public Long getApiResourceId() {
         return vmId;
     }
 

@@ -26,11 +26,10 @@ import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiArgValidator;
-import org.apache.cloudstack.api.ApiCommandJobType;
+import org.apache.cloudstack.api.ApiCommandResourceType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
-import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.RunDiagnosticsResponse;
@@ -39,7 +38,6 @@ import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.diagnostics.DiagnosticsService;
 import org.apache.cloudstack.diagnostics.DiagnosticsType;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.log4j.Logger;
 
 import com.cloud.event.EventTypes;
 import com.cloud.exception.InsufficientCapacityException;
@@ -47,15 +45,13 @@ import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.user.Account;
 import com.cloud.vm.VirtualMachine;
 
-@APICommand(name = RunDiagnosticsCmd.APINAME, responseObject = RunDiagnosticsResponse.class, entityType = {VirtualMachine.class},
+@APICommand(name = "runDiagnostics", responseObject = RunDiagnosticsResponse.class, entityType = {VirtualMachine.class},
         responseHasSensitiveInfo = false,
         requestHasSensitiveInfo = false,
         description = "Execute network-utility command (ping/arping/tracert) on system VMs remotely",
         authorized = {RoleType.Admin},
         since = "4.12.0.0")
 public class RunDiagnosticsCmd extends BaseAsyncCmd {
-    private static final Logger LOGGER = Logger.getLogger(RunDiagnosticsCmd.class);
-    public static final String APINAME = "runDiagnostics";
 
     @Inject
     private DiagnosticsService diagnosticsService;
@@ -70,12 +66,10 @@ public class RunDiagnosticsCmd extends BaseAsyncCmd {
     private Long id;
 
     @Parameter(name = ApiConstants.IP_ADDRESS, type = CommandType.STRING, required = true,
-            validations = {ApiArgValidator.NotNullOrEmpty},
             description = "The IP/Domain address to test connection to")
     private String address;
 
     @Parameter(name = ApiConstants.TYPE, type = CommandType.STRING, required = true,
-            validations = {ApiArgValidator.NotNullOrEmpty},
             description = "The system VM diagnostics type  valid options are: ping, traceroute, arping")
     private String type;
 
@@ -111,11 +105,6 @@ public class RunDiagnosticsCmd extends BaseAsyncCmd {
     /////////////////// Implementation //////////////////
     /////////////////////////////////////////////////////
     @Override
-    public String getCommandName() {
-        return APINAME.toLowerCase() + BaseCmd.RESPONSE_SUFFIX;
-    }
-
-    @Override
     public long getEntityOwnerId() {
         Account account = CallContext.current().getCallingAccount();
         if (account != null) {
@@ -143,8 +132,23 @@ public class RunDiagnosticsCmd extends BaseAsyncCmd {
     }
 
     @Override
-    public ApiCommandJobType getInstanceType() {
-        return ApiCommandJobType.SystemVm;
+    public Long getApiResourceId() {
+        return getId();
+    }
+
+    @Override
+    public ApiCommandResourceType getApiResourceType() {
+
+        VirtualMachine.Type vmType = _entityMgr.findById(VirtualMachine.class, getId()).getType();
+        switch (vmType) {
+            case ConsoleProxy:
+                return ApiCommandResourceType.ConsoleProxy;
+            case SecondaryStorageVm:
+                return ApiCommandResourceType.SystemVm;
+            case DomainRouter:
+                return ApiCommandResourceType.DomainRouter;
+        }
+        return null;
     }
 
     @Override
